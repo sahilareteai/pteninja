@@ -1,0 +1,7 @@
+{
+  "name": "PTE Ninja",
+  "description": "A high-performance, AI-driven PTE preparation app featuring real-time scoring, gamified learning paths, and full exam simulations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
