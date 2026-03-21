@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation date" },
+        "accessType": { "type": "string", "enum": ["guest", "user"], "description": "Type of access" },
+        "trialEndsAt": { "type": "string", "format": "date-time", "description": "End of 14-day trial" },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "trial", "guest", "expired"], "description": "Current subscription status" },
+        "subscriptionEndsAt": { "type": "string", "format": "date-time", "description": "End of current subscription period" },
+        "planId": { "type": "string", "enum": ["monthly", "quarterly", "annual"], "description": "Current subscription plan" }
+      },
+      "required": ["uid", "createdAt", "accessType", "subscriptionStatus"]
+    },
+    "Guest": {
+      "title": "Guest",
+      "description": "Temporary guest access tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique guest ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "First access date" },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "Access expiration date (3 days after creation)" }
+      },
+      "required": ["id", "createdAt", "expiresAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/guests/{guestId}": {
+      "schema": "Guest",
+      "description": "Guest access records"
+    }
+  }
+}
