@@ -13,7 +13,8 @@
         "trialEndsAt": { "type": "string", "format": "date-time", "description": "End of 14-day trial" },
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "trial", "guest", "expired"], "description": "Current subscription status" },
         "subscriptionEndsAt": { "type": "string", "format": "date-time", "description": "End of current subscription period" },
-        "planId": { "type": "string", "enum": ["monthly", "quarterly", "annual"], "description": "Current subscription plan" }
+        "planId": { "type": "string", "enum": ["monthly", "quarterly", "annual"], "description": "Current subscription plan" },
+        "activityLog": { "type": "array", "items": { "type": "string" }, "description": "List of dates (YYYY-MM-DD) when the app was opened" }
       },
       "required": ["uid", "createdAt", "accessType", "subscriptionStatus"]
     },

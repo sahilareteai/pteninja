@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType } from '../firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut } from 'lucide-react';
@@ -28,13 +28,21 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
   useEffect(() => {
+    let unsubDoc: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Clean up any existing document listener first
+      if (unsubDoc) {
+        unsubDoc();
+        unsubDoc = null;
+      }
+
       if (firebaseUser) {
         setLoading(true);
         const userRef = doc(db, 'users', firebaseUser.uid);
         
         // Listen for real-time updates to user data
-        const unsubDoc = onSnapshot(userRef, (docSnap) => {
+        unsubDoc = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             setUser(docSnap.data() as UserData);
           } else {
@@ -51,6 +59,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               accessType: isGuest ? 'guest' : 'user',
               subscriptionStatus: isGuest ? 'guest' : 'trial',
               trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+              activityLog: [now.toISOString().split('T')[0]],
+              completedTasks: [],
+              taskScores: {}
             };
 
             // Remove undefined fields before sending to Firestore
@@ -64,9 +75,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             // Only attempt to create the user document if we are authenticated
             // and don't have a pending auth error
             setDoc(userRef, firestoreData).catch(err => {
+              const isPermissionError = err.code === 'permission-denied' || 
+                                       (err.message && err.message.toLowerCase().includes('insufficient permissions'));
+              
               // If it's a permission error and we're anonymous, it might be due to the provider being disabled
-              if (firebaseUser.isAnonymous && err.code === 'permission-denied') {
-                console.warn("Could not create guest profile in Firestore. This usually happens if Anonymous Auth is disabled in the console.");
+              if (firebaseUser.isAnonymous && isPermissionError) {
+                console.warn("Could not create guest profile in Firestore. This usually happens if Anonymous Auth is disabled in the console. Error code:", err.code);
               } else {
                 handleFirestoreError(err, OperationType.CREATE, `users/${firebaseUser.uid}`);
               }
@@ -75,10 +89,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
           setLoading(false);
           setIsAuthenticating(false);
-        }, (err) => {
+        }, (err: any) => {
           // If we're anonymous and get a permission error, it's likely the same root cause
-          if (firebaseUser.isAnonymous && err.code === 'permission-denied') {
-            console.warn("Could not read guest profile from Firestore.");
+          const isPermissionError = err.code === 'permission-denied' || 
+                                   (err.message && err.message.toLowerCase().includes('insufficient permissions'));
+          
+          if (firebaseUser.isAnonymous && isPermissionError) {
+            console.warn("Could not read guest profile from Firestore. Error code:", err.code);
             // We can still set a local guest user so the app doesn't crash
             if (!user) {
               setUser({
@@ -89,13 +106,16 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               });
             }
           } else {
-            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+            // Check if we're still the same user. If not, this error is likely from an old listener
+            if (auth.currentUser?.uid === firebaseUser.uid) {
+              handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+            } else {
+              console.warn("Ignoring Firestore error from stale listener for user:", firebaseUser.uid);
+            }
           }
           setLoading(false);
           setIsAuthenticating(false);
         });
-
-        return () => unsubDoc();
       } else {
         setUser(null);
         setLoading(false);
@@ -104,7 +124,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubDoc) unsubDoc();
+    };
   }, []);
 
   const login = async () => {
@@ -175,7 +198,28 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return false;
   };
 
-  const isAccessRestricted = !loading && !checkAccess();
+  const isAccessRestricted = !!user && !loading && !checkAccess();
+  
+  useEffect(() => {
+    if (user && !isAccessRestricted) {
+      setShowSubscriptionModal(false);
+    }
+  }, [user, isAccessRestricted]);
+  
+  useEffect(() => {
+    if (user && user.uid) {
+      const today = new Date().toISOString().split('T')[0];
+      const activityLog = user.activityLog || [];
+      
+      if (!activityLog.includes(today)) {
+        const newLog = [...activityLog, today].sort();
+        const userRef = doc(db, 'users', user.uid);
+        updateDoc(userRef, { activityLog: newLog }).catch(err => {
+          handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+        });
+      }
+    }
+  }, [user?.uid, user?.activityLog?.length]);
 
   useEffect(() => {
     if (isAccessRestricted && !loading) {

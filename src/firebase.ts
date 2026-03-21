@@ -86,5 +86,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { onAuthStateChanged, signInWithPopup, signInAnonymously };
+export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, updateDoc };
 export type { FirebaseUser };

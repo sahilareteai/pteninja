@@ -9,6 +9,9 @@ import {
   Trophy, 
   Target, 
   ChevronRight, 
+  ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Lock, 
   Play,
   Settings,
@@ -29,20 +32,132 @@ import { cn } from './lib/utils';
 import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS } from './types';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
+import { db, doc, updateDoc, handleFirestoreError, OperationType } from './firebase';
 
 // Mock Data for Initial State
 const INITIAL_PROGRESS: UserProgress = {
-  targetScore: 79,
-  currentScore: 65,
-  streak: 12,
-  completedTasks: []
+  targetScore: 90,
+  currentScore: 0,
+  streak: 0,
+  completedTasks: [],
+  taskScores: {}
+};
+
+const calculateStreak = (activityLog: string[] = []) => {
+  if (!activityLog || activityLog.length === 0) return 0;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const logDates = activityLog.map(d => {
+    const date = new Date(d);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  }).sort((a, b) => b - a);
+  
+  const uniqueLogs = Array.from(new Set(logDates));
+  
+  let streak = 0;
+  let checkDate = today.getTime();
+  
+  // If today is not logged, check yesterday
+  if (uniqueLogs[0] !== checkDate) {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (uniqueLogs[0] !== yesterday.getTime()) {
+      return 0;
+    }
+    checkDate = yesterday.getTime();
+  }
+  
+  for (const logTime of uniqueLogs) {
+    if (logTime === checkDate) {
+      streak++;
+      const nextCheck = new Date(checkDate);
+      nextCheck.setDate(nextCheck.getDate() - 1);
+      checkDate = nextCheck.getTime();
+    } else if (logTime < checkDate) {
+      break;
+    }
+  }
+  
+  return streak;
 };
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile'>('dashboard');
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
+  const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
+  const [showStreakModal, setShowStreakModal] = useState(false);
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
+
+  const handleSelectTask = (task: PTETask, allTasks: PTETask[]) => {
+    setSelectedTask(task);
+    setCurrentCategoryTasks(allTasks);
+  };
+
+  const currentStreak = calculateStreak(user?.activityLog);
+
+  const calculateAverageScore = () => {
+    if (!user?.taskScores || Object.keys(user.taskScores).length === 0) return 0;
+    
+    let totalScore = 0;
+    let totalAttempts = 0;
+    
+    Object.values(user.taskScores).forEach(scores => {
+      if (Array.isArray(scores)) {
+        scores.forEach(score => {
+          totalScore += score;
+          totalAttempts++;
+        });
+      }
+    });
+    
+    return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
+  };
+
+  const calculateSectionAverage = (section: PTESection) => {
+    if (!user?.taskScores) return 0;
+    
+    const sectionTasks = PTE_TASKS.filter(t => t.section === section).map(t => t.id);
+    let totalScore = 0;
+    let totalAttempts = 0;
+    
+    sectionTasks.forEach(taskId => {
+      const scores = user.taskScores?.[taskId];
+      if (Array.isArray(scores) && scores.length > 0) {
+        scores.forEach(score => {
+          totalScore += score;
+          totalAttempts++;
+        });
+      }
+    });
+    
+    return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
+  };
+
+  const handleTaskFinish = async (taskId: string, score: number) => {
+    if (!user?.uid) return;
+    
+    const userRef = doc(db, 'users', user.uid);
+    const currentTaskScores = user.taskScores || {};
+    const taskScoresForId = currentTaskScores[taskId] || [];
+    
+    const newTaskScores = {
+      ...currentTaskScores,
+      [taskId]: [...taskScoresForId, score]
+    };
+
+    try {
+      await updateDoc(userRef, { 
+        taskScores: newTaskScores,
+        completedTasks: Array.from(new Set([...(user.completedTasks || []), taskId]))
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
 
   if (loading) {
     return (
@@ -89,10 +204,13 @@ function AppContent() {
                  user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
               </div>
             )}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#1F2833] rounded-full border border-[#45A29E]/20">
+            <button 
+              onClick={() => setShowStreakModal(true)}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#1F2833] rounded-full border border-[#45A29E]/20 hover:border-[#45A29E]/50 transition-all"
+            >
               <Flame className="text-orange-500" size={16} />
-              <span className="text-sm font-bold text-white">{progress.streak} DAY STREAK</span>
-            </div>
+              <span className="text-sm font-bold text-white">{currentStreak} DAY STREAK</span>
+            </button>
             <button 
               onClick={() => setActiveTab('profile')}
               className="p-2 hover:bg-[#1F2833] rounded-full transition-colors"
@@ -118,10 +236,17 @@ function AppContent() {
         <main className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' ? (
-              <Dashboard key="dashboard" progress={progress} onStartTask={(task) => {
-                setSelectedTask(task);
-                setActiveTab(task.section);
-              }} />
+              <Dashboard 
+                key="dashboard" 
+                progress={progress} 
+                user={user}
+                onStartTask={(task) => {
+                  setSelectedTask(task);
+                  setActiveTab(task.section);
+                }} 
+                calculateAverageScore={calculateAverageScore}
+                calculateSectionAverage={calculateSectionAverage}
+              />
             ) : activeTab === 'profile' ? (
               <ProfileView 
                 key="profile" 
@@ -133,8 +258,9 @@ function AppContent() {
               <SectionView 
                 key={activeTab} 
                 section={activeTab} 
+                user={user}
                 onBack={() => setActiveTab('dashboard')} 
-                onSelectTask={setSelectedTask}
+                onSelectTask={handleSelectTask}
               />
             )}
           </AnimatePresence>
@@ -153,7 +279,20 @@ function AppContent() {
       {/* Modals */}
       <AnimatePresence>
         {selectedTask && (
-          <TaskModal key={selectedTask.id} task={selectedTask} onClose={() => setSelectedTask(null)} />
+          <TaskModal 
+            key={selectedTask.id} 
+            task={selectedTask} 
+            onClose={() => setSelectedTask(null)} 
+            onFinish={(score) => handleTaskFinish(selectedTask.id, score)}
+            onPrev={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) > 0 ? () => {
+              const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
+              setSelectedTask(currentCategoryTasks[idx - 1]);
+            } : undefined}
+            onNext={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) < currentCategoryTasks.length - 1 ? () => {
+              const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
+              setSelectedTask(currentCategoryTasks[idx + 1]);
+            } : undefined}
+          />
         )}
         {showSubscriptionModal && (
           <SubscriptionModal 
@@ -164,7 +303,112 @@ function AppContent() {
             isAccessRestricted={isAccessRestricted}
           />
         )}
+        {showStreakModal && (
+          <StreakCalendarModal 
+            key="streak-modal"
+            activityLog={user?.activityLog || []}
+            onClose={() => setShowStreakModal(false)}
+          />
+        )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], onClose: () => void }) {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+  
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const totalDays = daysInMonth(year, month);
+  const startDay = firstDayOfMonth(year, month);
+  
+  const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+  
+  const prevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
+  
+  const isLogged = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return activityLog.includes(dateStr);
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0C10]/90 backdrop-blur-md">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="w-full max-w-md bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Flame className="text-orange-500" size={24} />
+            Training Streak
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={prevMonth} className="p-1 hover:text-[#45A29E] transition-colors"><ChevronRight className="rotate-180" /></button>
+          <span className="font-bold text-white">{monthName} {year}</span>
+          <button onClick={nextMonth} className="p-1 hover:text-[#45A29E] transition-colors"><ChevronRight /></button>
+        </div>
+        
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+            <div key={`${d}-${i}`} className="text-center text-[10px] font-bold text-[#C5C6C7]/50 py-2">{d}</div>
+          ))}
+          {Array.from({ length: startDay }).map((_, i) => (
+            <div key={`empty-${i}`} />
+          ))}
+          {Array.from({ length: totalDays }).map((_, i) => {
+            const day = i + 1;
+            const logged = isLogged(day);
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isToday = dateStr === todayStr;
+            
+            return (
+              <div 
+                key={day} 
+                className={cn(
+                  "aspect-square flex items-center justify-center rounded-lg text-sm font-bold transition-all relative",
+                  logged ? "bg-[#45A29E] text-[#0B0C10] shadow-[0_0_10px_rgba(69,162,158,0.3)]" : "bg-[#0B0C10] text-[#C5C6C7]/30",
+                  isToday && !logged && "border border-[#45A29E]/50"
+                )}
+              >
+                {day}
+                {isToday && (
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#66FCF1] rounded-full" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        
+        <div className="mt-6 p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
+              <Flame className="text-orange-500" size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-[#C5C6C7]/50 uppercase font-bold tracking-widest">Current Streak</p>
+              <p className="text-xl font-black text-white">{calculateStreak(activityLog)} Days</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-[#C5C6C7]/50 uppercase font-bold tracking-widest">Total Days</p>
+            <p className="text-xl font-black text-[#45A29E]">{activityLog.length}</p>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -579,7 +823,15 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
   );
 }
 
-function Dashboard({ progress, onStartTask }: { progress: UserProgress, onStartTask: (task: PTETask) => void }) {
+function Dashboard({ progress, user, onStartTask, calculateAverageScore, calculateSectionAverage }: { 
+  progress: UserProgress, 
+  user: any,
+  onStartTask: (task: PTETask) => void,
+  calculateAverageScore: () => number,
+  calculateSectionAverage: (section: PTESection) => number
+}) {
+  const averageScore = calculateAverageScore();
+  
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -594,19 +846,19 @@ function Dashboard({ progress, onStartTask }: { progress: UserProgress, onStartT
             <Trophy size={120} />
           </div>
           <div className="relative z-10">
-            <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Path to Mastery</h2>
+            <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
             <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-6xl font-black text-white">{progress.currentScore}</span>
-              <span className="text-xl text-[#C5C6C7]">/ {progress.targetScore}</span>
+              <span className="text-6xl font-black text-white">{averageScore}</span>
+              <span className="text-xl text-[#C5C6C7]">/ 90</span>
             </div>
             <div className="w-full h-3 bg-[#0B0C10] rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: `${(progress.currentScore / 90) * 100}%` }}
+                animate={{ width: `${(averageScore / 90) * 100}%` }}
                 className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
               />
             </div>
-            <p className="mt-4 text-sm text-[#C5C6C7]">You are in the <span className="text-[#66FCF1] font-bold">Top 15%</span> of students this week.</p>
+            <p className="mt-4 text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
           </div>
         </div>
 
@@ -639,17 +891,21 @@ function Dashboard({ progress, onStartTask }: { progress: UserProgress, onStartT
 
       {/* Quick Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatBox label="Fluency" value="78" color="text-[#66FCF1]" />
-        <StatBox label="Grammar" value="62" color="text-orange-500" />
-        <StatBox label="Vocab" value="84" color="text-[#66FCF1]" />
-        <StatBox label="Pronunc." value="71" color="text-yellow-500" />
+        <StatBox label="Speaking" value={calculateSectionAverage('speaking').toString()} color="text-[#66FCF1]" />
+        <StatBox label="Writing" value={calculateSectionAverage('writing').toString()} color="text-orange-500" />
+        <StatBox label="Reading" value={calculateSectionAverage('reading').toString()} color="text-[#66FCF1]" />
+        <StatBox label="Listening" value={calculateSectionAverage('listening').toString()} color="text-yellow-500" />
       </section>
     </motion.div>
   );
 }
 
-function SectionView({ section, onBack, onSelectTask }: { section: PTESection, onBack: () => void, onSelectTask: (task: PTETask) => void }) {
+function SectionView({ section, user, onBack, onSelectTask }: { section: PTESection, user: any, onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void }) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const tasks = PTE_TASKS.filter(t => t.section === section);
+  
+  // Group tasks by category
+  const categories = Array.from(new Set(tasks.map(t => t.category)));
   
   const sectionInfo = {
     speaking: { icon: Mic, color: 'text-[#45A29E]', bg: 'bg-[#45A29E]/10' },
@@ -660,6 +916,18 @@ function SectionView({ section, onBack, onSelectTask }: { section: PTESection, o
 
   const Icon = sectionInfo[section].icon;
 
+  const handleBack = () => {
+    if (selectedCategory) {
+      setSelectedCategory(null);
+    } else {
+      onBack();
+    }
+  };
+
+  const filteredTasks = selectedCategory 
+    ? tasks.filter(t => t.category === selectedCategory)
+    : [];
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -668,41 +936,106 @@ function SectionView({ section, onBack, onSelectTask }: { section: PTESection, o
       className="max-w-4xl mx-auto space-y-6"
     >
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
-          <ChevronRight className="rotate-180" />
+        <button onClick={handleBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+          <ChevronRight className="rotate-180" size={24} />
         </button>
         <div className={cn("p-3 rounded-2xl", sectionInfo[section].bg)}>
           <Icon className={sectionInfo[section].color} size={28} />
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-white capitalize">{section} Dojo</h2>
-          <p className="text-sm text-[#C5C6C7]">{tasks.length} specialized training modules</p>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-white capitalize">
+            {selectedCategory || `${section} Dojo`}
+          </h2>
+          <p className="text-sm text-[#C5C6C7]">
+            {selectedCategory 
+              ? `${filteredTasks.length} practice questions available`
+              : `${categories.length} specialized task types`}
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {tasks.map(task => (
-          <TaskCard key={task.id} task={task} onClick={() => onSelectTask(task)} />
-        ))}
-      </div>
+      <AnimatePresence mode="wait">
+        {!selectedCategory ? (
+          <motion.div 
+            key="categories"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            {categories.map(category => {
+              const categoryTasks = tasks.filter(t => t.category === category);
+              const completedInCategory = categoryTasks.filter(t => user?.completedTasks?.includes(t.id)).length;
+              
+              return (
+                <button 
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className="flex items-center gap-4 p-6 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-[#0B0C10] flex items-center justify-center group-hover:bg-[#45A29E] transition-colors shrink-0">
+                    <Icon size={24} className={cn("transition-colors", sectionInfo[section].color, "group-hover:text-[#0B0C10]")} />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors text-lg">{category}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-1 bg-[#0B0C10] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-[#45A29E]" 
+                          style={{ width: `${(completedInCategory / categoryTasks.length) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-[#C5C6C7] font-bold">{completedInCategory}/{categoryTasks.length}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} className="text-[#45A29E] shrink-0" />
+                </button>
+              );
+            })}
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="tasks"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            {filteredTasks.map(task => (
+                <TaskCard 
+                  key={task.id} 
+                  task={task} 
+                  isCompleted={user?.completedTasks?.includes(task.id)}
+                  onClick={() => onSelectTask(task, filteredTasks)} 
+                />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
 
-function TaskCard({ task, onClick }: { task: PTETask, onClick: () => void }) {
+function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?: boolean, onClick: () => void }) {
   return (
     <button 
       onClick={onClick}
-      className="flex items-center gap-4 p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left"
+      className="flex items-center gap-4 p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden"
     >
-      <div className="w-12 h-12 rounded-xl bg-[#0B0C10] flex items-center justify-center group-hover:bg-[#45A29E] transition-colors">
-        <Play size={20} className="text-[#45A29E] group-hover:text-[#0B0C10]" />
+      <div className={cn(
+        "w-12 h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
+        isCompleted ? "bg-green-500/20 text-green-500" : "bg-[#0B0C10] text-[#45A29E] group-hover:bg-[#45A29E] group-hover:text-[#0B0C10]"
+      )}>
+        {isCompleted ? <Check size={24} /> : <Play size={20} />}
       </div>
       <div className="flex-1">
-        <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors">{task.title}</h4>
+        <div className="flex items-center gap-2">
+          <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors">{task.title}</h4>
+          {isCompleted && <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Done</span>}
+        </div>
         <p className="text-xs text-[#C5C6C7] line-clamp-1">{task.description}</p>
       </div>
-      <ChevronRight size={16} className="text-[#45A29E] opacity-0 group-hover:opacity-100 transition-opacity" />
+      <ChevronRight size={16} className="text-[#45A29E] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
     </button>
   );
 }
@@ -716,52 +1049,170 @@ function StatBox({ label, value, color }: { label: string, value: string, color:
   );
 }
 
-function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
+function TaskModal({ 
+  task, 
+  onClose, 
+  onFinish,
+  onPrev,
+  onNext
+}: { 
+  task: PTETask, 
+  onClose: () => void, 
+  onFinish: (score: number) => void,
+  onPrev?: () => void,
+  onNext?: () => void
+}) {
   const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(
-    task.hasAudio ? 'audio' : (task.prepTime === 0 ? 'recording' : 'prep')
+    task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation'
+      ? 'prep' // 3s countdown before audio
+      : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'))
   );
-  const [timeLeft, setTimeLeft] = useState(
-    task.hasAudio ? 0 : (task.prepTime === 0 ? (task.recordingTime ?? 10) : (task.prepTime ?? 35))
-  );
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
+      return 3; // 3s countdown before audio
+    }
+    if (task.hasAudio) return 0;
+    if (task.prepTime === 0 || task.section === 'reading') {
+      // Default recording/writing times based on latest PTE trends
+      if (task.category === 'Summarize Written Text') return 600;
+      if (task.category === 'Write Essay') return 1200;
+      if (task.category === 'Summarize Spoken Text') return 600;
+      if (task.section === 'reading') {
+        if (task.category.includes('Fill in the Blanks')) return 120; // 2 mins
+        if (task.category.includes('Multiple Choice')) return 90; // 1.5 mins
+        if (task.category === 'Re-order Paragraphs') return 120; // 2 mins
+        return 120;
+      }
+      if (task.section === 'listening') return 90;
+      return task.recordingTime ?? 10;
+    }
+    return task.prepTime ?? 35;
+  });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [prefetchedAudio, setPrefetchedAudio] = useState<HTMLAudioElement | null>(null);
   const [userInput, setUserInput] = useState('');
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [reorderedParagraphs, setReorderedParagraphs] = useState<string[]>(task.paragraphs || []);
+  const [targetParagraphs, setTargetParagraphs] = useState<string[]>([]);
+  const [blankAnswers, setBlankAnswers] = useState<{ [key: string]: string }>({});
   const [feedback, setFeedback] = useState<any>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Reset phase and timer for new task
+    const initialPhase = task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation'
+      ? 'prep'
+      : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
+    
+    setPhase(initialPhase);
+    
+    let initialTime = 0;
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
+      initialTime = 3;
+    } else if (task.hasAudio) {
+      initialTime = 0;
+    } else if (task.prepTime === 0 || task.section === 'reading') {
+      if (task.category === 'Summarize Written Text') initialTime = 600;
+      else if (task.category === 'Write Essay') initialTime = 1200;
+      else if (task.category === 'Summarize Spoken Text') initialTime = 600;
+      else if (task.section === 'reading') {
+        if (task.category.includes('Fill in the Blanks')) initialTime = 120;
+        else if (task.category.includes('Multiple Choice')) initialTime = 90;
+        else if (task.category === 'Re-order Paragraphs') initialTime = 120;
+        else initialTime = 120;
+      }
+      else if (task.section === 'listening') initialTime = 90;
+      else initialTime = task.recordingTime ?? 10;
+    } else {
+      initialTime = task.prepTime ?? 35;
+    }
+    setTimeLeft(initialTime);
+
+    // Shuffle paragraphs for Re-order tasks
+    if (task.category === 'Re-order Paragraphs' && task.paragraphs) {
+      setReorderedParagraphs([...task.paragraphs].sort(() => Math.random() - 0.5));
+    } else {
+      setReorderedParagraphs([]);
+    }
+    
+    // For ROP, we also need a target list
+    setTargetParagraphs([]);
+    
+    setSelectedOptions([]);
+    setBlankAnswers({});
+    setUserInput('');
+  }, [task.id, task.category, task.paragraphs, task.section, task.hasAudio, task.prepTime, task.recordingTime]);
+
+  // Pre-fetch audio logic
+  useEffect(() => {
+    let isCancelled = false;
+    if (task.hasAudio) {
+      const prefetch = async () => {
+        try {
+          const base64 = await generateTTS(task.prompt || "");
+          if (isCancelled) return;
+          if (base64) {
+            const audio = new Audio(`data:audio/wav;base64,${base64}`);
+            setPrefetchedAudio(audio);
+          }
+        } catch (err) {
+          console.error("Pre-fetch TTS failed:", err);
+        }
+      };
+      prefetch();
+    }
+    return () => {
+      isCancelled = true;
+      setPrefetchedAudio(null);
+    };
+  }, [task.id]);
 
   // Audio logic
   useEffect(() => {
     let isCancelled = false;
     if (phase === 'audio') {
       const playAudio = async () => {
-        setIsAudioPlaying(true);
         try {
-          const base64 = await generateTTS(task.prompt || "");
+          let audio = prefetchedAudio;
+          if (!audio) {
+            const base64 = await generateTTS(task.prompt || "");
+            if (isCancelled) return;
+            if (base64) {
+              audio = new Audio(`data:audio/wav;base64,${base64}`);
+            }
+          }
+          
           if (isCancelled) return;
-          if (base64) {
-            const audio = new Audio(`data:audio/wav;base64,${base64}`);
+
+          if (audio) {
             audioRef.current = audio;
+            audio.onplay = () => {
+              if (!isCancelled) setIsAudioPlaying(true);
+            };
             audio.onended = () => {
               if (isCancelled) return;
               setIsAudioPlaying(false);
-              if (task.prepTime && task.prepTime > 0) {
-                setPhase('prep');
-                setTimeLeft(task.prepTime);
-              } else {
-                setPhase('recording');
-                setTimeLeft(task.recordingTime ?? 15);
-              }
+              // Small pause after audio before next phase
+              setTimeout(() => {
+                if (isCancelled) return;
+                if (task.prepTime && task.prepTime > 0) {
+                  setPhase('prep');
+                  setTimeLeft(task.prepTime);
+                } else {
+                  setPhase('recording');
+                  setTimeLeft(task.recordingTime ?? 15);
+                }
+              }, 1000);
             };
             audio.play();
           } else {
-            setIsAudioPlaying(false);
             setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
             setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
           }
         } catch (err) {
-          console.error("TTS failed:", err);
-          setIsAudioPlaying(false);
+          console.error("Audio playback failed:", err);
           setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
           setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
         }
@@ -775,7 +1226,7 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
         audioRef.current = null;
       }
     };
-  }, [phase, task.id]);
+  }, [phase, task.id, prefetchedAudio]);
 
   // Recording logic
   useEffect(() => {
@@ -832,7 +1283,22 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             if (phase === 'prep') {
+              // If it was a countdown before audio
+              if (task.hasAudio && (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') && !audioRef.current) {
+                setPhase('audio');
+                return 0;
+              }
               setPhase('recording');
+              // Set appropriate recording/writing time based on latest PTE trends
+              if (task.category === 'Summarize Written Text') return 600;
+              if (task.category === 'Write Essay') return 1200;
+              if (task.category === 'Summarize Spoken Text') return 600;
+              if (task.section === 'reading') {
+                if (task.category.includes('Fill in the Blanks')) return 120; // 2 mins
+                if (task.category.includes('Multiple Choice')) return 90; // 1.5 mins
+                if (task.category === 'Re-order Paragraphs') return 120; // 2 mins
+              }
+              if (task.section === 'listening') return 90;
               return task.recordingTime ?? 40;
             } else {
               handleFinish();
@@ -844,7 +1310,7 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [phase, task.recordingTime]);
+  }, [phase, task.recordingTime, task.hasAudio, task.category]);
 
   const handleFinish = async () => {
     setPhase('analyzing');
@@ -865,10 +1331,21 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
         }
         result = await analyzeSpeaking(base64, task.title, mediaRecorder?.mimeType || 'audio/webm');
       } else {
-        if (!userInput.trim()) {
-           throw new Error("No text provided");
+        let finalInput = userInput;
+        if (task.section === 'reading') {
+          if (task.category === 'Reading & Writing: Fill in the Blanks' || task.category === 'Reading: Fill in the Blanks') {
+            finalInput = Object.values(blankAnswers).join(', ');
+          } else if (task.category.includes('Multiple Choice')) {
+            finalInput = selectedOptions.join(', ');
+          } else if (task.category === 'Re-order Paragraphs') {
+            finalInput = targetParagraphs.join(' -> ');
+          }
         }
-        result = await analyzeWriting(userInput, task.title);
+        
+        if (!finalInput.trim() && task.category !== 'Re-order Paragraphs') {
+           throw new Error("No response provided");
+        }
+        result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
       }
       
       const tips = result.tips || result.feedback || ["Keep practicing!"];
@@ -887,6 +1364,7 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
         },
         tips: Array.isArray(tips) ? tips : [tips]
       });
+      onFinish(result.overall || result.Score || 70);
       setPhase('feedback');
     } catch (error) {
       console.error("Analysis failed:", error);
@@ -928,7 +1406,7 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
       >
         {/* Header */}
         <div className="p-6 border-b border-[#1F2833] flex items-center justify-between bg-[#1F2833]">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
             <div className="p-2 bg-[#45A29E]/10 rounded-lg">
               {task.section === 'speaking' ? <Mic className="text-[#45A29E]" size={20} /> : <PenTool className="text-[#45A29E]" size={20} />}
             </div>
@@ -937,9 +1415,31 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
               <p className="text-[10px] text-[#45A29E] uppercase tracking-widest mt-1 font-bold">PTE Academic Standard</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7]">
-            <ChevronRight className="rotate-90" />
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {onPrev && (
+              <button 
+                onClick={onPrev}
+                className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7] disabled:opacity-30"
+                title="Previous Question"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+            {onNext && (
+              <button 
+                onClick={onNext}
+                className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7] disabled:opacity-30"
+                title="Next Question"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
+            <div className="w-px h-6 bg-[#45A29E]/20 mx-2" />
+            <button onClick={onClose} className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7]">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="p-8 space-y-6">
@@ -952,12 +1452,12 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
                   phase === 'prep' ? "bg-yellow-500" : (phase === 'audio' ? "bg-blue-500" : "bg-red-500")
                 )} />
                 <span className="text-xs font-bold uppercase tracking-widest text-white">
-                  {phase === 'audio' ? "Listening" : (phase === 'prep' ? "Preparation" : (task.section === 'speaking' ? "Recording" : "Writing"))}
+                  {phase === 'audio' ? "Listening" : (phase === 'prep' ? (task.hasAudio && !audioRef.current ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : "Writing"))}
                 </span>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-mono font-bold text-white">
-                  {phase === 'audio' ? "---" : formatTime(timeLeft)}
+                  {phase === 'audio' ? "Playing" : formatTime(timeLeft)}
                 </div>
                 {phase === 'prep' && (
                   <button 
@@ -993,17 +1493,180 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
 
           {/* Input Area (Writing, Reading, Listening) */}
           {task.section !== 'speaking' && phase === 'recording' && (
-            <div className="space-y-4">
-              <textarea
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder={task.section === 'listening' ? "Type what you hear..." : "Type your response here..."}
-                className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
-              />
+            <div className="space-y-6">
+              {task.section === 'reading' ? (
+                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                  {task.category === 'Reading & Writing: Fill in the Blanks' ? (
+                    <div className="text-white leading-relaxed text-lg">
+                      {task.prompt?.split('________').map((part, i, arr) => (
+                        <React.Fragment key={i}>
+                          {part}
+                          {i < arr.length - 1 && (
+                            <select
+                              value={blankAnswers[i] || ''}
+                              onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
+                              className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10"
+                            >
+                              <option value="">[Select]</option>
+                              {task.blanks?.[i]?.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : task.category === 'Multiple Choice, Multiple Answer' || task.category === 'Multiple Choice, Single Answer' ? (
+                    <div className="space-y-4">
+                      {task.options?.map(option => (
+                        <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
+                          <input
+                            type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
+                            name="reading-option"
+                            checked={selectedOptions.includes(option)}
+                            onChange={(e) => {
+                              if (task.category.includes('Multiple Answer')) {
+                                if (e.target.checked) setSelectedOptions([...selectedOptions, option]);
+                                else setSelectedOptions(selectedOptions.filter(o => o !== option));
+                              } else {
+                                setSelectedOptions([option]);
+                              }
+                            }}
+                            className="w-5 h-5 accent-[#45A29E]"
+                          />
+                          <span className="text-white">{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : task.category === 'Re-order Paragraphs' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[400px]">
+                      {/* Source Panel */}
+                      <div className="flex flex-col gap-3 p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/20 overflow-y-auto">
+                        <h4 className="text-[#C5C6C7] text-xs uppercase tracking-wider font-bold mb-2">Source</h4>
+                        {reorderedParagraphs.map((para, i) => (
+                          <motion.div 
+                            key={para}
+                            layoutId={para}
+                            onClick={() => {
+                              setTargetParagraphs([...targetParagraphs, para]);
+                              setReorderedParagraphs(reorderedParagraphs.filter(p => p !== para));
+                            }}
+                            className="p-3 bg-[#0B0C10] rounded-lg border border-[#45A29E]/20 cursor-pointer hover:border-[#66FCF1] hover:text-[#66FCF1] transition-all text-sm text-white leading-relaxed"
+                          >
+                            {para}
+                          </motion.div>
+                        ))}
+                      </div>
+                      
+                      {/* Target Panel */}
+                      <div className="flex flex-col gap-3 p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/20 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-[#C5C6C7] text-xs uppercase tracking-wider font-bold">Target</h4>
+                          {targetParagraphs.length > 0 && (
+                            <button 
+                              onClick={() => {
+                                setReorderedParagraphs([...reorderedParagraphs, ...targetParagraphs]);
+                                setTargetParagraphs([]);
+                              }}
+                              className="text-[10px] text-[#45A29E] hover:text-[#66FCF1] uppercase tracking-tighter"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        {targetParagraphs.map((para, i) => (
+                          <motion.div 
+                            key={para}
+                            layoutId={para}
+                            onClick={() => {
+                              setReorderedParagraphs([...reorderedParagraphs, para]);
+                              setTargetParagraphs(targetParagraphs.filter(p => p !== para));
+                            }}
+                            className="p-3 bg-[#0B0C10] rounded-lg border border-[#66FCF1]/30 cursor-pointer hover:border-[#66FCF1] transition-all text-sm text-[#66FCF1] leading-relaxed relative group"
+                          >
+                            <span className="absolute -left-2 -top-2 w-5 h-5 bg-[#66FCF1] text-[#0B0C10] rounded-full flex items-center justify-center text-[10px] font-bold">
+                              {i + 1}
+                            </span>
+                            {para}
+                          </motion.div>
+                        ))}
+                        {targetParagraphs.length === 0 && (
+                          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-[#45A29E]/10 rounded-lg">
+                            <p className="text-[#C5C6C7]/30 text-xs italic">Select from source to order</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : task.category === 'Reading: Fill in the Blanks' ? (
+                    <div className="space-y-6">
+                      <div className="text-white leading-relaxed p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/10">
+                        {task.prompt?.split('________').map((part, i, arr) => (
+                          <React.Fragment key={i}>
+                            {part}
+                            {i < arr.length - 1 && (
+                              <span 
+                                onClick={() => {
+                                  if (blankAnswers[i]) {
+                                    const newAnswers = { ...blankAnswers };
+                                    delete newAnswers[i];
+                                    setBlankAnswers(newAnswers);
+                                  }
+                                }}
+                                className="inline-block min-w-[100px] h-8 border-b-2 border-dashed border-[#45A29E] mx-2 text-center text-[#66FCF1] font-bold cursor-pointer hover:bg-[#45A29E]/10 transition-all"
+                              >
+                                {blankAnswers[i] || ''}
+                              </span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-3 p-4 bg-[#1F2833] rounded-xl border border-[#45A29E]/20">
+                        {task.options?.filter(opt => !Object.values(blankAnswers).includes(opt)).map(option => (
+                          <button
+                            key={option}
+                            onClick={() => {
+                              // Find first empty blank
+                              const firstEmpty = task.prompt?.split('________').findIndex((_, idx, arr) => idx < arr.length - 1 && !blankAnswers[idx]);
+                              if (firstEmpty !== undefined && firstEmpty !== -1) {
+                                setBlankAnswers({ ...blankAnswers, [firstEmpty]: option });
+                              }
+                            }}
+                            className="px-4 py-2 bg-[#0B0C10] border border-[#45A29E]/30 rounded-lg text-sm text-white hover:border-[#45A29E] hover:text-[#66FCF1] transition-all"
+                          >
+                            {option}
+                          </button>
+                        ))}
+                        <button 
+                          onClick={() => setBlankAnswers({})}
+                          className="px-4 py-2 text-xs font-bold text-red-400 hover:text-red-300 transition-colors ml-auto"
+                        >
+                          Reset Blanks
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <textarea
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      placeholder="Type your response here..."
+                      className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                    />
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  placeholder={task.section === 'listening' ? "Type what you hear..." : "Type your response here..."}
+                  className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                />
+              )}
               <div className="flex justify-between items-center">
                 <div className="flex gap-4">
-                  <span className="text-xs text-[#C5C6C7]">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
-                  {task.section === 'listening' && (
+                  {task.category !== 'Re-order Paragraphs' && !task.category.includes('Multiple Choice') && !task.category.includes('Fill in the Blanks') && (
+                    <span className="text-xs text-[#C5C6C7]">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
+                  )}
+                  {task.section === 'listening' && phase === 'recording' && (
                     <span className="text-xs text-[#45A29E] font-bold animate-pulse">Audio Playing...</span>
                   )}
                 </div>
@@ -1122,25 +1785,25 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
                   </button>
                 </div>
               </motion.div>
-            ) : task.section === 'speaking' || phase === 'prep' || phase === 'audio' ? (
+            ) : (task.section === 'speaking' && (phase === 'recording' || phase === 'prep')) || phase === 'audio' ? (
               <motion.div 
                 key="active"
                 className="flex flex-col items-center py-8"
               >
-                {(phase === 'recording' && task.section === 'speaking') || phase === 'audio' ? (
+                {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
                   <>
                     <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
                       {[...Array(20)].map((_, i) => (
                         <motion.div 
                           key={i}
-                          animate={phase === 'audio' 
+                          animate={(isAudioPlaying || (phase === 'recording' && task.section === 'speaking')) 
                             ? { height: [10, Math.random() * 40 + 10, 10] } 
-                            : { height: [10, Math.random() * 60 + 10, 10] }
+                            : { height: 10 }
                           }
                           transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.05 }}
                           className={cn(
                             "w-1.5 rounded-full",
-                            phase === 'audio' ? "bg-blue-400" : "bg-[#45A29E]"
+                            isAudioPlaying ? "bg-blue-400" : "bg-[#45A29E]"
                           )}
                         />
                       ))}
@@ -1149,7 +1812,13 @@ function TaskModal({ task, onClose }: { task: PTETask, onClose: () => void }) {
                       {phase === 'audio' ? "Listening to audio..." : "Recording your response..."}
                     </p>
                   </>
-                ) : null}
+                ) : (
+                  <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
+                    {[...Array(20)].map((_, i) => (
+                      <div key={i} className="w-1.5 h-[10px] rounded-full bg-[#45A29E]/20" />
+                    ))}
+                  </div>
+                )}
                 
                 <button 
                   disabled={phase === 'audio'}
