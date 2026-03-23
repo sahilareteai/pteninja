@@ -24,6 +24,37 @@ export interface UserProgress {
   streak: number;
   completedTasks: string[];
   taskScores: Record<string, number[]>;
+  favoriteWords?: string[];
+}
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  targetScore: number;
+  description: string;
+  isUnlocked: boolean;
+}
+
+export interface ScheduledTask {
+  id: string;
+  taskId: string;
+  scheduledAt: string; // ISO string
+  duration: number; // minutes
+  isCompleted: boolean;
+}
+
+export interface DailyGoal {
+  id: string;
+  type: 'tasks' | 'time';
+  target: number;
+  current: number;
+  date: string; // YYYY-MM-DD
+}
+
+export interface TaskCompletion {
+  taskId: string;
+  score: number;
+  completedAt: string; // ISO string
 }
 
 export interface UserData {
@@ -38,7 +69,13 @@ export interface UserData {
   planId?: 'monthly' | 'quarterly' | 'annual';
   activityLog?: string[];
   completedTasks?: string[];
+  completedTasksDetailed?: TaskCompletion[];
   taskScores?: Record<string, number[]>;
+  targetScore?: number;
+  roadmap?: RoadmapMilestone[];
+  schedule?: ScheduledTask[];
+  goals?: DailyGoal[];
+  favoriteWords?: string[];
 }
 
 export const SUBSCRIPTION_PLANS = [
@@ -256,18 +293,18 @@ export const PTE_TASKS: PTETask[] = [
     id: 'swt-1', 
     title: 'Question 1', 
     category: 'Summarize Written Text',
-    description: 'Summarize a text in a single sentence.', 
+    description: 'Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the passage.', 
     section: 'writing', 
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 600,
-    prompt: "Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the passage."
+    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical."
   },
   { 
     id: 'swt-2', 
     title: 'Question 2', 
     category: 'Summarize Written Text',
-    description: 'Summarize a text in a single sentence.', 
+    description: 'Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task.', 
     section: 'writing', 
     type: 'writing', 
     prepTime: 0, 
@@ -278,23 +315,23 @@ export const PTE_TASKS: PTETask[] = [
     id: 'we-1', 
     title: 'Question 1', 
     category: 'Write Essay',
-    description: 'Write a 200-300 word essay on a given topic.', 
-    section: 'writing', 
-    type: 'writing', 
-    prepTime: 0, 
-    recordingTime: 1200,
-    prompt: "You will have 20 minutes to plan, write and revise an essay about the topic below. Your response will be judged on how well you develop a position, organize your ideas, present supporting details, and control the elements of standard written English. You should write 200-300 words."
-  },
-  { 
-    id: 'we-2', 
-    title: 'Question 2', 
-    category: 'Write Essay',
-    description: 'Write a 200-300 word essay on a given topic.', 
+    description: 'You will have 20 minutes to plan, write and revise an essay about the topic below. Your response will be judged on how well you develop a position, organize your ideas, present supporting details, and control the elements of standard written English. You should write 200-300 words.', 
     section: 'writing', 
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 1200,
     prompt: "Some people believe that technology has made our lives more complex and stressful, while others argue that it has made them easier and more efficient. Discuss both views and give your own opinion."
+  },
+  { 
+    id: 'we-2', 
+    title: 'Question 2', 
+    category: 'Write Essay',
+    description: 'You will have 20 minutes to plan, write and revise an essay about the topic below. You should write 200-300 words.', 
+    section: 'writing', 
+    type: 'writing', 
+    prepTime: 0, 
+    recordingTime: 1200,
+    prompt: "The impact of social media on modern communication is a complex topic with both positive and negative implications for society. Discuss the role of social media in modern society and whether it should be regulated."
   },
   
   // Reading
@@ -336,10 +373,10 @@ export const PTE_TASKS: PTETask[] = [
     id: 'rmcq-1', 
     title: 'Question 1', 
     category: 'Multiple Choice, Multiple Answer',
-    description: 'Select all correct answers based on a text.', 
+    description: "Read the passage below and answer the multiple-choice question by selecting all the correct responses. More than one response may be correct.", 
     section: 'reading', 
     type: 'reading',
-    prompt: "According to the text, which of the following are mentioned as impacts of the internet? Select all that apply.",
+    prompt: "The widespread use of the internet has transformed the way we communicate, work, and access information. While it has brought numerous benefits, such as instant connectivity and global reach, it has also raised significant concerns regarding privacy and security. As we continue to conduct more of our lives online, the need for robust cybersecurity measures becomes increasingly critical.",
     options: [
       'Facilitation of rapid information exchange across borders.',
       'Complete replacement of traditional educational institutions.',
@@ -355,10 +392,10 @@ export const PTE_TASKS: PTETask[] = [
     id: 'rscq-1', 
     title: 'Question 1', 
     category: 'Multiple Choice, Single Answer',
-    description: 'Select the best answer based on a text.', 
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
     section: 'reading', 
     type: 'reading',
-    prompt: "What is the primary focus of modern psychology as described in the passage?",
+    prompt: "The study of psychology seeks to understand the complexities of human behavior and mental processes. Researchers use various methods, including experiments and surveys, to collect data and test hypotheses. One of the key themes in modern psychology is the interaction between genetics and environment, often referred to as the nature versus nurture debate.",
     options: [
       'The study of physical health and biological systems.',
       'The interaction between genetic factors and environmental influences.',
@@ -399,86 +436,77 @@ export const PTE_TASKS: PTETask[] = [
     options: ['challenges', 'developing', 'ignoring', 'benefits', 'risks'],
     correctAnswers: ['challenges', 'developing']
   },
-  { 
-    id: 'rfib3-1', 
-    title: 'Question 1', 
-    category: 'Reading: Fill in the Blanks 2',
-    description: 'Select the correct words to complete a text.', 
-    section: 'reading', 
-    type: 'reading',
-    prompt: "The process of urbanization has led to the growth of megacities around the world. These cities offer many opportunities but also face significant ________ such as pollution, traffic congestion, and housing shortages. To address these issues, urban planners are ________ sustainable solutions that prioritize public transportation and green spaces."
-  },
   
   // Listening
   { 
     id: 'sst-1', 
     title: 'Question 1', 
     category: 'Summarize Spoken Text',
-    description: 'Listen to a recording and summarize it in 50-70 words.', 
-    section: 'listening', 
-    type: 'listening',
-    hasAudio: true,
-    prompt: "You will hear a short lecture. Write a summary for a fellow student who was not present at the lecture. You should write 50-70 words. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the lecture."
-  },
-  { 
-    id: 'sst-2', 
-    title: 'Question 2', 
-    category: 'Summarize Spoken Text',
-    description: 'Listen to a recording and summarize it in 50-70 words.', 
+    description: 'You will hear a short lecture. Write a summary for a fellow student who was not present at the lecture. You should write 50-70 words. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the lecture.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
     prompt: "The history of space exploration is a testament to human curiosity and ingenuity. From the first satellite launch to the moon landing, we have made incredible strides in understanding our place in the universe. Today, private companies are playing an increasingly important role in space travel, with plans for Mars colonization and asteroid mining. These developments open up new possibilities for the future of humanity beyond Earth."
   },
   { 
-    id: 'lmcq-1', 
-    title: 'Question 1', 
-    category: 'Multiple Choice, Multiple Answer',
-    description: 'Select all correct answers based on a recording.', 
+    id: 'sst-2', 
+    title: 'Question 2', 
+    category: 'Summarize Spoken Text',
+    description: 'You will hear a short lecture. Write a summary for a fellow student who was not present at the lecture. You should write 50-70 words.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "Listen to the recording and answer the question by selecting all the correct responses. More than one response may be correct."
+    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical."
+  },
+  { 
+    id: 'lmcq-1', 
+    title: 'Question 1', 
+    category: 'Multiple Choice, Multiple Answer',
+    description: 'Listen to the recording and answer the question by selecting all the correct responses. More than one response may be correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    prompt: "Which of the following are mentioned as impacts of the internet on society?"
   },
   { 
     id: 'lfib-1', 
     title: 'Question 1', 
     category: 'Fill in the Blanks',
-    description: 'Type missing words into a transcript while listening.', 
+    description: 'You will hear a recording. Type the missing words in each blank.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "You will hear a recording. Type the missing words in each blank."
+    prompt: "The process of ________ has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution."
   },
   { 
     id: 'hcs-1', 
     title: 'Question 1', 
     category: 'Highlight Correct Summary',
-    description: 'Select the best summary of a recording.', 
+    description: 'You will hear a recording. Click on the paragraph that best relates to the recording.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "You will hear a recording. Click on the paragraph that best relates to the recording."
+    prompt: "The study of psychology seeks to understand the complexities of human behavior and mental processes."
   },
   { 
     id: 'wfd-1', 
     title: 'Question 1', 
     category: 'Write from Dictation',
-    description: 'Listen to a short sentence and type it exactly.', 
+    description: 'You will hear a sentence. Type the sentence in the box below exactly as you hear it. Write as much of the sentence as you can. You will hear the sentence only once.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "You will hear a sentence. Type the sentence in the box below exactly as you hear it. Write as much of the sentence as you can. You will hear the sentence only once."
+    prompt: "The results of the study will be published in a peer-reviewed journal next month."
   },
   { 
     id: 'wfd-2', 
     title: 'Question 2', 
     category: 'Write from Dictation',
-    description: 'Listen to a short sentence and type it exactly.', 
+    description: 'You will hear a sentence. Type the sentence in the box below exactly as you hear it.', 
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The results of the study will be published in a peer-reviewed journal next month."
+    prompt: "The university will provide all the necessary equipment for the experiment."
   },
 ];
 

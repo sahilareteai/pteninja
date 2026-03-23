@@ -21,9 +21,16 @@ service cloud.firestore {
              data.createdAt is string &&
              data.accessType in ['guest', 'user'] &&
              data.subscriptionStatus in ['active', 'inactive', 'trial', 'guest', 'expired'] &&
+             (!('email' in data) || data.email == null || data.email is string) &&
+             (!('displayName' in data) || data.displayName == null || data.displayName is string) &&
              (!('activityLog' in data) || data.activityLog is list) &&
              (!('completedTasks' in data) || data.completedTasks is list) &&
-             (!('taskScores' in data) || data.taskScores is map);
+             (!('taskScores' in data) || data.taskScores is map) &&
+             (!('targetScore' in data) || data.targetScore is number) &&
+             (!('favoriteWords' in data) || data.favoriteWords is list) &&
+             (!('subscriptionEndsAt' in data) || data.subscriptionEndsAt is string) &&
+             (!('trialEndsAt' in data) || data.trialEndsAt is string) &&
+             (!('planId' in data) || data.planId in ['monthly', 'quarterly', 'annual']);
     }
 
     // ===============================================================

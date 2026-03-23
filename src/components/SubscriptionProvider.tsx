@@ -26,6 +26,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let unsubDoc: (() => void) | null = null;
@@ -61,7 +62,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
               activityLog: [now.toISOString().split('T')[0]],
               completedTasks: [],
-              taskScores: {}
+              completedTasksDetailed: [],
+              taskScores: {},
+              favoriteWords: [],
+              schedule: [],
+              goals: []
             };
 
             // Remove undefined fields before sending to Firestore
@@ -102,7 +107,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 uid: firebaseUser.uid,
                 createdAt: new Date().toISOString(),
                 accessType: 'guest',
-                subscriptionStatus: 'guest'
+                subscriptionStatus: 'guest',
+                favoriteWords: [],
+                schedule: [],
+                goals: [],
+                completedTasksDetailed: []
               });
             }
           } else {
@@ -133,12 +142,22 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const login = async () => {
     if (isAuthenticating) return;
     setIsAuthenticating(true);
+    setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
       setIsAuthenticating(false);
+      if (error.code === 'auth/popup-closed-by-user') {
+        setAuthError("The sign-in window was closed. Please try again to continue.");
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        setAuthError("Sign-in was interrupted. Please try again.");
+      } else if (error.code === 'auth/popup-blocked') {
+        setAuthError("The sign-in popup was blocked by your browser. Please allow popups for this site.");
+      } else {
+        setAuthError("Login failed. Please check your connection and try again.");
+      }
     }
   };
 
@@ -146,8 +165,6 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     await auth.signOut();
     setShowAuthModal(true);
   };
-
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const continueAsGuest = async () => {
     if (isAuthenticating) return;

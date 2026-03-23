@@ -134,9 +134,36 @@ export async function analyzeWriting(text: string, taskType: string) {
     model,
     contents: `Analyze this PTE ${taskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips. Return JSON.`,
     config: {
-      responseMimeType: "application/json"
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          overall: { type: Type.NUMBER },
+          grammar: { type: Type.NUMBER },
+          vocabulary: { type: Type.NUMBER },
+          spelling: { type: Type.NUMBER },
+          content: { type: Type.NUMBER },
+          tips: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
+        },
+        required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips"]
+      }
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  try {
+    return JSON.parse(response.text || "{}");
+  } catch (e) {
+    console.error("Failed to parse Gemini writing response:", response.text);
+    return {
+      overall: 50,
+      grammar: 50,
+      vocabulary: 50,
+      spelling: 50,
+      content: 50,
+      tips: ["Could not analyze response correctly."]
+    };
+  }
 }

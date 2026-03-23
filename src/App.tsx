@@ -26,21 +26,33 @@ import {
   X,
   LogOut,
   CreditCard,
-  ShieldCheck
+  ShieldCheck,
+  Bell,
+  Calendar,
+  Map,
+  Plus,
+  Trash2,
+  TrendingUp,
+  AlertCircle,
+  Book,
+  Search,
+  Volume2
 } from 'lucide-react';
 import { cn } from './lib/utils';
-import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS } from './types';
+import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion } from './types';
+import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
 import { db, doc, updateDoc, handleFirestoreError, OperationType } from './firebase';
 
 // Mock Data for Initial State
 const INITIAL_PROGRESS: UserProgress = {
-  targetScore: 90,
+  targetScore: 0,
   currentScore: 0,
   streak: 0,
   completedTasks: [],
-  taskScores: {}
+  taskScores: {},
+  favoriteWords: []
 };
 
 const calculateStreak = (activityLog: string[] = []) => {
@@ -84,13 +96,472 @@ const calculateStreak = (activityLog: string[] = []) => {
   return streak;
 };
 
+const NotificationService = {
+  requestPermission: async () => {
+    if (!('Notification' in window)) return false;
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  },
+  send: (title: string, options?: NotificationOptions) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      new Notification(title, options);
+    } catch (e) {
+      console.error("Notification error:", e);
+    }
+  }
+};
+
+
+function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void }) {
+  const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
+  const [showAddSchedule, setShowAddSchedule] = useState(false);
+  const [newSchedule, setNewSchedule] = useState({ taskId: '', time: '09:00', duration: 30 });
+  const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
+
+  const milestones = [
+    { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
+    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: (user?.currentScore || 0) >= 30 },
+    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: (user?.currentScore || 0) >= 50 },
+    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: (user?.currentScore || 0) >= 65 },
+    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: (user?.currentScore || 0) >= 79 },
+  ];
+
+  const currentMilestone = milestones.find(m => !m.isUnlocked) || milestones[milestones.length - 1];
+
+  const handleAddSchedule = async () => {
+    if (!user?.uid || !newSchedule.taskId) return;
+    const task = PTE_TASKS.find(t => t.id === newSchedule.taskId);
+    if (!task) return;
+
+    const scheduleItem: ScheduledTask = {
+      id: Math.random().toString(36).substr(2, 9),
+      taskId: newSchedule.taskId,
+      scheduledAt: newSchedule.time,
+      duration: newSchedule.duration,
+      isCompleted: false
+    };
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        schedule: [...(user.schedule || []), scheduleItem]
+      });
+      setShowAddSchedule(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    if (!user?.uid) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        schedule: user.schedule.filter((s: ScheduledTask) => s.id !== id)
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const handleAddGoal = async () => {
+    if (!user?.uid) return;
+    const goalItem: DailyGoal = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: newGoal.type,
+      target: newGoal.target,
+      current: 0,
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        goals: [...(user.goals || []), goalItem]
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const handleDeleteGoal = async (id: string) => {
+    if (!user?.uid) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        goals: user.goals.filter((g: DailyGoal) => g.id !== id)
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const getTodayCompletions = () => {
+    const today = new Date().toISOString().split('T')[0];
+    return (user.completedTasksDetailed || []).filter((c: TaskCompletion) => c.completedAt.startsWith(today));
+  };
+
+  const calculateGoalProgress = (goal: DailyGoal) => {
+    const completions = getTodayCompletions();
+    if (goal.type === 'tasks') {
+      return completions.length;
+    } else if (goal.type === 'time') {
+      // Estimate 5 mins per task if not specified
+      return completions.length * 5;
+    }
+    return 0;
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-4xl mx-auto space-y-6 pb-20"
+    >
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+            <ChevronRight className="rotate-180" size={24} />
+          </button>
+          <h2 className="text-2xl font-black text-white uppercase tracking-tight">Your Roadmap</h2>
+        </div>
+        <div className="flex bg-[#1F2833] p-1 rounded-xl border border-white/5">
+          <button 
+            onClick={() => setActiveView('roadmap')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              activeView === 'roadmap' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+            )}
+          >
+            Path
+          </button>
+          <button 
+            onClick={() => setActiveView('schedule')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              activeView === 'schedule' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+            )}
+          >
+            Schedule
+          </button>
+          <button 
+            onClick={() => setActiveView('goals')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              activeView === 'goals' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+            )}
+          >
+            Goals
+          </button>
+        </div>
+      </div>
+
+      {activeView === 'roadmap' && (
+        <div className="space-y-8 relative">
+          {/* Connecting Line */}
+          <div className="absolute left-8 top-10 bottom-10 w-0.5 bg-gradient-to-b from-[#45A29E] via-[#45A29E]/20 to-transparent" />
+          
+          {milestones.map((milestone, index) => (
+            <motion.div 
+              key={milestone.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className={cn(
+                "relative pl-20 group",
+                !milestone.isUnlocked && "opacity-50"
+              )}
+            >
+              <div className={cn(
+                "absolute left-4 top-0 w-8 h-8 rounded-full border-4 border-[#0B0C10] z-10 flex items-center justify-center transition-all duration-500",
+                milestone.isUnlocked ? "bg-[#45A29E] shadow-[0_0_15px_rgba(69,162,158,0.5)]" : "bg-[#1F2833]"
+              )}>
+                {milestone.isUnlocked ? <Check size={14} className="text-[#0B0C10]" /> : <Lock size={12} className="text-[#C5C6C7]" />}
+              </div>
+              
+              <div className={cn(
+                "bg-[#1F2833] p-6 rounded-3xl border transition-all duration-300",
+                milestone.isUnlocked ? "border-[#45A29E]/30 hover:border-[#45A29E]" : "border-white/5"
+              )}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{milestone.title}</h3>
+                    <p className="text-xs text-[#45A29E] font-bold uppercase tracking-widest">Target: {milestone.targetScore}</p>
+                  </div>
+                  {milestone.isUnlocked && milestone.id === currentMilestone.id && (
+                    <span className="px-3 py-1 bg-[#45A29E]/10 text-[#45A29E] rounded-full text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                      Current Level
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-[#C5C6C7] leading-relaxed">{milestone.description}</p>
+                
+                {milestone.isUnlocked && (
+                  <div className="mt-6 grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => onStartTask(PTE_TASKS[0])}
+                      className="py-2 bg-[#0B0C10] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#45A29E] hover:text-[#0B0C10] transition-all"
+                    >
+                      Practice Now
+                    </button>
+                    <button className="py-2 border border-white/5 text-[#C5C6C7] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
+                      View Details
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {activeView === 'schedule' && (
+        <div className="space-y-6">
+          <div className="bg-[#1F2833] p-8 rounded-[2.5rem] border border-[#45A29E]/10">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-xl font-bold text-white">Study Schedule</h3>
+                <p className="text-sm text-[#C5C6C7]">Align your study time with specific tasks.</p>
+              </div>
+              <button 
+                onClick={() => setShowAddSchedule(!showAddSchedule)}
+                className="p-3 bg-[#45A29E] text-[#0B0C10] rounded-2xl hover:bg-[#66FCF1] transition-all shadow-lg"
+              >
+                <Plus size={24} className={cn("transition-transform", showAddSchedule && "rotate-45")} />
+              </button>
+            </div>
+
+            {showAddSchedule && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 p-6 bg-[#0B0C10] rounded-3xl border border-[#45A29E]/30 space-y-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <select 
+                    value={newSchedule.taskId}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, taskId: e.target.value })}
+                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                  >
+                    <option value="">Select Task</option>
+                    {PTE_TASKS.map(t => (
+                      <option key={t.id} value={t.id}>{t.category}: {t.title}</option>
+                    ))}
+                  </select>
+                  <input 
+                    type="time"
+                    value={newSchedule.time}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
+                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                  />
+                  <input 
+                    type="number"
+                    placeholder="Duration (min)"
+                    value={newSchedule.duration}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, duration: parseInt(e.target.value) || 0 })}
+                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                  />
+                </div>
+                <button 
+                  onClick={handleAddSchedule}
+                  className="w-full py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                >
+                  Add to Schedule
+                </button>
+              </motion.div>
+            )}
+
+            <div className="space-y-4">
+              {(!user.schedule || user.schedule.length === 0) ? (
+                <div className="text-center py-12 bg-[#0B0C10] rounded-3xl border border-dashed border-white/10">
+                  <Calendar className="mx-auto text-[#C5C6C7]/20 mb-4" size={48} />
+                  <p className="text-[#C5C6C7]">No tasks scheduled yet.</p>
+                </div>
+              ) : (
+                user.schedule.map((item: ScheduledTask) => {
+                  const task = PTE_TASKS.find(t => t.id === item.taskId);
+                  return (
+                    <div key={item.id} className="flex items-center gap-6 p-4 bg-[#0B0C10] rounded-2xl border border-white/5 group hover:border-[#45A29E]/30 transition-all">
+                      <div className="text-center min-w-[80px]">
+                        <p className="text-sm font-bold text-white">{item.scheduledAt}</p>
+                        <p className="text-[10px] text-[#45A29E] font-bold uppercase">{item.duration}m</p>
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-white">{task?.category || 'Unknown Task'}</h4>
+                        <p className="text-xs text-[#C5C6C7] uppercase tracking-widest">{task?.section || 'N/A'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => task && onStartTask(task)}
+                          className="p-2 text-[#45A29E] hover:bg-[#45A29E]/10 rounded-lg transition-all"
+                        >
+                          <Play size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteSchedule(item.id)}
+                          className="p-2 text-[#C5C6C7] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="bg-[#45A29E]/5 p-6 rounded-3xl border border-[#45A29E]/20 flex items-center gap-4">
+            <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center">
+              <Bell className="text-[#45A29E]" size={24} />
+            </div>
+            <div>
+              <h4 className="font-bold text-white">Enable Notifications</h4>
+              <p className="text-xs text-[#C5C6C7]">Get reminded before your scheduled study sessions.</p>
+            </div>
+            <button 
+              onClick={() => NotificationService.requestPermission()}
+              className="ml-auto px-4 py-2 bg-[#45A29E] text-[#0B0C10] rounded-xl text-[10px] font-bold uppercase tracking-widest"
+            >
+              Enable
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeView === 'goals' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-[#1F2833] p-8 rounded-[2.5rem] border border-[#45A29E]/10">
+              <div className="flex items-center gap-3 mb-6">
+                <TrendingUp className="text-[#45A29E]" size={24} />
+                <h3 className="text-xl font-bold text-white">Daily Goals</h3>
+              </div>
+              
+              <div className="space-y-6">
+                {(!user.goals || user.goals.length === 0) ? (
+                  <div className="text-center py-8">
+                    <p className="text-[#C5C6C7] text-sm">No goals set for today.</p>
+                  </div>
+                ) : (
+                  user.goals.map((goal: DailyGoal) => (
+                    <div key={goal.id} className="relative group">
+                      <GoalItem 
+                        label={goal.type === 'tasks' ? 'Tasks Completed' : 'Study Time (min)'} 
+                        current={calculateGoalProgress(goal)} 
+                        target={goal.target} 
+                      />
+                      <button 
+                        onClick={() => handleDeleteGoal(goal.id)}
+                        className="absolute -right-2 -top-2 p-1 bg-red-500/20 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-[#0B0C10] p-8 rounded-[2.5rem] border border-[#45A29E]/10 flex flex-col justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">Set New Goal</h3>
+                <p className="text-sm text-[#C5C6C7] mb-6">Challenge yourself to improve faster.</p>
+                
+                <div className="space-y-4">
+                  <select 
+                    value={newGoal.type}
+                    onChange={(e) => setNewGoal({ ...newGoal, type: e.target.value as 'tasks' | 'time' })}
+                    className="w-full bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                  >
+                    <option value="tasks">Tasks per day</option>
+                    <option value="time">Minutes per day</option>
+                  </select>
+                  <input 
+                    type="number" 
+                    placeholder="Enter target value"
+                    value={newGoal.target}
+                    onChange={(e) => setNewGoal({ ...newGoal, target: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                  />
+                </div>
+              </div>
+              <button 
+                onClick={handleAddGoal}
+                className="mt-8 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+              >
+                Add Goal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function GoalItem({ label, current, target }: { label: string, current: number, target: number }) {
+  const percent = Math.min(100, (current / target) * 100);
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-end">
+        <span className="text-xs font-bold text-[#C5C6C7] uppercase tracking-wider">{label}</span>
+        <span className="text-sm font-bold text-white">{current} / {target}</span>
+      </div>
+      <div className="h-2 bg-[#0B0C10] rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${percent}%` }}
+          className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1]"
+        />
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken'>('dashboard');
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
+
+  useEffect(() => {
+    if (user?.targetScore) {
+      setProgress(prev => ({ ...prev, targetScore: user.targetScore }));
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user?.schedule) {
+        const now = new Date();
+        user.schedule.forEach((item: any) => {
+          const scheduledTime = new Date(item.scheduledAt);
+          // If within 1 minute of scheduled time and not completed
+          if (!item.isCompleted && Math.abs(now.getTime() - scheduledTime.getTime()) < 60000) {
+            NotificationService.send(`Study Time: ${item.taskId}`, {
+              body: `It's time for your scheduled ${item.taskId} session!`,
+              icon: '/favicon.ico'
+            });
+          }
+        });
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [user?.schedule]);
+
+  const handleSetTargetScore = async (score: number) => {
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { targetScore: score });
+        setProgress(prev => ({ ...prev, targetScore: score }));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    } else {
+      setProgress(prev => ({ ...prev, targetScore: score }));
+    }
+  };
 
   const handleSelectTask = (task: PTETask, allTasks: PTETask[]) => {
     setSelectedTask(task);
@@ -149,10 +620,17 @@ function AppContent() {
       [taskId]: [...taskScoresForId, score]
     };
 
+    const newTaskCompletion: TaskCompletion = {
+      taskId,
+      score,
+      completedAt: new Date().toISOString()
+    };
+
     try {
       await updateDoc(userRef, { 
         taskScores: newTaskScores,
-        completedTasks: Array.from(new Set([...(user.completedTasks || []), taskId]))
+        completedTasks: Array.from(new Set([...(user.completedTasks || []), taskId])),
+        completedTasksDetailed: [...(user.completedTasksDetailed || []), newTaskCompletion]
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
@@ -183,8 +661,8 @@ function AppContent() {
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-[#1F2833] bg-[#0B0C10]/80 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)]">
-              <Zap className="text-[#0B0C10] fill-current" size={24} />
+            <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
+              <Zap className="text-[#0B0C10] fill-current" size={20} />
             </div>
             <h1 className="text-2xl font-bold tracking-tighter text-white font-display">
               PTE <span className="text-[#45A29E]">NINJA</span>
@@ -244,8 +722,39 @@ function AppContent() {
                   setSelectedTask(task);
                   setActiveTab(task.section);
                 }} 
+                onSelectSection={setActiveTab}
+                onViewRoadmap={() => setActiveTab('roadmap')}
+                onViewVocabulary={() => setActiveTab('vocabulary')}
+                onViewShuriken={() => setActiveTab('shuriken')}
                 calculateAverageScore={calculateAverageScore}
                 calculateSectionAverage={calculateSectionAverage}
+                onSetTargetScore={handleSetTargetScore}
+              />
+            ) : activeTab === 'roadmap' ? (
+              <RoadmapView 
+                key="roadmap"
+                user={user}
+                onBack={() => setActiveTab('dashboard')}
+                onStartTask={(task) => {
+                  setSelectedTask(task);
+                  setActiveTab(task.section);
+                }}
+              />
+            ) : activeTab === 'vocabulary' ? (
+              <VocabularyBuilder 
+                key="vocabulary"
+                user={user}
+                onBack={() => setActiveTab('dashboard')}
+              />
+            ) : activeTab === 'shuriken' ? (
+              <DailyShurikenView 
+                key="shuriken"
+                user={user}
+                onBack={() => setActiveTab('dashboard')}
+                onStartTask={(task) => {
+                  setSelectedTask(task);
+                  setActiveTab(task.section);
+                }}
               />
             ) : activeTab === 'profile' ? (
               <ProfileView 
@@ -267,8 +776,10 @@ function AppContent() {
         </main>
 
         {/* Navigation Bar */}
-        <nav className="flex items-center justify-around px-4 py-3 border-t border-[#1F2833] bg-[#0B0C10]/90 backdrop-blur-xl">
+        <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-[#1F2833] bg-[#0B0C10]/90 backdrop-blur-xl sticky bottom-0 z-50">
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
+          <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
+          <NavButton active={activeTab === 'roadmap'} onClick={() => setActiveTab('roadmap')} icon={Map} label="Roadmap" />
           <NavButton active={activeTab === 'speaking'} onClick={() => setActiveTab('speaking')} icon={Mic} label="Speaking" />
           <NavButton active={activeTab === 'writing'} onClick={() => setActiveTab('writing')} icon={PenTool} label="Writing" />
           <NavButton active={activeTab === 'reading'} onClick={() => setActiveTab('reading')} icon={BookOpen} label="Reading" />
@@ -452,8 +963,8 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       {/* Navbar */}
       <nav className="relative z-20 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)]">
-            <Zap className="text-[#0B0C10] fill-current" size={24} />
+          <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
+            <Zap className="text-[#0B0C10] fill-current" size={20} />
           </div>
           <h1 className="text-2xl font-bold tracking-tighter text-white font-display">
             PTE <span className="text-[#45A29E]">NINJA</span>
@@ -802,36 +1313,66 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
     <button 
       onClick={onClick}
       className={cn(
-        "flex flex-col items-center gap-1 transition-all duration-300 relative group",
+        "flex flex-col items-center gap-1 transition-all duration-300 relative group flex-1 md:flex-none py-1",
         active ? "text-[#45A29E]" : "text-[#C5C6C7] hover:text-white"
       )}
     >
       <div className={cn(
-        "p-2 rounded-xl transition-all",
+        "p-1.5 md:p-2 rounded-xl transition-all",
         active ? "bg-[#45A29E]/10" : "group-hover:bg-[#1F2833]"
       )}>
-        <Icon size={24} />
+        <Icon size={20} className="md:w-6 md:h-6" />
       </div>
-      <span className="text-[10px] uppercase tracking-widest font-bold">{label}</span>
+      <span className="text-[10px] uppercase tracking-widest font-bold hidden md:block">{label}</span>
       {active && (
         <motion.div 
           layoutId="nav-indicator"
-          className="absolute -bottom-3 w-1 h-1 bg-[#45A29E] rounded-full shadow-[0_0_8px_#45A29E]"
+          className="absolute -bottom-1 md:-bottom-3 w-1 h-1 bg-[#45A29E] rounded-full shadow-[0_0_8px_#45A29E]"
         />
       )}
     </button>
   );
 }
 
-function Dashboard({ progress, user, onStartTask, calculateAverageScore, calculateSectionAverage }: { 
+function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
   progress: UserProgress, 
   user: any,
   onStartTask: (task: PTETask) => void,
+  onSelectSection: (section: PTESection) => void,
+  onViewRoadmap: () => void,
+  onViewVocabulary: () => void,
+  onViewShuriken: () => void,
   calculateAverageScore: () => number,
-  calculateSectionAverage: (section: PTESection) => number
+  calculateSectionAverage: (section: PTESection) => number,
+  onSetTargetScore: (score: number) => void
 }) {
   const averageScore = calculateAverageScore();
+  const [tempTarget, setTempTarget] = useState(79);
   
+  // Analysis logic
+  const totalTasks = PTE_TASKS.length;
+  const attemptedTasks = user?.completedTasks?.length || 0;
+  
+  const sectionAverages = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => ({
+    section: s,
+    average: calculateSectionAverage(s)
+  }));
+  const weakestSection = sectionAverages.reduce((prev, curr) => prev.average < curr.average ? prev : curr);
+  
+  const highPriorityTasks = PTE_TASKS.filter(t => t.section === weakestSection.section && !user?.completedTasks?.includes(t.id)).slice(0, 2);
+  const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : PTE_TASKS.slice(0, 4);
+
+  // Calculate current belt based on score
+  const getBelt = (score: number) => {
+    if (score >= 79) return { title: 'Black Belt', next: 'Mastery' };
+    if (score >= 65) return { title: 'Blue Belt', next: 'Black Belt' };
+    if (score >= 50) return { title: 'Green Belt', next: 'Blue Belt' };
+    if (score >= 30) return { title: 'Yellow Belt', next: 'Green Belt' };
+    return { title: 'White Belt', next: 'Yellow Belt' };
+  };
+
+  const belt = getBelt(averageScore);
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -846,29 +1387,112 @@ function Dashboard({ progress, user, onStartTask, calculateAverageScore, calcula
             <Trophy size={120} />
           </div>
           <div className="relative z-10">
-            <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
-            <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-6xl font-black text-white">{averageScore}</span>
-              <span className="text-xl text-[#C5C6C7]">/ 90</span>
-            </div>
-            <div className="w-full h-3 bg-[#0B0C10] rounded-full overflow-hidden">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${(averageScore / 90) * 100}%` }}
-                className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
-              />
-            </div>
-            <p className="mt-4 text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
+            {progress.targetScore === 0 ? (
+              <div>
+                <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Target</h2>
+                <p className="text-[#C5C6C7] mb-6 text-sm">What is your goal for the PTE? For a Black Belt, aim for 79+.</p>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="number" 
+                    value={tempTarget}
+                    onChange={(e) => setTempTarget(Number(e.target.value))}
+                    className="w-24 bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E]"
+                    min="10"
+                    max="90"
+                  />
+                  <button 
+                    onClick={() => onSetTargetScore(tempTarget)}
+                    className="flex-1 py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                  >
+                    Set Target
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
+                <div className="flex items-baseline gap-2 mb-6">
+                  <span className="text-6xl font-black text-white">{averageScore}</span>
+                  <span className="text-xl text-[#C5C6C7]">/ 90</span>
+                </div>
+                <div className="w-full h-3 bg-[#0B0C10] rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(averageScore / 90) * 100}%` }}
+                    className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
+                  />
+                </div>
+                <p className="mt-4 text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
+              </>
+            )}
           </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#45A29E] to-[#1F2833] rounded-3xl p-8 flex flex-col justify-between text-[#0B0C10]">
           <div>
             <Target size={32} className="mb-4" />
-            <h3 className="text-xl font-bold leading-tight">Next Milestone: <br/>Black Belt</h3>
+            <h3 className="text-xl font-bold leading-tight">Next Milestone: <br/>{belt.next}</h3>
+            <p className="text-xs font-bold opacity-60 mt-1 uppercase tracking-widest">Current: {belt.title}</p>
           </div>
-          <button className="mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+          <button 
+            onClick={onViewRoadmap}
+            className="mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all"
+          >
             View Roadmap
+          </button>
+        </div>
+      </section>
+
+      {/* Advanced Analysis & Vocabulary */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <BarChart3 className="text-[#45A29E]" size={20} />
+              Training Analysis
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/5">
+              <p className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-1">Attempted</p>
+              <p className="text-2xl font-black text-white">{attemptedTasks} <span className="text-xs text-[#C5C6C7]/30">/ {totalTasks}</span></p>
+            </div>
+            <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/5">
+              <p className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-1">Available</p>
+              <p className="text-2xl font-black text-[#45A29E]">{totalTasks - attemptedTasks}</p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-center gap-4">
+            <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500">
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-orange-500/50 uppercase tracking-widest">Needs Improvement</p>
+              <p className="text-sm font-bold text-white capitalize">{weakestSection.section} Section</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Book className="text-[#45A29E]" size={20} />
+                Vocabulary Builder
+              </h3>
+              <span className="px-2 py-1 bg-[#45A29E]/10 text-[#45A29E] text-[10px] font-bold rounded-md uppercase tracking-widest">2000+ Words</span>
+            </div>
+            <p className="text-sm text-[#C5C6C7] leading-relaxed">
+              Master high-frequency academic words essential for PTE success. Includes meanings, context, and audio pronunciations.
+            </p>
+          </div>
+          <button 
+            onClick={onViewVocabulary}
+            className="mt-6 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+          >
+            Open Builder
           </button>
         </div>
       </section>
@@ -880,10 +1504,13 @@ function Dashboard({ progress, user, onStartTask, calculateAverageScore, calcula
             <Zap className="text-[#45A29E]" size={20} />
             Daily Shuriken
           </h2>
-          <button className="text-sm text-[#45A29E] font-bold hover:underline">View All</button>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-md uppercase tracking-widest">High Priority</span>
+            <button onClick={onViewShuriken} className="text-sm text-[#45A29E] font-bold hover:underline">View All</button>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {PTE_TASKS.slice(0, 4).map((task) => (
+          {recommendedTasks.map((task) => (
             <TaskCard key={task.id} task={task} onClick={() => onStartTask(task)} />
           ))}
         </div>
@@ -891,11 +1518,264 @@ function Dashboard({ progress, user, onStartTask, calculateAverageScore, calcula
 
       {/* Quick Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatBox label="Speaking" value={calculateSectionAverage('speaking').toString()} color="text-[#66FCF1]" />
-        <StatBox label="Writing" value={calculateSectionAverage('writing').toString()} color="text-orange-500" />
-        <StatBox label="Reading" value={calculateSectionAverage('reading').toString()} color="text-[#66FCF1]" />
-        <StatBox label="Listening" value={calculateSectionAverage('listening').toString()} color="text-yellow-500" />
+        <StatBox label="Speaking" value={calculateSectionAverage('speaking').toString()} color="text-[#66FCF1]" onClick={() => onSelectSection('speaking')} />
+        <StatBox label="Writing" value={calculateSectionAverage('writing').toString()} color="text-orange-500" onClick={() => onSelectSection('writing')} />
+        <StatBox label="Reading" value={calculateSectionAverage('reading').toString()} color="text-[#66FCF1]" onClick={() => onSelectSection('reading')} />
+        <StatBox label="Listening" value={calculateSectionAverage('listening').toString()} color="text-yellow-500" onClick={() => onSelectSection('listening')} />
       </section>
+    </motion.div>
+  );
+}
+
+function DailyShurikenView({ user, onBack, onStartTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void }) {
+  const highPriorityTasks = PTE_TASKS
+    .filter(t => !user?.completedTasks?.includes(t.id))
+    .slice(0, 100);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-4xl mx-auto space-y-8 pb-20"
+    >
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+          <ChevronRight className="rotate-180" size={24} />
+        </button>
+        <div className="p-3 rounded-2xl bg-orange-500/10">
+          <Zap className="text-orange-500" size={28} />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-white">Daily Shuriken</h2>
+          <p className="text-sm text-[#C5C6C7]">100 High-priority tasks to boost your score across all sections</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {highPriorityTasks.length === 0 ? (
+          <div className="text-center py-20 bg-[#1F2833] rounded-3xl border border-[#45A29E]/10">
+            <Check className="mx-auto text-[#45A29E] mb-4" size={48} />
+            <h3 className="text-xl font-bold text-white">All Tasks Completed!</h3>
+            <p className="text-[#C5C6C7]">You've mastered all current high-priority tasks.</p>
+          </div>
+        ) : (
+          highPriorityTasks.map((task, index) => (
+            <div key={task.id} className="flex items-center gap-4 group">
+              <div className="w-8 h-8 rounded-full bg-[#1F2833] border border-[#45A29E]/20 flex items-center justify-center text-xs font-bold text-[#45A29E] shrink-0">
+                {index + 1}
+              </div>
+              <div className="flex-1">
+                <TaskCard task={task} onClick={() => onStartTask(task)} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedWord, setSelectedWord] = useState<VocabularyWord | null>(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  const filteredWords = PTE_VOCABULARY.filter(w => {
+    const matchesSearch = w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         w.meaning.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFavorite = !showFavoritesOnly || user?.favoriteWords?.includes(w.id);
+    return matchesSearch && matchesFavorite;
+  });
+
+  const playPronunciation = (word: string) => {
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleToggleFavorite = async (wordId: string) => {
+    if (!user?.uid) return;
+    
+    const currentFavorites = user.favoriteWords || [];
+    const isFavorite = currentFavorites.includes(wordId);
+    
+    const newFavorites = isFavorite 
+      ? currentFavorites.filter((id: string) => id !== wordId)
+      : [...currentFavorites, wordId];
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { 
+        favoriteWords: newFavorites 
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-4xl mx-auto space-y-6 pb-20"
+    >
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+          <ChevronRight className="rotate-180" size={24} />
+        </button>
+        <div className="p-3 rounded-2xl bg-[#45A29E]/10">
+          <BookOpen className="text-[#45A29E]" size={28} />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-white">Vocabulary Builder</h2>
+          <p className="text-sm text-[#C5C6C7]">Master 2000+ essential PTE words</p>
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C5C6C7]/50" size={20} />
+          <input 
+            type="text" 
+            placeholder="Search words or meanings..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-[#1F2833] border border-[#45A29E]/20 rounded-2xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-[#45A29E] transition-all"
+          />
+        </div>
+        <button
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className={cn(
+            "px-6 rounded-2xl border transition-all flex items-center gap-2 font-bold shrink-0",
+            showFavoritesOnly 
+              ? "bg-yellow-400/10 border-yellow-400/50 text-yellow-400" 
+              : "bg-[#1F2833] border-[#45A29E]/10 text-[#C5C6C7] hover:border-[#45A29E]/30"
+          )}
+        >
+          <Star size={20} fill={showFavoritesOnly ? "currentColor" : "none"} />
+          <span className="hidden sm:inline">Flashcards</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+          {filteredWords.map(word => {
+            const isFavorite = user?.favoriteWords?.includes(word.id);
+            return (
+              <div 
+                key={word.id}
+                onClick={() => setSelectedWord(word)}
+                className={cn(
+                  "w-full text-left p-4 rounded-xl border transition-all flex items-center justify-between group cursor-pointer",
+                  selectedWord?.id === word.id 
+                    ? "bg-[#45A29E] border-[#45A29E] text-[#0B0C10]" 
+                    : "bg-[#1F2833] border-[#45A29E]/10 text-white hover:border-[#45A29E]/40"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleFavorite(word.id);
+                    }}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors hover:bg-white/5",
+                      isFavorite ? "text-yellow-400" : "text-[#C5C6C7]/30"
+                    )}
+                  >
+                    <Star size={16} fill={isFavorite ? "currentColor" : "none"} />
+                  </button>
+                  <div>
+                    <div className="font-bold text-lg">{word.word}</div>
+                    <div className={cn("text-xs uppercase font-bold tracking-widest opacity-60", selectedWord?.id === word.id ? "text-[#0B0C10]" : "text-[#45A29E]")}>
+                      {word.partOfSpeech}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playPronunciation(word.word);
+                  }}
+                  className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    selectedWord?.id === word.id ? "hover:bg-black/10" : "hover:bg-white/5"
+                  )}
+                >
+                  <Volume2 size={20} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 sticky top-6 h-fit">
+          {selectedWord ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-3xl font-black text-white tracking-tight">{selectedWord.word}</h3>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleToggleFavorite(selectedWord.id)}
+                    className={cn(
+                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all border",
+                      user?.favoriteWords?.includes(selectedWord.id)
+                        ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
+                        : "bg-white/5 border-white/10 text-[#C5C6C7] hover:border-[#45A29E]/50"
+                    )}
+                  >
+                    <Star size={24} fill={user?.favoriteWords?.includes(selectedWord.id) ? "currentColor" : "none"} />
+                  </button>
+                  <button 
+                    onClick={() => playPronunciation(selectedWord.word)}
+                    className="w-12 h-12 bg-[#45A29E]/10 rounded-xl flex items-center justify-center text-[#45A29E] hover:bg-[#45A29E] hover:text-[#0B0C10] transition-all"
+                  >
+                    <Volume2 size={24} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="inline-block px-3 py-1 bg-[#45A29E]/10 border border-[#45A29E]/20 rounded-lg text-[#45A29E] text-xs font-bold uppercase tracking-widest">
+                {selectedWord.partOfSpeech}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-2">Meaning</h4>
+                  <p className="text-white leading-relaxed">{selectedWord.meaning}</p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-2">Context</h4>
+                  <p className="text-[#C5C6C7] italic leading-relaxed">"{selectedWord.context}"</p>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-[#45A29E]/10">
+                <button 
+                  onClick={() => handleToggleFavorite(selectedWord.id)}
+                  className={cn(
+                    "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
+                    user?.favoriteWords?.includes(selectedWord.id)
+                      ? "bg-[#1F2833] text-[#45A29E] border border-[#45A29E]/20"
+                      : "bg-[#45A29E] text-[#0B0C10] hover:bg-[#66FCF1]"
+                  )}
+                >
+                  {user?.favoriteWords?.includes(selectedWord.id) ? 'Remove from Flashcards' : 'Add to Flashcards'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20">
+              <div className="w-20 h-20 bg-[#0B0C10] rounded-3xl flex items-center justify-center text-[#45A29E]/20">
+                <Book size={40} />
+              </div>
+              <p className="text-[#C5C6C7]/50 font-medium">Select a word to view details</p>
+            </div>
+          )}
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -1017,10 +1897,54 @@ function SectionView({ section, user, onBack, onSelectTask }: { section: PTESect
 }
 
 function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?: boolean, onClick: () => void }) {
+  const sectionColors = {
+    speaking: "bg-rose-500/20 text-rose-500 border-rose-500/30",
+    writing: "bg-sky-500/20 text-sky-500 border-sky-500/30",
+    reading: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
+    listening: "bg-violet-500/20 text-violet-500 border-violet-500/30"
+  };
+
+  const getCategoryColor = (category: string) => {
+    const colors: Record<string, string> = {
+      // Speaking
+      'Read Aloud': 'bg-rose-400/10 text-rose-400 border-rose-400/20',
+      'Repeat Sentence': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
+      'Describe Image': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+      'Re-tell Lecture': 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20',
+      'Respond to a Situation': 'bg-lime-400/10 text-lime-400 border-lime-400/20',
+      'Summarize Group Discussion': 'bg-green-400/10 text-green-400 border-green-400/20',
+      'Answer Short Question': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
+      
+      // Writing
+      'Summarize Written Text': 'bg-sky-400/10 text-sky-400 border-sky-400/20',
+      'Write Essay': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
+      
+      // Reading
+      'Reading & Writing: Fill in the Blanks': 'bg-teal-400/10 text-teal-400 border-teal-400/20',
+      'Multiple Choice, Multiple Answer': 'bg-cyan-400/10 text-cyan-400 border-cyan-400/20',
+      'Multiple Choice, Single Answer': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
+      'Re-order Paragraphs': 'bg-violet-400/10 text-violet-400 border-violet-400/20',
+      'Reading: Fill in the Blanks': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
+      
+      // Listening
+      'Summarize Spoken Text': 'bg-fuchsia-400/10 text-fuchsia-400 border-fuchsia-400/20',
+      'Fill in the Blanks': 'bg-pink-400/10 text-pink-400 border-pink-400/20',
+      'Highlight Correct Summary': 'bg-rose-400/10 text-rose-400 border-rose-400/20',
+      'Write from Dictation': 'bg-slate-400/10 text-slate-400 border-slate-400/20',
+    };
+    return colors[category] || 'bg-gray-400/10 text-gray-400 border-gray-400/20';
+  };
+
   return (
     <button 
       onClick={onClick}
-      className="flex items-center gap-4 p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden"
+      className={cn(
+        "flex items-center gap-4 p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
+        task.section === 'speaking' ? 'border-l-rose-500' :
+        task.section === 'writing' ? 'border-l-sky-500' :
+        task.section === 'reading' ? 'border-l-emerald-500' :
+        'border-l-violet-500'
+      )}
     >
       <div className={cn(
         "w-12 h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
@@ -1029,9 +1953,25 @@ function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?:
         {isCompleted ? <Check size={24} /> : <Play size={20} />}
       </div>
       <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors">{task.title}</h4>
-          {isCompleted && <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Done</span>}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2">
+            <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors">{task.title}</h4>
+            {isCompleted && <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Done</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border",
+              getCategoryColor(task.category)
+            )}>
+              {task.category}
+            </span>
+            <span className={cn(
+              "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border",
+              sectionColors[task.section]
+            )}>
+              {task.section}
+            </span>
+          </div>
         </div>
         <p className="text-xs text-[#C5C6C7] line-clamp-1">{task.description}</p>
       </div>
@@ -1040,14 +1980,48 @@ function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?:
   );
 }
 
-function StatBox({ label, value, color }: { label: string, value: string, color: string }) {
+function StatBox({ label, value, color, onClick }: { label: string, value: string, color: string, onClick?: () => void }) {
   return (
-    <div className="bg-[#1F2833] p-4 rounded-2xl border border-[#45A29E]/5 flex flex-col items-center">
-      <span className="text-xs font-bold text-[#C5C6C7] uppercase tracking-widest mb-1">{label}</span>
+    <button 
+      onClick={onClick}
+      className="bg-[#1F2833] p-4 rounded-2xl border border-[#45A29E]/5 flex flex-col items-center hover:border-[#45A29E]/40 hover:bg-[#1F2833]/80 transition-all group"
+    >
+      <span className="text-xs font-bold text-[#C5C6C7] uppercase tracking-widest mb-1 group-hover:text-[#45A29E] transition-colors">{label}</span>
       <span className={cn("text-2xl font-black", color)}>{value}</span>
-    </div>
+    </button>
   );
 }
+
+// Helper to play a beep sound
+const playBeep = () => {
+  return new Promise<void>((resolve) => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+
+      oscillator.onended = () => {
+        audioContext.close();
+        resolve();
+      };
+
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.4);
+    } catch (e) {
+      console.error("Beep failed", e);
+      resolve();
+    }
+  });
+};
 
 function TaskModal({ 
   task, 
@@ -1062,15 +2036,22 @@ function TaskModal({
   onPrev?: () => void,
   onNext?: () => void
 }) {
-  const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(
-    task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation'
-      ? 'prep' // 3s countdown before audio
-      : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'))
-  );
+  const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(() => {
+    const isListeningPrep = task.section === 'listening' || 
+                           task.category === 'Repeat Sentence' || 
+                           task.category === 'Answer Short Question' || 
+                           task.category === 'Write from Dictation';
+    
+    if (isListeningPrep) return 'prep';
+    return task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep');
+  });
   const [timeLeft, setTimeLeft] = useState(() => {
     if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
-      return 3; // 3s countdown before audio
+      return 3;
     }
+    if (task.category === 'Summarize Spoken Text') return 12;
+    if (task.section === 'listening' && task.hasAudio) return 7;
+    
     if (task.hasAudio) return 0;
     if (task.prepTime === 0 || task.section === 'reading') {
       // Default recording/writing times based on latest PTE trends
@@ -1102,15 +2083,22 @@ function TaskModal({
 
   useEffect(() => {
     // Reset phase and timer for new task
-    const initialPhase = task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation'
-      ? 'prep'
-      : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
+    const isListeningPrep = task.section === 'listening' || 
+                           task.category === 'Repeat Sentence' || 
+                           task.category === 'Answer Short Question' || 
+                           task.category === 'Write from Dictation';
+    
+    const initialPhase = isListeningPrep ? 'prep' : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
     
     setPhase(initialPhase);
     
     let initialTime = 0;
     if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
       initialTime = 3;
+    } else if (task.category === 'Summarize Spoken Text') {
+      initialTime = 12;
+    } else if (task.section === 'listening' && task.hasAudio) {
+      initialTime = 7;
     } else if (task.hasAudio) {
       initialTime = 0;
     } else if (task.prepTime === 0 || task.section === 'reading') {
@@ -1206,7 +2194,28 @@ function TaskModal({
                 }
               }, 1000);
             };
-            audio.play();
+            
+            // Play beep before audio
+            await playBeep();
+            
+            try {
+              setIsAudioPlaying(true);
+              await audio.play();
+            } catch (playErr) {
+              console.error("Audio play failed, retrying...", playErr);
+              // Fallback for some browsers
+              setIsAudioPlaying(true);
+              audio.play().catch(e => {
+                console.error("Final audio play attempt failed:", e);
+                setIsAudioPlaying(false);
+                // Move to next phase if audio is completely blocked
+                setTimeout(() => {
+                  if (isCancelled) return;
+                  setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
+                  setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
+                }, 2000);
+              });
+            }
           } else {
             setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
             setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
@@ -1242,6 +2251,9 @@ function TaskModal({
 
   const startRecording = async () => {
     try {
+      // Play beep before recording starts
+      await playBeep();
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
@@ -1284,7 +2296,12 @@ function TaskModal({
           if (prev <= 1) {
             if (phase === 'prep') {
               // If it was a countdown before audio
-              if (task.hasAudio && (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') && !audioRef.current) {
+              const isListeningPrep = task.section === 'listening' || 
+                                     task.category === 'Repeat Sentence' || 
+                                     task.category === 'Answer Short Question' || 
+                                     task.category === 'Write from Dictation';
+              
+              if (task.hasAudio && isListeningPrep && !audioRef.current) {
                 setPhase('audio');
                 return 0;
               }
@@ -1330,20 +2347,71 @@ function TaskModal({
            throw new Error("No audio detected");
         }
         result = await analyzeSpeaking(base64, task.title, mediaRecorder?.mimeType || 'audio/webm');
+      } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
+        // Local scoring for objective tasks
+        let score = 0;
+        let maxScore = 10; // Default base
+        let feedbackTips: string[] = [];
+
+        if (task.category.includes('Fill in the Blanks')) {
+          const answers = Object.values(blankAnswers);
+          const correct = task.correctAnswers || [];
+          maxScore = Math.max(correct.length, 1);
+          let correctCount = 0;
+          correct.forEach((ans, i) => {
+            if (answers[i] === ans) correctCount++;
+          });
+          score = Math.round((correctCount / maxScore) * 80) + 10;
+          feedbackTips = correctCount === maxScore ? ["Perfect! All blanks filled correctly."] : [`You got ${correctCount} out of ${maxScore} blanks correct.`];
+        } else if (task.category.includes('Multiple Choice')) {
+          const correct = task.correctAnswers || [];
+          maxScore = Math.max(correct.length, 1);
+          let correctCount = 0;
+          selectedOptions.forEach(opt => {
+            if (correct.includes(opt)) correctCount++;
+            else correctCount--; // Negative marking for some PTE tasks, but let's keep it simple
+          });
+          score = Math.max(10, Math.min(90, Math.round((correctCount / maxScore) * 80) + 10));
+          feedbackTips = [`You selected ${selectedOptions.length} options. Correct options were: ${correct.join(', ')}`];
+        } else if (task.category === 'Re-order Paragraphs') {
+          const correct = task.correctAnswers || [];
+          maxScore = Math.max(correct.length - 1, 1); // PTE scores adjacent pairs
+          let correctPairs = 0;
+          for (let i = 0; i < targetParagraphs.length - 1; i++) {
+            const currentIdx = correct.indexOf(targetParagraphs[i]);
+            const nextIdx = correct.indexOf(targetParagraphs[i+1]);
+            if (nextIdx === currentIdx + 1) correctPairs++;
+          }
+          score = Math.round((correctPairs / maxScore) * 80) + 10;
+          feedbackTips = [`You found ${correctPairs} correct adjacent pairs.`];
+        } else if (task.category === 'Write from Dictation') {
+          const userWords = userInput.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/);
+          const correctWords = (task.prompt || "").toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/);
+          maxScore = correctWords.length;
+          let correctCount = 0;
+          userWords.forEach(word => {
+            if (correctWords.includes(word)) correctCount++;
+          });
+          score = Math.round((correctCount / maxScore) * 80) + 10;
+          feedbackTips = [`You got ${correctCount} out of ${maxScore} words correct.`];
+        }
+
+        result = {
+          overall: score,
+          content: score,
+          grammar: 90,
+          vocabulary: 90,
+          spelling: 90,
+          fluency: 90,
+          pronunciation: 90,
+          tips: feedbackTips,
+          feedback: feedbackTips
+        };
       } else {
         let finalInput = userInput;
-        if (task.section === 'reading') {
-          if (task.category === 'Reading & Writing: Fill in the Blanks' || task.category === 'Reading: Fill in the Blanks') {
-            finalInput = Object.values(blankAnswers).join(', ');
-          } else if (task.category.includes('Multiple Choice')) {
-            finalInput = selectedOptions.join(', ');
-          } else if (task.category === 'Re-order Paragraphs') {
-            finalInput = targetParagraphs.join(' -> ');
-          }
-        }
         
         if (!finalInput.trim() && task.category !== 'Re-order Paragraphs') {
-           throw new Error("No response provided");
+           throw new Error("Please provide a response before submitting.");
         }
         result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
       }
@@ -1351,19 +2419,36 @@ function TaskModal({
       const tips = result.tips || result.feedback || ["Keep practicing!"];
       const mispronounced = result.mispronounced || [];
       
-      setFeedback({
-        overall: result.overall || result.Score || 70,
-        content: result.content || result.Content || 70,
-        oralFluency: result.fluency || result.Fluency || result.oralFluency || 70,
-        pronunciation: result.pronunciation || result.Pronunciation || 70,
-        details: {
-          hesitations: result.hesitations || 0,
-          mispronounced: Array.isArray(mispronounced) ? mispronounced : [mispronounced],
-          pace: result.pace || "Good",
-          stress: result.stress || "Good"
-        },
-        tips: Array.isArray(tips) ? tips : [tips]
-      });
+      if (task.section === 'writing') {
+        setFeedback({
+          overall: result.overall || 70,
+          content: result.content || 70,
+          grammar: result.grammar || 70,
+          vocabulary: result.vocabulary || 70,
+          spelling: result.spelling || 70,
+          details: {
+            hesitations: 0,
+            mispronounced: [],
+            pace: "N/A",
+            stress: "N/A"
+          },
+          tips: Array.isArray(tips) ? tips : [tips]
+        });
+      } else {
+        setFeedback({
+          overall: result.overall || result.Score || 70,
+          content: result.content || result.Content || 70,
+          oralFluency: result.fluency || result.Fluency || result.oralFluency || 70,
+          pronunciation: result.pronunciation || result.Pronunciation || 70,
+          details: {
+            hesitations: result.hesitations || 0,
+            mispronounced: Array.isArray(mispronounced) ? mispronounced : [mispronounced],
+            pace: result.pace || "Good",
+            stress: result.stress || "Good"
+          },
+          tips: Array.isArray(tips) ? tips : [tips]
+        });
+      }
       onFinish(result.overall || result.Score || 70);
       setPhase('feedback');
     } catch (error) {
@@ -1405,14 +2490,17 @@ function TaskModal({
         className="bg-[#1F2833] w-full max-w-2xl rounded-3xl border border-[#45A29E]/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
       >
         {/* Header */}
-        <div className="p-6 border-b border-[#1F2833] flex items-center justify-between bg-[#1F2833]">
+        <div className="p-6 border-b border-[#45A29E]/20 flex items-center justify-between bg-[#1F2833]">
           <div className="flex items-center gap-3 flex-1">
             <div className="p-2 bg-[#45A29E]/10 rounded-lg">
-              {task.section === 'speaking' ? <Mic className="text-[#45A29E]" size={20} /> : <PenTool className="text-[#45A29E]" size={20} />}
+              {task.section === 'speaking' ? <Mic className="text-[#45A29E]" size={20} /> : 
+               task.section === 'writing' ? <PenTool className="text-[#45A29E]" size={20} /> :
+               task.section === 'reading' ? <BookOpen className="text-[#45A29E]" size={20} /> :
+               <Headphones className="text-[#45A29E]" size={20} />}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white leading-none">{task.title}</h3>
-              <p className="text-[10px] text-[#45A29E] uppercase tracking-widest mt-1 font-bold">PTE Academic Standard</p>
+              <h3 className="text-lg font-bold text-white leading-none">{task.category}</h3>
+              <p className="text-[10px] text-[#45A29E] uppercase tracking-widest mt-1 font-bold">{task.title} • PTE Academic</p>
             </div>
           </div>
           
@@ -1457,7 +2545,7 @@ function TaskModal({
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-mono font-bold text-white">
-                  {phase === 'audio' ? "Playing" : formatTime(timeLeft)}
+                  {phase === 'audio' ? (isAudioPlaying ? "Playing" : "Loading...") : formatTime(timeLeft)}
                 </div>
                 {phase === 'prep' && (
                   <button 
@@ -1471,25 +2559,38 @@ function TaskModal({
             </div>
           )}
 
-          {/* Prompt Area */}
-          <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/10 relative group">
-            <p className="text-xl text-white leading-relaxed font-medium">
-              {/* Hide prompt for audio-based tasks during audio phase */}
-              {((task.id === 'rs' || task.id === 'wfd' || task.id === 'rl' || task.id === 'sgd') && phase === 'audio') 
-                ? (task.id === 'rs' || task.id === 'wfd' ? "Listen carefully to the sentence..." : "Listen carefully to the recording...") 
-                : (task.prompt || "No prompt available for this task.")}
+          {/* Instruction Area */}
+          <div className="bg-[#1F2833]/30 p-4 rounded-xl border border-[#45A29E]/20">
+            <p className="text-sm text-white leading-relaxed">
+              <span className="text-[#45A29E] font-bold mr-2">Instruction:</span>
+              {task.description}
             </p>
-            {task.image && (
-              <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
-                <img 
-                  src={task.image} 
-                  alt="Task Prompt" 
-                  className="w-full h-auto object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            )}
           </div>
+
+          {/* Prompt Area */}
+          {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && (
+            <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/10 relative group">
+              <p className={cn(
+                "text-white leading-relaxed font-medium",
+                task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
+              )}>
+                {/* Hide prompt for audio-based tasks during audio phase */}
+                {((task.id.startsWith('rs') || task.id.startsWith('wfd') || task.id.startsWith('rl') || task.id.startsWith('sgd')) && phase === 'audio') 
+                  ? (task.id.startsWith('rs') || task.id.startsWith('wfd') ? "Listen carefully to the sentence..." : "Listen carefully to the recording...") 
+                  : (task.prompt || "No prompt available for this task.")}
+              </p>
+              {task.image && (
+                <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
+                  <img 
+                    src={task.image} 
+                    alt="Task Prompt" 
+                    className="w-full h-auto object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Input Area (Writing, Reading, Listening) */}
           {task.section !== 'speaking' && phase === 'recording' && (
@@ -1505,11 +2606,17 @@ function TaskModal({
                             <select
                               value={blankAnswers[i] || ''}
                               onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
-                              className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10"
+                              className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10 appearance-none pr-8 relative"
+                              style={{
+                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2366FCF1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 0.5rem center',
+                                backgroundSize: '1.5em 1.5em'
+                              }}
                             >
-                              <option value="">[Select]</option>
+                              <option value="" className="bg-[#1F2833] text-[#66FCF1]">[Select]</option>
                               {task.blanks?.[i]?.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
+                                <option key={opt} value={opt} className="bg-[#1F2833] text-white">{opt}</option>
                               ))}
                             </select>
                           )}
@@ -1717,11 +2824,119 @@ function TaskModal({
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    <ScoreMetric label="Content" score={feedback.content} max={90} />
-                    <ScoreMetric label="Oral Fluency" score={feedback.oralFluency} max={90} />
-                    <ScoreMetric label="Pronunciation" score={feedback.pronunciation} max={90} />
+                    {task.section === 'writing' ? (
+                      <>
+                        <ScoreMetric label="Grammar" score={feedback.grammar} max={90} />
+                        <ScoreMetric label="Vocabulary" score={feedback.vocabulary} max={90} />
+                        <ScoreMetric label="Spelling" score={feedback.spelling} max={90} />
+                      </>
+                    ) : task.section === 'speaking' ? (
+                      <>
+                        <ScoreMetric label="Content" score={feedback.content} max={90} />
+                        <ScoreMetric label="Oral Fluency" score={feedback.oralFluency} max={90} />
+                        <ScoreMetric label="Pronunciation" score={feedback.pronunciation} max={90} />
+                      </>
+                    ) : (
+                      <>
+                        <ScoreMetric label="Content" score={feedback.content} max={90} />
+                        <div className="col-span-2" />
+                      </>
+                    )}
                   </div>
                 </div>
+
+                {/* Reading Answer Key */}
+                {task.section === 'reading' && task.correctAnswers && (
+                  <div className="bg-[#0B0C10] rounded-2xl p-6 border border-[#45A29E]/20 space-y-4">
+                    <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Check size={16} className="text-[#45A29E]" />
+                      Answer Key & Feedback
+                    </h5>
+                    
+                    {task.category.includes('Fill in the Blanks') ? (
+                      <div className="text-sm leading-relaxed text-[#C5C6C7] bg-[#1F2833]/50 p-4 rounded-xl border border-white/5">
+                        {task.prompt?.split('________').map((part, i, arr) => {
+                          const userAnswer = blankAnswers[i];
+                          const correctAnswer = task.correctAnswers?.[i];
+                          const isCorrect = userAnswer === correctAnswer;
+                          
+                          return (
+                            <React.Fragment key={i}>
+                              {part}
+                              {i < arr.length - 1 && (
+                                <span className={cn(
+                                  "inline-block px-2 py-0.5 mx-1 rounded font-bold",
+                                  isCorrect ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                                )}>
+                                  {userAnswer || "[Missing]"}
+                                  {!isCorrect && (
+                                    <span className="ml-1 text-[10px] opacity-70 line-through decoration-red-400/50">
+                                      ({correctAnswer})
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ) : task.category.includes('Multiple Choice') ? (
+                      <div className="space-y-2">
+                        {task.options?.map(option => {
+                          const isSelected = selectedOptions.includes(option);
+                          const isCorrect = task.correctAnswers?.includes(option);
+                          
+                          return (
+                            <div 
+                              key={option}
+                              className={cn(
+                                "p-3 rounded-xl border text-xs flex items-center justify-between",
+                                isCorrect 
+                                  ? "bg-green-500/10 border-green-500/30 text-green-400" 
+                                  : isSelected 
+                                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                                    : "bg-[#1F2833] border-white/5 text-[#C5C6C7]"
+                              )}
+                            >
+                              <span>{option}</span>
+                              <div className="flex items-center gap-2">
+                                {isSelected && (isCorrect ? <Check size={14} /> : <X size={14} />)}
+                                {!isSelected && isCorrect && <Check size={14} className="opacity-50" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : task.category === 'Re-order Paragraphs' ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <h6 className="text-[10px] font-bold text-[#C5C6C7] uppercase">Your Order</h6>
+                            {targetParagraphs.map((para, i) => {
+                              const isCorrectPos = task.correctAnswers?.[i] === para;
+                              return (
+                                <div key={i} className={cn(
+                                  "p-2 rounded-lg border text-[10px] leading-tight",
+                                  isCorrectPos ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+                                )}>
+                                  {i + 1}. {para.substring(0, 100)}...
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="space-y-2">
+                            <h6 className="text-[10px] font-bold text-[#C5C6C7] uppercase">Correct Order</h6>
+                            {task.correctAnswers?.map((para, i) => (
+                              <div key={i} className="p-2 bg-[#1F2833] rounded-lg border border-white/5 text-[10px] leading-tight text-[#C5C6C7]">
+                                {i + 1}. {para.substring(0, 100)}...
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
                 {/* Detailed Analysis */}
                 <div className="grid grid-cols-2 gap-4">
