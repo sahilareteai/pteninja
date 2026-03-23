@@ -214,20 +214,26 @@ function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => v
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 pb-20"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
             <ChevronRight className="rotate-180" size={24} />
           </button>
+          <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
+            <Map className="text-[#45A29E]" size={28} />
+          </div>
+          <h2 className="text-2xl font-black text-white uppercase tracking-tight sm:hidden">Roadmap</h2>
+        </div>
+        <div className="flex-1 hidden sm:block">
           <h2 className="text-2xl font-black text-white uppercase tracking-tight">Your Roadmap</h2>
         </div>
-        <div className="flex bg-[#1F2833] p-1 rounded-xl border border-white/5">
+        <div className="flex bg-[#1F2833] p-1 rounded-xl border border-white/5 w-full sm:w-auto overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveView('roadmap')}
             className={cn(
-              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
               activeView === 'roadmap' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
             )}
           >
@@ -236,7 +242,7 @@ function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => v
           <button 
             onClick={() => setActiveView('schedule')}
             className={cn(
-              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
               activeView === 'schedule' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
             )}
           >
@@ -245,7 +251,7 @@ function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => v
           <button 
             onClick={() => setActiveView('goals')}
             className={cn(
-              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+              "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
               activeView === 'goals' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
             )}
           >
@@ -1218,27 +1224,27 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto space-y-8"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center gap-6 bg-[#1F2833] p-8 rounded-3xl border border-[#45A29E]/20">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#45A29E] to-[#66FCF1] p-1">
+      <div className="flex flex-col sm:flex-row items-center gap-6 bg-[#1F2833] p-6 md:p-8 rounded-3xl border border-[#45A29E]/20">
+        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-[#45A29E] to-[#66FCF1] p-1 shrink-0">
           <div className="w-full h-full rounded-full bg-[#0B0C10] flex items-center justify-center overflow-hidden">
             {user?.displayName ? (
               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&size=128&background=45A29E&color=0B0C10`} alt="User" className="w-full h-full object-cover" />
             ) : (
-              <User size={48} className="text-[#45A29E]" />
+              <User size={40} className="text-[#45A29E] md:w-12 md:h-12" />
             )}
           </div>
         </div>
-        <div className="flex-1">
-          <h2 className="text-3xl font-bold text-white">{user?.displayName || 'Sensei'}</h2>
-          <p className="text-[#C5C6C7]">{user?.email || 'Guest User'}</p>
-          <div className="flex items-center gap-3 mt-3">
-            <span className={cn("px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-widest", getStatusColor())}>
+        <div className="flex-1 text-center sm:text-left min-w-0">
+          <h2 className="text-2xl md:text-3xl font-bold text-white truncate">{user?.displayName || 'Sensei'}</h2>
+          <p className="text-[#C5C6C7] truncate text-sm md:text-base">{user?.email || 'Guest User'}</p>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 md:gap-3 mt-3">
+            <span className={cn("px-3 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase tracking-widest", getStatusColor())}>
               {user?.subscriptionStatus}
             </span>
             {(isTrial || isGuest) && (
-              <span className="text-xs text-[#C5C6C7]/50">
+              <span className="text-[10px] md:text-xs text-[#C5C6C7]/50">
                 {getRemainingDays()} days remaining
               </span>
             )}
@@ -1246,40 +1252,40 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
         </div>
         <button 
           onClick={onLogout}
-          className="p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all"
+          className="p-3 md:p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all shrink-0"
         >
-          <LogOut size={24} />
+          <LogOut className="w-5 h-5 md:w-6 md:h-6" />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-[#1F2833] p-8 rounded-3xl border border-[#45A29E]/20 space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              <CreditCard className="text-[#45A29E]" /> Subscription
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        <div className="bg-[#1F2833] p-6 md:p-8 rounded-3xl border border-[#45A29E]/20 space-y-4 md:space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+              <CreditCard className="text-[#45A29E]" size={20} /> Subscription
             </h3>
             {!isActive && (
               <button 
                 onClick={onUpgrade}
-                className="px-4 py-2 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all"
+                className="w-full sm:w-auto px-4 py-2 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all text-sm"
               >
                 Upgrade
               </button>
             )}
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-3 md:space-y-4">
             <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10">
-              <p className="text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Current Plan</p>
-              <p className="text-lg font-bold text-white mt-1">
+              <p className="text-[10px] md:text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Current Plan</p>
+              <p className="text-base md:text-lg font-bold text-white mt-1">
                 {isActive ? `${user.planId?.toUpperCase()} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
             {isActive && (
               <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10">
-                <p className="text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Next Billing Date</p>
-                <p className="text-lg font-bold text-white mt-1">
+                <p className="text-[10px] md:text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Next Billing Date</p>
+                <p className="text-base md:text-lg font-bold text-white mt-1">
                   {new Date(user.subscriptionEndsAt).toLocaleDateString()}
                 </p>
               </div>
@@ -1378,25 +1384,25 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto space-y-8"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
     >
       {/* Progress Overview */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-[#1F2833] rounded-3xl p-8 border border-[#45A29E]/10 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="md:col-span-2 bg-[#1F2833] rounded-3xl p-6 md:p-8 border border-[#45A29E]/10 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity hidden sm:block">
             <Trophy size={120} />
           </div>
           <div className="relative z-10">
             {progress.targetScore === 0 ? (
               <div>
-                <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Target</h2>
-                <p className="text-[#C5C6C7] mb-6 text-sm">What is your goal for the PTE? For a Black Belt, aim for 79+.</p>
-                <div className="flex items-center gap-4">
+                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Target</h2>
+                <p className="text-[#C5C6C7] mb-6 text-xs md:text-sm">What is your goal for the PTE? For a Black Belt, aim for 79+.</p>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                   <input 
                     type="number" 
                     value={tempTarget}
                     onChange={(e) => setTempTarget(Number(e.target.value))}
-                    className="w-24 bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E]"
+                    className="w-full sm:w-24 bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E]"
                     min="10"
                     max="90"
                   />
@@ -1410,33 +1416,33 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
               </div>
             ) : (
               <>
-                <h2 className="text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
-                <div className="flex items-baseline gap-2 mb-6">
-                  <span className="text-6xl font-black text-white">{averageScore}</span>
-                  <span className="text-xl text-[#C5C6C7]">/ 90</span>
+                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
+                <div className="flex items-baseline gap-2 mb-4 md:mb-6">
+                  <span className="text-4xl md:text-6xl font-black text-white">{averageScore}</span>
+                  <span className="text-lg md:text-xl text-[#C5C6C7]">/ 90</span>
                 </div>
-                <div className="w-full h-3 bg-[#0B0C10] rounded-full overflow-hidden">
+                <div className="w-full h-2 md:h-3 bg-[#0B0C10] rounded-full overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${(averageScore / 90) * 100}%` }}
                     className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
                   />
                 </div>
-                <p className="mt-4 text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
+                <p className="mt-3 md:mt-4 text-xs md:text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
               </>
             )}
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#45A29E] to-[#1F2833] rounded-3xl p-8 flex flex-col justify-between text-[#0B0C10]">
+        <div className="bg-gradient-to-br from-[#45A29E] to-[#1F2833] rounded-3xl p-6 md:p-8 flex flex-col justify-between text-[#0B0C10]">
           <div>
-            <Target size={32} className="mb-4" />
-            <h3 className="text-xl font-bold leading-tight">Next Milestone: <br/>{belt.next}</h3>
-            <p className="text-xs font-bold opacity-60 mt-1 uppercase tracking-widest">Current: {belt.title}</p>
+            <Target size={28} className="mb-3 md:mb-4" />
+            <h3 className="text-lg md:text-xl font-bold leading-tight">Next Milestone: <br/>{belt.next}</h3>
+            <p className="text-[10px] md:text-xs font-bold opacity-60 mt-1 uppercase tracking-widest">Current: {belt.title}</p>
           </div>
           <button 
             onClick={onViewRoadmap}
-            className="mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all"
+            className="mt-4 md:mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-xs md:text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all"
           >
             View Roadmap
           </button>
@@ -1537,17 +1543,20 @@ function DailyShurikenView({ user, onBack, onStartTask }: { user: any, onBack: (
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-8 pb-20"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
-          <ChevronRight className="rotate-180" size={24} />
-        </button>
-        <div className="p-3 rounded-2xl bg-orange-500/10">
-          <Zap className="text-orange-500" size={28} />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+            <ChevronRight className="rotate-180" size={24} />
+          </button>
+          <div className="p-3 rounded-2xl bg-orange-500/10 shrink-0">
+            <Zap className="text-orange-500" size={28} />
+          </div>
+          <h2 className="text-2xl font-bold text-white sm:hidden">Daily Shuriken</h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white">Daily Shuriken</h2>
+          <h2 className="text-2xl font-bold text-white hidden sm:block">Daily Shuriken</h2>
           <p className="text-sm text-[#C5C6C7]">100 High-priority tasks to boost your score across all sections</p>
         </div>
       </div>
@@ -1561,11 +1570,11 @@ function DailyShurikenView({ user, onBack, onStartTask }: { user: any, onBack: (
           </div>
         ) : (
           highPriorityTasks.map((task, index) => (
-            <div key={task.id} className="flex items-center gap-4 group">
-              <div className="w-8 h-8 rounded-full bg-[#1F2833] border border-[#45A29E]/20 flex items-center justify-center text-xs font-bold text-[#45A29E] shrink-0">
+            <div key={task.id} className="flex items-center gap-2 md:gap-4 group">
+              <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-[#1F2833] border border-[#45A29E]/20 flex items-center justify-center text-[10px] md:text-xs font-bold text-[#45A29E] shrink-0">
                 {index + 1}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <TaskCard task={task} onClick={() => onStartTask(task)} />
               </div>
             </div>
@@ -1619,22 +1628,25 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 pb-20"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
-          <ChevronRight className="rotate-180" size={24} />
-        </button>
-        <div className="p-3 rounded-2xl bg-[#45A29E]/10">
-          <BookOpen className="text-[#45A29E]" size={28} />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+            <ChevronRight className="rotate-180" size={24} />
+          </button>
+          <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
+            <BookOpen className="text-[#45A29E]" size={28} />
+          </div>
+          <h2 className="text-2xl font-bold text-white sm:hidden">Vocabulary</h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white">Vocabulary Builder</h2>
+          <h2 className="text-2xl font-bold text-white hidden sm:block">Vocabulary Builder</h2>
           <p className="text-sm text-[#C5C6C7]">Master 2000+ essential PTE words</p>
         </div>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C5C6C7]/50" size={20} />
           <input 
@@ -1645,18 +1657,18 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
             className="w-full bg-[#1F2833] border border-[#45A29E]/20 rounded-2xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-[#45A29E] transition-all"
           />
         </div>
-        <button
-          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-          className={cn(
-            "px-6 rounded-2xl border transition-all flex items-center gap-2 font-bold shrink-0",
-            showFavoritesOnly 
-              ? "bg-yellow-400/10 border-yellow-400/50 text-yellow-400" 
-              : "bg-[#1F2833] border-[#45A29E]/10 text-[#C5C6C7] hover:border-[#45A29E]/30"
-          )}
-        >
-          <Star size={20} fill={showFavoritesOnly ? "currentColor" : "none"} />
-          <span className="hidden sm:inline">Flashcards</span>
-        </button>
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+          <button 
+            onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap flex items-center gap-2",
+              showFavoritesOnly ? "bg-amber-500 text-[#0B0C10] border-amber-500" : "bg-[#1F2833] text-[#C5C6C7] border-[#45A29E]/20 hover:border-[#45A29E]/50"
+            )}
+          >
+            <Star size={16} fill={showFavoritesOnly ? "currentColor" : "none"} />
+            Favorites
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1813,17 +1825,22 @@ function SectionView({ section, user, onBack, onSelectTask }: { section: PTESect
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6"
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={handleBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
-          <ChevronRight className="rotate-180" size={24} />
-        </button>
-        <div className={cn("p-3 rounded-2xl", sectionInfo[section].bg)}>
-          <Icon className={sectionInfo[section].color} size={28} />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <button onClick={handleBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+            <ChevronRight className="rotate-180" size={24} />
+          </button>
+          <div className={cn("p-3 rounded-2xl shrink-0", sectionInfo[section].bg)}>
+            <Icon className={sectionInfo[section].color} size={28} />
+          </div>
+          <h2 className="text-2xl font-bold text-white capitalize sm:hidden">
+            {selectedCategory || `${section}`}
+          </h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white capitalize">
+          <h2 className="text-2xl font-bold text-white capitalize hidden sm:block">
             {selectedCategory || `${section} Dojo`}
           </h2>
           <p className="text-sm text-[#C5C6C7]">
@@ -1939,7 +1956,7 @@ function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?:
     <button 
       onClick={onClick}
       className={cn(
-        "flex items-center gap-4 p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
+        "flex items-center gap-3 md:gap-4 p-3 md:p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
         task.section === 'speaking' ? 'border-l-rose-500' :
         task.section === 'writing' ? 'border-l-sky-500' :
         task.section === 'reading' ? 'border-l-emerald-500' :
@@ -1947,35 +1964,35 @@ function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?:
       )}
     >
       <div className={cn(
-        "w-12 h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
+        "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
         isCompleted ? "bg-green-500/20 text-green-500" : "bg-[#0B0C10] text-[#45A29E] group-hover:bg-[#45A29E] group-hover:text-[#0B0C10]"
       )}>
-        {isCompleted ? <Check size={24} /> : <Play size={20} />}
+        {isCompleted ? <Check size={20} className="md:w-6 md:h-6" /> : <Play size={18} className="md:w-5 md:h-5" />}
       </div>
-      <div className="flex-1">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2">
-            <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors">{task.title}</h4>
-            {isCompleted && <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Done</span>}
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors truncate text-sm md:text-base">{task.title}</h4>
+            {isCompleted && <span className="text-[9px] md:text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter shrink-0">Done</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className={cn(
-              "text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border",
+              "text-[7px] md:text-[8px] px-1.5 md:px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border whitespace-nowrap",
               getCategoryColor(task.category)
             )}>
               {task.category}
             </span>
             <span className={cn(
-              "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border",
+              "text-[7px] md:text-[8px] px-1.5 md:px-2 py-0.5 rounded-full font-black uppercase tracking-widest border whitespace-nowrap",
               sectionColors[task.section]
             )}>
               {task.section}
             </span>
           </div>
         </div>
-        <p className="text-xs text-[#C5C6C7] line-clamp-1">{task.description}</p>
+        <p className="text-[10px] md:text-xs text-[#C5C6C7] line-clamp-1">{task.description}</p>
       </div>
-      <ChevronRight size={16} className="text-[#45A29E] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      <ChevronRight size={14} className="text-[#45A29E] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hidden sm:block" />
     </button>
   );
 }
