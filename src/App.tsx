@@ -39,6 +39,7 @@ import {
   Volume2
 } from 'lucide-react';
 import { cn } from './lib/utils';
+import { Toaster, toast } from 'sonner';
 import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion } from './types';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
@@ -98,22 +99,51 @@ const calculateStreak = (activityLog: string[] = []) => {
 
 const NotificationService = {
   requestPermission: async () => {
-    if (!('Notification' in window)) return false;
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
+    if (!('Notification' in window)) {
+      toast.error("Notifications are not supported in this browser.");
+      return false;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        toast.success("Notifications enabled!");
+        return true;
+      } else if (permission === 'denied') {
+        toast.error("Notification permission denied. Please enable it in your browser settings.");
+        return false;
+      }
+      return false;
+    } catch (e) {
+      console.error("Permission request error:", e);
+      toast.error("Failed to request notification permission.");
+      return false;
+    }
   },
   send: (title: string, options?: NotificationOptions) => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    try {
-      new Notification(title, options);
-    } catch (e) {
-      console.error("Notification error:", e);
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification(title, options);
+      } catch (e) {
+        console.error("Notification error:", e);
+        // Fallback to toast if Notification constructor fails (e.g. in some mobile browsers)
+        toast(title, { description: options?.body });
+      }
+    } else {
+      // Fallback to toast if permission not granted but we tried to send
+      toast(title, { description: options?.body });
     }
   }
 };
 
 
-function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void }) {
+function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
+  user: any, 
+  onBack: () => void, 
+  onStartTask: (task: PTETask) => void,
+  notificationPermission: string,
+  onRequestPermission: () => void
+}) {
   const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [newSchedule, setNewSchedule] = useState({ taskId: '', time: '09:00', duration: 30 });
@@ -424,10 +454,16 @@ function RoadmapView({ user, onBack, onStartTask }: { user: any, onBack: () => v
               <p className="text-xs text-[#C5C6C7]">Get reminded before your scheduled study sessions.</p>
             </div>
             <button 
-              onClick={() => NotificationService.requestPermission()}
-              className="ml-auto px-4 py-2 bg-[#45A29E] text-[#0B0C10] rounded-xl text-[10px] font-bold uppercase tracking-widest"
+              onClick={onRequestPermission}
+              disabled={notificationPermission === 'granted'}
+              className={cn(
+                "ml-auto px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                notificationPermission === 'granted' 
+                  ? "bg-green-500/20 text-green-500 cursor-default" 
+                  : "bg-[#45A29E] text-[#0B0C10] hover:bg-[#66FCF1]"
+              )}
             >
-              Enable
+              {notificationPermission === 'granted' ? 'Enabled' : 'Enable'}
             </button>
           </div>
         </div>
@@ -524,12 +560,25 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help'>('dashboard');
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+  const sentNotifications = useRef<Set<string>>(new Set());
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
+
+  const handleRequestNotificationPermission = async () => {
+    const granted = await NotificationService.requestPermission();
+    if (granted) {
+      setNotificationPermission('granted');
+    } else {
+      setNotificationPermission(typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported');
+    }
+  };
 
   useEffect(() => {
     if (user?.targetScore) {
@@ -539,22 +588,26 @@ function AppContent() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (user?.schedule) {
+      if (user?.schedule && notificationPermission !== 'unsupported') {
         const now = new Date();
         user.schedule.forEach((item: any) => {
           const scheduledTime = new Date(item.scheduledAt);
-          // If within 1 minute of scheduled time and not completed
-          if (!item.isCompleted && Math.abs(now.getTime() - scheduledTime.getTime()) < 60000) {
+          const timeDiff = now.getTime() - scheduledTime.getTime();
+          
+          // If within 1 minute of scheduled time (up to 1 minute after) and not completed
+          // AND we haven't sent a notification for this specific schedule ID yet
+          if (!item.isCompleted && timeDiff >= 0 && timeDiff < 60000 && !sentNotifications.current.has(item.id)) {
             NotificationService.send(`Study Time: ${item.taskId}`, {
               body: `It's time for your scheduled ${item.taskId} session!`,
               icon: '/favicon.ico'
             });
+            sentNotifications.current.add(item.id);
           }
         });
       }
-    }, 60000);
+    }, 10000); // Check every 10 seconds for better precision
     return () => clearInterval(interval);
-  }, [user?.schedule]);
+  }, [user?.schedule, notificationPermission]);
 
   const handleSetTargetScore = async (score: number) => {
     if (user?.uid) {
@@ -696,7 +749,7 @@ function AppContent() {
               <span className="text-sm font-bold text-white">{currentStreak} DAY STREAK</span>
             </button>
             <button 
-              onClick={() => setActiveTab('profile')}
+              onClick={() => setActiveTab('help')}
               className="p-2 hover:bg-[#1F2833] rounded-full transition-colors"
             >
               <Settings size={20} />
@@ -745,6 +798,8 @@ function AppContent() {
                   setSelectedTask(task);
                   setActiveTab(task.section);
                 }}
+                notificationPermission={notificationPermission}
+                onRequestPermission={handleRequestNotificationPermission}
               />
             ) : activeTab === 'vocabulary' ? (
               <VocabularyBuilder 
@@ -768,6 +823,12 @@ function AppContent() {
                 user={user} 
                 onLogout={logout} 
                 onUpgrade={() => setShowSubscriptionModal(true)}
+              />
+            ) : activeTab === 'help' ? (
+              <HelpView 
+                key="help"
+                onBack={() => setActiveTab('dashboard')}
+                onNavigate={(tab) => setActiveTab(tab as any)}
               />
             ) : (
               <SectionView 
@@ -1188,7 +1249,93 @@ export default function App() {
   return (
     <SubscriptionProvider>
       <AppContent />
+      <Toaster position="top-center" richColors />
     </SubscriptionProvider>
+  );
+}
+
+function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab: string) => void }) {
+  const helpOptions = [
+    { 
+      title: 'Getting Started', 
+      description: 'Learn the basics of PTE Ninja and how to use the AI trainer.',
+      icon: Play,
+      action: () => {} 
+    },
+    { 
+      title: 'Study Roadmap', 
+      description: 'View your personalized path to PTE mastery.',
+      icon: Map,
+      action: () => onNavigate('roadmap')
+    },
+    { 
+      title: 'Vocabulary Tips', 
+      description: 'How to effectively use the vocabulary builder.',
+      icon: Book,
+      action: () => onNavigate('vocabulary')
+    },
+    { 
+      title: 'Contact Support', 
+      description: 'Need help? Our team is here to assist you 24/7.',
+      icon: Bell,
+      action: () => toast.info("Support team notified. We'll get back to you soon!")
+    }
+  ];
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+    >
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+          <ChevronRight className="rotate-180" size={24} />
+        </button>
+        <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
+          <Settings className="text-[#45A29E]" size={28} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-white uppercase tracking-tight">Help & Support</h2>
+          <p className="text-sm text-[#C5C6C7]">How can we help you today?</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        {helpOptions.map((option, index) => (
+          <motion.button
+            key={option.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            onClick={option.action}
+            className="flex items-start gap-4 p-6 bg-[#1F2833] border border-[#45A29E]/10 rounded-3xl hover:border-[#45A29E]/40 transition-all text-left group"
+          >
+            <div className="w-12 h-12 bg-[#0B0C10] rounded-2xl flex items-center justify-center group-hover:bg-[#45A29E] transition-colors shrink-0">
+              <option.icon size={24} className="text-[#45A29E] group-hover:text-[#0B0C10] transition-colors" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white group-hover:text-[#66FCF1] transition-colors">{option.title}</h3>
+              <p className="text-sm text-[#C5C6C7] leading-relaxed mt-1">{option.description}</p>
+            </div>
+          </motion.button>
+        ))}
+      </div>
+
+      <div className="bg-[#45A29E]/5 p-8 rounded-[2.5rem] border border-[#45A29E]/10 text-center space-y-4">
+        <h3 className="text-xl font-bold text-white">Still have questions?</h3>
+        <p className="text-[#C5C6C7] max-w-md mx-auto">Check out our comprehensive FAQ or join our community of PTE Ninjas.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+          <button className="px-8 py-3 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all">
+            View FAQ
+          </button>
+          <button className="px-8 py-3 bg-transparent border border-[#45A29E]/30 text-[#45A29E] font-bold rounded-xl hover:bg-[#45A29E]/10 transition-all">
+            Join Discord
+          </button>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 

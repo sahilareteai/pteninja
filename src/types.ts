@@ -432,9 +432,31 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Drag and drop words to complete a text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "The process of urbanization has led to the growth of megacities around the world. These cities offer many opportunities but also face significant ________ such as pollution, traffic congestion, and housing shortages. To address these issues, urban planners are ________ sustainable solutions that prioritize public transportation and green spaces.",
-    options: ['challenges', 'developing', 'ignoring', 'benefits', 'risks'],
-    correctAnswers: ['challenges', 'developing']
+    prompt: "The process of urbanization has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution, traffic congestion, and housing shortages. To address these issues, urban planners are ________ sustainable solutions that ________ public transportation and green spaces.",
+    options: ['opportunities', 'challenges', 'developing', 'prioritize', 'ignoring', 'benefits', 'risks', 'implementing', 'neglect'],
+    correctAnswers: ['opportunities', 'challenges', 'developing', 'prioritize']
+  },
+  { 
+    id: 'rfib2-2', 
+    title: 'Question 2', 
+    category: 'Reading: Fill in the Blanks',
+    description: 'Drag and drop words to complete a text.', 
+    section: 'reading', 
+    type: 'reading',
+    prompt: "The study of history provides ________ into the past and helps us ________ the present and future. By analyzing historical events, we can ________ patterns and ________ from the mistakes of previous generations. This knowledge is ________ for making informed decisions in a rapidly changing world.",
+    options: ['insights', 'understand', 'identify', 'learn', 'crucial', 'ignorance', 'ignore', 'obscure', 'forget', 'optional'],
+    correctAnswers: ['insights', 'understand', 'identify', 'learn', 'crucial']
+  },
+  { 
+    id: 'rfib2-3', 
+    title: 'Question 3', 
+    category: 'Reading: Fill in the Blanks',
+    description: 'Drag and drop words to complete a text.', 
+    section: 'reading', 
+    type: 'reading',
+    prompt: "Technological ________ is driving changes in the job market, requiring workers to ________ new skills. As automation ________ more routine tasks, the demand for ________ thinking and problem-solving abilities is ________. Lifelong learning has become a necessity for career success in the digital age.",
+    options: ['innovation', 'acquire', 'assumes', 'critical', 'increasing', 'stagnation', 'lose', 'neglects', 'simple', 'decreasing'],
+    correctAnswers: ['innovation', 'acquire', 'assumes', 'critical', 'increasing']
   },
   
   // Listening
@@ -808,14 +830,19 @@ categoriesToExpand.forEach(category => {
     } else if (category === 'Reading: Fill in the Blanks') {
       const rf_prompts = [
         {
-          text: "The process of ________ has led to the growth of megacities. These cities offer many ________ but also face significant ________ such as pollution.",
-          options: ['urbanization', 'opportunities', 'challenges', 'benefits', 'risks'],
-          correct: ['urbanization', 'opportunities', 'challenges']
+          text: "The ________ of the new library was a major milestone for the university community. It was designed to provide students with ________ access to digital resources and ________ study spaces. The project was ________ by a generous donation from a former student who ________ the importance of lifelong learning.",
+          options: ['opening', 'unprecedented', 'collaborative', 'funded', 'recognized', 'closing', 'limited', 'individual', 'ignored', 'rejected'],
+          correct: ['opening', 'unprecedented', 'collaborative', 'funded', 'recognized']
         },
         {
-          text: "Scientific ________ requires careful observation and ________ testing to understand the ________ world.",
-          options: ['research', 'rigorous', 'natural', 'simple', 'complex'],
-          correct: ['research', 'rigorous', 'natural']
+          text: "Scientific ________ requires careful observation and ________ testing to understand the ________ world. Researchers must ________ their hypotheses based on empirical evidence and ________ their findings to the wider scientific community.",
+          options: ['research', 'rigorous', 'natural', 'validate', 'communicate', 'ignorance', 'casual', 'artificial', 'reject', 'hide'],
+          correct: ['research', 'rigorous', 'natural', 'validate', 'communicate']
+        },
+        {
+          text: "The ________ of renewable energy is ________ for reducing our reliance on fossil fuels. Solar and wind power ________ clean alternatives that can help ________ the impacts of climate change. However, the ________ of these technologies requires significant investment in infrastructure.",
+          options: ['adoption', 'essential', 'provide', 'mitigate', 'implementation', 'rejection', 'optional', 'consume', 'exacerbate', 'neglect'],
+          correct: ['adoption', 'essential', 'provide', 'mitigate', 'implementation']
         }
       ];
       const selected = rf_prompts[i % rf_prompts.length];
