@@ -560,7 +560,7 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern'>('dashboard');
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
@@ -785,6 +785,7 @@ function AppContent() {
                 onViewRoadmap={() => setActiveTab('roadmap')}
                 onViewVocabulary={() => setActiveTab('vocabulary')}
                 onViewShuriken={() => setActiveTab('shuriken')}
+                onViewPattern={() => setActiveTab('pattern')}
                 calculateAverageScore={calculateAverageScore}
                 calculateSectionAverage={calculateSectionAverage}
                 onSetTargetScore={handleSetTargetScore}
@@ -829,6 +830,11 @@ function AppContent() {
                 key="help"
                 onBack={() => setActiveTab('dashboard')}
                 onNavigate={(tab) => setActiveTab(tab as any)}
+              />
+            ) : activeTab === 'pattern' ? (
+              <PatternView 
+                key="pattern"
+                onBack={() => setActiveTab('dashboard')}
               />
             ) : (
               <SectionView 
@@ -1487,7 +1493,7 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
   );
 }
 
-function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
+function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
   progress: UserProgress, 
   user: any,
   onStartTask: (task: PTETask) => void,
@@ -1495,6 +1501,7 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
   onViewRoadmap: () => void,
   onViewVocabulary: () => void,
   onViewShuriken: () => void,
+  onViewPattern: () => void,
   calculateAverageScore: () => number,
   calculateSectionAverage: (section: PTESection) => number,
   onSetTargetScore: (score: number) => void
@@ -1592,6 +1599,12 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
             className="mt-4 md:mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-xs md:text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all"
           >
             View Roadmap
+          </button>
+          <button 
+            onClick={onViewPattern}
+            className="mt-2 w-full py-3 bg-[#45A29E]/10 text-[#45A29E] border border-[#45A29E]/20 rounded-xl font-bold text-xs md:text-sm uppercase tracking-widest hover:bg-[#45A29E]/20 transition-all"
+          >
+            Exam Pattern
           </button>
         </div>
       </section>
@@ -1934,6 +1947,115 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
             </div>
           )}
         </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function PatternView({ onBack }: { onBack: () => void }) {
+  const sections = [
+    {
+      title: "Speaking & Writing",
+      duration: "54–67 minutes",
+      color: "text-[#45A29E]",
+      tasks: [
+        { name: "Personal Introduction", count: "1", description: "Not scored; used for security and identification." },
+        { name: "Read Aloud", count: "6–7", description: "Read a short text aloud with natural fluency and pronunciation." },
+        { name: "Repeat Sentence", count: "10–12", description: "Listen to a sentence and repeat it exactly." },
+        { name: "Describe Image", count: "3–4", description: "Describe the information shown in an image." },
+        { name: "Re-tell Lecture", count: "1–2", description: "Listen to a lecture and summarize it in your own words." },
+        { name: "Answer Short Question", count: "5–6", description: "Answer a simple question with a single word or short phrase." },
+        { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." },
+        { name: "Write Essay", count: "1–2", description: "Write a 200–300 word argumentative essay on a given topic." }
+      ]
+    },
+    {
+      title: "Reading",
+      duration: "29–30 minutes",
+      color: "text-orange-500",
+      tasks: [
+        { name: "Reading & Writing: Fill in the Blanks", count: "5–6", description: "Select the correct words from dropdown menus in a text." },
+        { name: "Multiple Choice, Multiple Answer", count: "1–2", description: "Select all correct responses from a list based on a text." },
+        { name: "Re-order Paragraphs", count: "2–3", description: "Arrange text boxes in the correct logical order." },
+        { name: "Reading: Fill in the Blanks", count: "4–5", description: "Drag and drop words to complete blanks in a text." },
+        { name: "Multiple Choice, Single Answer", count: "1–2", description: "Select the one correct response from a list based on a text." }
+      ]
+    },
+    {
+      title: "Listening",
+      duration: "30–43 minutes",
+      color: "text-yellow-500",
+      tasks: [
+        { name: "Summarize Spoken Text", count: "1–2", description: "Listen to a lecture and write a 50–70 word summary." },
+        { name: "Multiple Choice, Multiple Answer", count: "1–2", description: "Select all correct responses based on a recording." },
+        { name: "Fill in the Blanks", count: "2–3", description: "Type missing words into blanks while listening to a recording." },
+        { name: "Highlight Correct Summary", count: "1–2", description: "Select the paragraph that best summarizes a recording." },
+        { name: "Multiple Choice, Single Answer", count: "1–2", description: "Select the one correct response based on a recording." },
+        { name: "Select Missing Word", count: "1–2", description: "Select the missing word or phrase that completes a recording." },
+        { name: "Highlight Incorrect Words", count: "2–3", description: "Identify words in a transcript that differ from a recording." },
+        { name: "Write from Dictation", count: "3–4", description: "Listen to a sentence and type it exactly as heard." }
+      ]
+    }
+  ];
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-4xl mx-auto space-y-8 pb-20 px-4 md:px-0"
+    >
+      <div className="flex items-center gap-4">
+        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+          <ChevronRight className="rotate-180" size={24} />
+        </button>
+        <div>
+          <h2 className="text-3xl font-black text-white tracking-tight">PTE EXAM PATTERN</h2>
+          <p className="text-[#C5C6C7]/50 font-bold uppercase tracking-widest text-xs">Official Pearson Standards</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
+        {sections.map((section, idx) => (
+          <div key={idx} className="bg-[#1F2833] rounded-3xl border border-[#45A29E]/10 overflow-hidden">
+            <div className="p-6 border-b border-[#45A29E]/10 bg-[#0B0C10]/30 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={cn("w-2 h-8 rounded-full bg-current", section.color)} />
+                <h3 className="text-xl font-bold text-white">{section.title}</h3>
+              </div>
+              <div className="px-3 py-1 bg-[#45A29E]/10 rounded-full border border-[#45A29E]/20">
+                <span className="text-xs font-bold text-[#45A29E]">{section.duration}</span>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {section.tasks.map((task, tIdx) => (
+                  <div key={tIdx} className="flex items-start gap-4 p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/5 hover:border-[#45A29E]/20 transition-all group">
+                    <div className="w-10 h-10 rounded-xl bg-[#1F2833] flex items-center justify-center font-black text-[#45A29E] shrink-0 group-hover:bg-[#45A29E] group-hover:text-[#0B0C10] transition-all">
+                      {task.count}
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-white group-hover:text-[#45A29E] transition-colors">{task.name}</h4>
+                      <p className="text-xs text-[#C5C6C7]/60 leading-relaxed">{task.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="p-8 bg-gradient-to-br from-[#45A29E]/20 to-transparent rounded-3xl border border-[#45A29E]/20 text-center space-y-4">
+        <ShieldCheck className="mx-auto text-[#45A29E]" size={48} />
+        <h3 className="text-2xl font-bold text-white">Ready to start your training?</h3>
+        <p className="text-[#C5C6C7] max-w-md mx-auto">Our AI-powered platform follows these exact patterns to ensure you are fully prepared for the actual exam.</p>
+        <button 
+          onClick={onBack}
+          className="px-8 py-4 bg-[#45A29E] text-[#0B0C10] font-bold rounded-2xl hover:bg-[#66FCF1] transition-all shadow-[0_0_30px_rgba(69,162,158,0.3)]"
+        >
+          Go to Dojo
+        </button>
       </div>
     </motion.div>
   );

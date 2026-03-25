@@ -342,15 +342,16 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Select the correct words from the dropdown menus to complete the text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "The widespread use of the internet has ________ the way we communicate, work, and access information. While it has brought numerous ________, such as instant connectivity and global reach, it has also raised significant ________ regarding privacy and security. As we continue to ________ more of our lives online, the need for robust cybersecurity measures becomes increasingly ________.",
+    prompt: "The widespread use of the internet has ________ the way we communicate, work, and access information. While it has brought numerous ________, such as instant connectivity and global reach, it has also raised significant ________ regarding privacy and security. As we continue to ________ more of our lives online, the need for robust cybersecurity measures becomes increasingly ________. Furthermore, the ________ of digital literacy is paramount in navigating this complex landscape.",
     blanks: {
       '0': ['transformed', 'exchanged', 'translated', 'transferred'],
       '1': ['benefits', 'profits', 'advantages', 'gains'],
       '2': ['concerns', 'interests', 'attentions', 'regards'],
       '3': ['conduct', 'perform', 'operate', 'execute'],
-      '4': ['critical', 'optional', 'trivial', 'marginal']
+      '4': ['critical', 'optional', 'trivial', 'marginal'],
+      '5': ['acquisition', 'requirement', 'dissemination', 'evaluation']
     },
-    correctAnswers: ['transformed', 'benefits', 'concerns', 'conduct', 'critical']
+    correctAnswers: ['transformed', 'benefits', 'concerns', 'conduct', 'critical', 'acquisition']
   },
   { 
     id: 'rfib-2', 
@@ -359,15 +360,16 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Select the correct words from the dropdown menus to complete the text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "The study of psychology ________ to understand the complexities of human behavior and mental processes. Researchers use various ________, including experiments and surveys, to ________ data and test hypotheses. One of the key ________ in modern psychology is the interaction between genetics and environment, often ________ to as the nature versus nurture debate.",
+    prompt: "The study of psychology ________ to understand the complexities of human behavior and mental processes. Researchers use various ________, including experiments and surveys, to ________ data and test hypotheses. One of the key ________ in modern psychology is the interaction between genetics and environment, often ________ to as the nature versus nurture debate. This ________ approach allows for a more comprehensive understanding of human development.",
     blanks: {
       '0': ['seeks', 'looks', 'wants', 'needs'],
       '1': ['methods', 'ways', 'modes', 'styles'],
       '2': ['collect', 'gather', 'pick', 'select'],
       '3': ['themes', 'topics', 'subjects', 'issues'],
-      '4': ['referred', 'called', 'named', 'known']
+      '4': ['referred', 'called', 'named', 'known'],
+      '5': ['holistic', 'singular', 'isolated', 'fragmented']
     },
-    correctAnswers: ['seeks', 'methods', 'collect', 'themes', 'referred']
+    correctAnswers: ['seeks', 'methods', 'collect', 'themes', 'referred', 'holistic']
   },
   { 
     id: 'rmcq-1', 
@@ -432,9 +434,9 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Drag and drop words to complete a text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "The process of urbanization has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution, traffic congestion, and housing shortages. To address these issues, urban planners are ________ sustainable solutions that ________ public transportation and green spaces.",
-    options: ['opportunities', 'challenges', 'developing', 'prioritize', 'ignoring', 'benefits', 'risks', 'implementing', 'neglect'],
-    correctAnswers: ['opportunities', 'challenges', 'developing', 'prioritize']
+    prompt: "The process of urbanization has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution, traffic congestion, and housing shortages. To address these issues, urban planners are ________ sustainable solutions that ________ public transportation and green spaces. This ________ approach is essential for long-term urban viability.",
+    options: ['opportunities', 'challenges', 'developing', 'prioritize', 'comprehensive', 'ignoring', 'benefits', 'risks', 'implementing', 'neglect', 'isolated'],
+    correctAnswers: ['opportunities', 'challenges', 'developing', 'prioritize', 'comprehensive']
   },
   { 
     id: 'rfib2-2', 
@@ -443,9 +445,9 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Drag and drop words to complete a text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "The study of history provides ________ into the past and helps us ________ the present and future. By analyzing historical events, we can ________ patterns and ________ from the mistakes of previous generations. This knowledge is ________ for making informed decisions in a rapidly changing world.",
-    options: ['insights', 'understand', 'identify', 'learn', 'crucial', 'ignorance', 'ignore', 'obscure', 'forget', 'optional'],
-    correctAnswers: ['insights', 'understand', 'identify', 'learn', 'crucial']
+    prompt: "The study of history provides ________ into the past and helps us ________ the present and future. By analyzing historical events, we can ________ patterns and ________ from the mistakes of previous generations. This knowledge is ________ for making informed decisions in a ________ changing world.",
+    options: ['insights', 'understand', 'identify', 'learn', 'crucial', 'rapidly', 'ignorance', 'ignore', 'obscure', 'forget', 'optional', 'slowly'],
+    correctAnswers: ['insights', 'understand', 'identify', 'learn', 'crucial', 'rapidly']
   },
   { 
     id: 'rfib2-3', 
@@ -454,9 +456,9 @@ export const PTE_TASKS: PTETask[] = [
     description: 'Drag and drop words to complete a text.', 
     section: 'reading', 
     type: 'reading',
-    prompt: "Technological ________ is driving changes in the job market, requiring workers to ________ new skills. As automation ________ more routine tasks, the demand for ________ thinking and problem-solving abilities is ________. Lifelong learning has become a necessity for career success in the digital age.",
-    options: ['innovation', 'acquire', 'assumes', 'critical', 'increasing', 'stagnation', 'lose', 'neglects', 'simple', 'decreasing'],
-    correctAnswers: ['innovation', 'acquire', 'assumes', 'critical', 'increasing']
+    prompt: "Technological ________ is driving changes in the job market, requiring workers to ________ new skills. As automation ________ more routine tasks, the demand for ________ thinking and problem-solving abilities is ________. This shift ________ the importance of lifelong learning.",
+    options: ['innovation', 'acquire', 'assumes', 'critical', 'increasing', 'underscores', 'stagnation', 'lose', 'neglects', 'simple', 'decreasing', 'ignores'],
+    correctAnswers: ['innovation', 'acquire', 'assumes', 'critical', 'increasing', 'underscores']
   },
   
   // Listening
@@ -773,24 +775,28 @@ categoriesToExpand.forEach(category => {
     if (category === 'Reading & Writing: Fill in the Blanks') {
       const rwf_prompts = [
         {
-          text: "The rapid development of artificial intelligence has ________ the way we interact with technology. While it offers ________ efficiency, it also presents ________ ethical dilemmas that must be ________ addressed.",
+          text: "The rapid development of artificial intelligence has ________ the way we interact with technology. While it offers ________ efficiency, it also presents ________ ethical dilemmas that must be ________ addressed. As we continue to ________ more of our lives online, the need for robust cybersecurity measures becomes increasingly ________.",
           blanks: {
             '0': ['revolutionized', 'modified', 'altered', 'changed'],
             '1': ['unprecedented', 'limited', 'marginal', 'trivial'],
             '2': ['complex', 'simple', 'minor', 'easy'],
-            '3': ['carefully', 'randomly', 'quickly', 'slowly']
+            '3': ['carefully', 'randomly', 'quickly', 'slowly'],
+            '4': ['conduct', 'perform', 'operate', 'execute'],
+            '5': ['critical', 'optional', 'trivial', 'marginal']
           },
-          correct: ['revolutionized', 'unprecedented', 'complex', 'carefully']
+          correct: ['revolutionized', 'unprecedented', 'complex', 'carefully', 'conduct', 'critical']
         },
         {
-          text: "Sustainable agriculture ________ to minimize environmental impact while ________ food security. This involves ________ natural resources and ________ the use of chemical fertilizers.",
+          text: "Sustainable agriculture ________ to minimize environmental impact while ________ food security. This involves ________ natural resources and ________ the use of chemical fertilizers. Furthermore, the ________ of sustainable practices is ________ for long-term ecological balance.",
           blanks: {
             '0': ['aims', 'wants', 'needs', 'looks'],
             '1': ['ensuring', 'ignoring', 'risking', 'avoiding'],
             '2': ['preserving', 'wasting', 'using', 'consuming'],
-            '3': ['reducing', 'increasing', 'expanding', 'growing']
+            '3': ['reducing', 'increasing', 'expanding', 'growing'],
+            '4': ['adoption', 'rejection', 'neglect', 'avoidance'],
+            '5': ['essential', 'optional', 'trivial', 'marginal']
           },
-          correct: ['aims', 'ensuring', 'preserving', 'reducing']
+          correct: ['aims', 'ensuring', 'preserving', 'reducing', 'adoption', 'essential']
         }
       ];
       const selected = rwf_prompts[i % rwf_prompts.length];
@@ -849,6 +855,13 @@ categoriesToExpand.forEach(category => {
       newTask.prompt = selected.text;
       newTask.options = selected.options;
       newTask.correctAnswers = selected.correct;
+    } else if (category === 'Fill in the Blanks' && template.section === 'listening') {
+      const lfib_prompts = [
+        "The ________ of the new library was a major milestone for the university community. It was designed to provide students with ________ access to digital resources and ________ study spaces. The project was ________ by a generous donation.",
+        "Scientific ________ requires careful observation and ________ testing to understand the ________ world. Researchers must ________ their hypotheses based on empirical evidence.",
+        "The ________ of renewable energy is ________ for reducing our reliance on fossil fuels. Solar and wind power ________ clean alternatives that can help ________ the impacts of climate change."
+      ];
+      newTask.prompt = lfib_prompts[i % lfib_prompts.length];
     }
 
     PTE_TASKS.push(newTask);
