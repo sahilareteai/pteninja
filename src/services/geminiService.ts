@@ -3,7 +3,12 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
-  const pcmData = Uint8Array.from(atob(base64Pcm), c => c.charCodeAt(0));
+  const binaryPcm = atob(base64Pcm);
+  const pcmData = new Uint8Array(binaryPcm.length);
+  for (let i = 0; i < binaryPcm.length; i++) {
+    pcmData[i] = binaryPcm.charCodeAt(i);
+  }
+  
   const dataSize = pcmData.length;
   const header = new ArrayBuffer(44);
   const view = new DataView(header);
@@ -40,89 +45,116 @@ function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
   combined.set(headerUint8);
   combined.set(pcmData, headerUint8.length);
   
-  // Convert combined Uint8Array to base64
+  // Convert combined Uint8Array to base64 efficiently
   let binary = '';
-  const len = combined.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(combined[i]);
+  const chunkSize = 8192;
+  for (let i = 0; i < combined.length; i += chunkSize) {
+    binary += String.fromCharCode(...combined.slice(i, i + chunkSize));
   }
   return btoa(binary);
 }
 
-export async function generateTTS(text: string) {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Say clearly and naturally: ${text}` }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' },
-        },
-      },
-    },
-  });
+async function callGemini(params: any, retries: number = 3): Promise<any> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (e: any) {
+      console.error(`Gemini call attempt ${i + 1} failed:`, e);
+      if (i < retries) {
+        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+        console.log(`Retrying in ${Math.round(delay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw e;
+      }
+    }
+  }
+}
 
-  const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64) return null;
-
-  // Check if it already has a RIFF header (starts with "UklGR")
-  if (base64.startsWith('UklGR')) {
-    return base64;
+export async function generateTTS(text: string, retries: number = 3) {
+  if (!text || text.trim().length === 0) {
+    console.warn("generateTTS: Empty text provided");
+    return null;
   }
 
-  // Assume raw PCM 16-bit 24kHz Mono and add header
   try {
+    const response = await callGemini({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `Say clearly and naturally: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
+        },
+      },
+    }, retries);
+
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) {
+      console.error("No audio data in Gemini response");
+      return null;
+    }
+
+    console.log("TTS generated successfully, length:", base64.length);
+
+    // Check if it already has a RIFF header (starts with "UklGR")
+    if (base64.startsWith('UklGR')) {
+      return base64;
+    }
+
+    // Assume raw PCM 16-bit 24kHz Mono and add header
     return addWavHeader(base64, 24000);
   } catch (e) {
-    console.error("Error adding WAV header:", e);
-    return base64;
+    console.error("All generateTTS attempts failed.");
+    return null;
   }
 }
 
 export async function analyzeSpeaking(audioData: string, taskType: string, mimeType: string = "audio/webm") {
   const model = "gemini-3-flash-preview";
   
-  const response = await ai.models.generateContent({
-    model,
-    contents: [
-      {
-        parts: [
-          { text: `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words.` },
-          { inlineData: { mimeType, data: audioData } }
-        ]
-      }
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          overall: { type: Type.NUMBER },
-          fluency: { type: Type.NUMBER },
-          pronunciation: { type: Type.NUMBER },
-          content: { type: Type.NUMBER },
-          feedback: { 
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          mispronounced: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          hesitations: { type: Type.NUMBER },
-          pace: { type: Type.STRING },
-          stress: { type: Type.STRING }
-        },
-        required: ["overall", "fluency", "pronunciation", "content"]
-      }
-    }
-  });
-
   try {
+    const response = await callGemini({
+      model,
+      contents: [
+        {
+          parts: [
+            { text: `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words.` },
+            { inlineData: { mimeType, data: audioData } }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overall: { type: Type.NUMBER },
+            fluency: { type: Type.NUMBER },
+            pronunciation: { type: Type.NUMBER },
+            content: { type: Type.NUMBER },
+            feedback: { 
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            mispronounced: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            hesitations: { type: Type.NUMBER },
+            pace: { type: Type.STRING },
+            stress: { type: Type.STRING }
+          },
+          required: ["overall", "fluency", "pronunciation", "content"]
+        }
+      }
+    });
+
     return JSON.parse(response.text || "{}");
   } catch (e) {
-    console.error("Failed to parse Gemini response:", response.text);
+    console.error("Failed to analyze speaking:", e);
     throw e;
   }
 }
@@ -130,33 +162,33 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
 export async function analyzeWriting(text: string, taskType: string) {
   const model = "gemini-3.1-pro-preview";
   
-  const response = await ai.models.generateContent({
-    model,
-    contents: `Analyze this PTE ${taskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips. Return JSON.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          overall: { type: Type.NUMBER },
-          grammar: { type: Type.NUMBER },
-          vocabulary: { type: Type.NUMBER },
-          spelling: { type: Type.NUMBER },
-          content: { type: Type.NUMBER },
-          tips: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          }
-        },
-        required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips"]
-      }
-    }
-  });
-
   try {
+    const response = await callGemini({
+      model,
+      contents: `Analyze this PTE ${taskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips. Return JSON.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overall: { type: Type.NUMBER },
+            grammar: { type: Type.NUMBER },
+            vocabulary: { type: Type.NUMBER },
+            spelling: { type: Type.NUMBER },
+            content: { type: Type.NUMBER },
+            tips: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips"]
+        }
+      }
+    });
+
     return JSON.parse(response.text || "{}");
   } catch (e) {
-    console.error("Failed to parse Gemini writing response:", response.text);
+    console.error("Failed to analyze writing:", e);
     return {
       overall: 50,
       grammar: 50,

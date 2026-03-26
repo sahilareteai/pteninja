@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Lock, 
   Play,
+  RefreshCw,
   Settings,
   User,
   BarChart3,
@@ -2278,37 +2279,6 @@ function StatBox({ label, value, color, onClick }: { label: string, value: strin
   );
 }
 
-// Helper to play a beep sound
-const playBeep = () => {
-  return new Promise<void>((resolve) => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime);
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-
-      oscillator.onended = () => {
-        audioContext.close();
-        resolve();
-      };
-
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.4);
-    } catch (e) {
-      console.error("Beep failed", e);
-      resolve();
-    }
-  });
-};
-
 function TaskModal({ 
   task, 
   onClose, 
@@ -2356,7 +2326,11 @@ function TaskModal({
     return task.prepTime ?? 35;
   });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [prefetchedAudio, setPrefetchedAudio] = useState<HTMLAudioElement | null>(null);
+  const [isPreparingAudio, setIsPreparingAudio] = useState(false);
+  const [hasAudioError, setHasAudioError] = useState(false);
+  const [audioRetryCount, setAudioRetryCount] = useState(0);
+  const [prefetchedAudioBase64, setPrefetchedAudioBase64] = useState<string | null>(null);
+  const audioFetchPromiseRef = useRef<Promise<string | null> | null>(null);
   const [userInput, setUserInput] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [reorderedParagraphs, setReorderedParagraphs] = useState<string[]>(task.paragraphs || []);
@@ -2366,6 +2340,47 @@ function TaskModal({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Helper to play a beep sound using a persistent AudioContext
+  const playBeep = () => {
+    return new Promise<void>((resolve) => {
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioContextRef.current;
+        
+        // Resume context if it was suspended (common browser policy)
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0, ctx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+
+        oscillator.onended = () => {
+          resolve();
+        };
+
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + 0.4);
+      } catch (e) {
+        console.error("Beep failed", e);
+        resolve();
+      }
+    });
+  };
 
   useEffect(() => {
     // Reset phase and timer for new task
@@ -2414,22 +2429,35 @@ function TaskModal({
     // For ROP, we also need a target list
     setTargetParagraphs([]);
     
+    setHasAudioError(false);
+    setAudioRetryCount(0);
     setSelectedOptions([]);
     setBlankAnswers({});
     setUserInput('');
+    prefetchedAudioRef.current = null;
   }, [task.id, task.category, task.paragraphs, task.section, task.hasAudio, task.prepTime, task.recordingTime]);
 
   // Pre-fetch audio logic
   useEffect(() => {
     let isCancelled = false;
+    audioFetchPromiseRef.current = null;
+    setPrefetchedAudioBase64(null);
+    prefetchedAudioRef.current = null;
+
     if (task.hasAudio) {
       const prefetch = async () => {
+        const audioContent = task.transcript || task.prompt || "";
+        const promise = generateTTS(audioContent);
+        audioFetchPromiseRef.current = promise;
+        
         try {
-          const base64 = await generateTTS(task.prompt || "");
+          const base64 = await promise;
           if (isCancelled) return;
           if (base64) {
+            setPrefetchedAudioBase64(base64);
             const audio = new Audio(`data:audio/wav;base64,${base64}`);
-            setPrefetchedAudio(audio);
+            audio.load();
+            prefetchedAudioRef.current = audio;
           }
         } catch (err) {
           console.error("Pre-fetch TTS failed:", err);
@@ -2439,22 +2467,49 @@ function TaskModal({
     }
     return () => {
       isCancelled = true;
-      setPrefetchedAudio(null);
+      audioFetchPromiseRef.current = null;
+      prefetchedAudioRef.current = null;
     };
   }, [task.id]);
 
   // Audio logic
   useEffect(() => {
     let isCancelled = false;
-    if (phase === 'audio') {
+    if (phase === 'audio' && task.hasAudio) {
       const playAudio = async () => {
+        // Start beep immediately if needed
+        const needsBeep = task.section === 'listening' || 
+                         task.category === 'Repeat Sentence' || 
+                         task.category === 'Answer Short Question' || 
+                         task.category === 'Write from Dictation';
+        
         try {
-          let audio = prefetchedAudio;
+          setHasAudioError(false);
+          setIsAudioPlaying(false);
+          setIsPreparingAudio(false);
+
+          let audio = prefetchedAudioRef.current;
+          
           if (!audio) {
-            const base64 = await generateTTS(task.prompt || "");
+            let base64 = prefetchedAudioBase64;
+            if (!base64) {
+              setIsPreparingAudio(true);
+              if (audioFetchPromiseRef.current) {
+                console.log("Waiting for pre-fetch to complete...");
+                base64 = await audioFetchPromiseRef.current;
+              } else {
+                console.log("Starting on-demand audio generation...");
+                const audioContent = task.transcript || task.prompt || "";
+                base64 = await generateTTS(audioContent);
+              }
+              setIsPreparingAudio(false);
+            }
+            
             if (isCancelled) return;
+
             if (base64) {
               audio = new Audio(`data:audio/wav;base64,${base64}`);
+              audio.load();
             }
           }
           
@@ -2462,66 +2517,92 @@ function TaskModal({
 
           if (audio) {
             audioRef.current = audio;
+            
+            // Wait for beep to finish before starting audio
+            // We play the beep ONLY when the audio is ready to go
+            if (needsBeep) {
+              await playBeep();
+            }
+            
+            if (isCancelled) return;
+
             audio.onplay = () => {
-              if (!isCancelled) setIsAudioPlaying(true);
+              if (!isCancelled) {
+                setIsAudioPlaying(true);
+                setIsPreparingAudio(false);
+              }
             };
             audio.onended = () => {
               if (isCancelled) return;
               setIsAudioPlaying(false);
+              setIsPreparingAudio(false);
               // Small pause after audio before next phase
               setTimeout(() => {
                 if (isCancelled) return;
-                if (task.prepTime && task.prepTime > 0) {
+                if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
                   setPhase('prep');
                   setTimeLeft(task.prepTime);
                 } else {
                   setPhase('recording');
-                  setTimeLeft(task.recordingTime ?? 15);
+                  // For listening tasks, recording time is usually until they finish typing
+                  if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
+                  else if (task.section === 'listening') setTimeLeft(120);
+                  else setTimeLeft(task.recordingTime ?? 15);
                 }
               }, 1000);
             };
-            
-            // Play beep before audio
-            await playBeep();
-            
+
             try {
-              setIsAudioPlaying(true);
-              await audio.play();
-            } catch (playErr) {
-              console.error("Audio play failed, retrying...", playErr);
-              // Fallback for some browsers
-              setIsAudioPlaying(true);
-              audio.play().catch(e => {
-                console.error("Final audio play attempt failed:", e);
+              const playPromise = audio.play();
+              if (playPromise !== undefined) {
+                await playPromise;
+                if (!isCancelled) setIsAudioPlaying(true);
+              }
+            } catch (playErr: any) {
+              // Ignore AbortError which happens when pause() is called before play() promise resolves
+              if (!isCancelled && playErr.name !== 'AbortError') {
+                console.error("Audio play failed:", playErr);
                 setIsAudioPlaying(false);
-                // Move to next phase if audio is completely blocked
-                setTimeout(() => {
-                  if (isCancelled) return;
-                  setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
-                  setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
-                }, 2000);
-              });
+                setIsPreparingAudio(false);
+              }
             }
           } else {
-            setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
-            setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
+            console.warn("Audio failed to load, showing error state...");
+            if (!isCancelled) {
+              setHasAudioError(true);
+              setIsAudioPlaying(false);
+              setIsPreparingAudio(false);
+            }
           }
-        } catch (err) {
-          console.error("Audio playback failed:", err);
-          setPhase(task.prepTime && task.prepTime > 0 ? 'prep' : 'recording');
-          setTimeLeft(task.prepTime && task.prepTime > 0 ? task.prepTime : (task.recordingTime ?? 15));
+        } catch (err: any) {
+          if (!isCancelled && err.name !== 'AbortError') {
+            console.error("Audio playback failed:", err);
+            setHasAudioError(true);
+            setIsAudioPlaying(false);
+            setIsPreparingAudio(false);
+          }
         }
       };
+
       playAudio();
-    }
-    return () => {
-      isCancelled = true;
+
+      return () => {
+        isCancelled = true;
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        setIsAudioPlaying(false);
+      };
+    } else {
+      // Ensure audio is stopped and state is reset if we're not in audio phase
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-    };
-  }, [phase, task.id, prefetchedAudio]);
+      setIsAudioPlaying(false);
+    }
+  }, [phase, task.id, task.hasAudio, prefetchedAudioBase64, audioRetryCount]);
 
   // Recording logic
   useEffect(() => {
@@ -2752,8 +2833,13 @@ function TaskModal({
   };
 
   const skipPrep = () => {
-    setPhase('recording');
-    setTimeLeft(task.recordingTime ?? 40);
+    if (task.hasAudio) {
+      setPhase('audio');
+      setTimeLeft(0);
+    } else {
+      setPhase('recording');
+      setTimeLeft(task.recordingTime ?? 40);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -2826,12 +2912,12 @@ function TaskModal({
                   phase === 'prep' ? "bg-yellow-500" : (phase === 'audio' ? "bg-blue-500" : "bg-red-500")
                 )} />
                 <span className="text-xs font-bold uppercase tracking-widest text-white">
-                  {phase === 'audio' ? "Listening" : (phase === 'prep' ? (task.hasAudio && !audioRef.current ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : "Writing"))}
+                  {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : "Listening") : (phase === 'prep' ? (task.hasAudio ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : "Writing"))}
                 </span>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-mono font-bold text-white">
-                  {phase === 'audio' ? (isAudioPlaying ? "Playing" : "Loading...") : formatTime(timeLeft)}
+                  {phase === 'audio' ? (isPreparingAudio ? "..." : (isAudioPlaying ? "Playing" : "Loading...")) : formatTime(timeLeft)}
                 </div>
                 {phase === 'prep' && (
                   <button 
@@ -2860,11 +2946,25 @@ function TaskModal({
                 "text-white leading-relaxed font-medium",
                 task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
               )}>
-                {/* Hide prompt for audio-based tasks during audio phase */}
-                {((task.id.startsWith('rs') || task.id.startsWith('wfd') || task.id.startsWith('rl') || task.id.startsWith('sgd')) && phase === 'audio') 
-                  ? (task.id.startsWith('rs') || task.id.startsWith('wfd') ? "Listen carefully to the sentence..." : "Listen carefully to the recording...") 
+                {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
+                {task.section === 'listening' 
+                  ? (hasAudioError 
+                      ? "Audio failed to load. Please check your connection and try again." 
+                      : (phase === 'audio' ? "Listen carefully to the recording..." : (task.category === 'Fill in the Blanks' ? "Type the missing words in each blank." : (task.prompt || "Complete the task based on the recording."))))
                   : (task.prompt || "No prompt available for this task.")}
               </p>
+              {hasAudioError && (
+                <button 
+                  onClick={() => {
+                    setHasAudioError(false);
+                    setAudioRetryCount(prev => prev + 1);
+                  }}
+                  className="mt-4 px-6 py-2 bg-[#45A29E] text-[#0B0C10] rounded-lg font-bold hover:bg-[#66FCF1] transition-all flex items-center gap-2"
+                >
+                  <RefreshCw size={16} />
+                  Retry Audio
+                </button>
+              )}
               {task.image && (
                 <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
                   <img 
@@ -3046,20 +3146,80 @@ function TaskModal({
                     />
                   )}
                 </div>
+              ) : task.section === 'listening' ? (
+                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                  {task.category === 'Fill in the Blanks' ? (
+                    <div className="text-white leading-relaxed text-lg">
+                      {task.prompt?.split('________').map((part, i, arr) => (
+                        <React.Fragment key={i}>
+                          {part}
+                          {i < arr.length - 1 && (
+                            <input
+                              type="text"
+                              value={blankAnswers[i] || ''}
+                              onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
+                              placeholder={`[${i + 1}]`}
+                              className="mx-1 w-32 bg-[#1F2833] text-[#66FCF1] border-b-2 border-[#45A29E]/40 focus:border-[#66FCF1] outline-none px-2 py-0.5 transition-all text-center"
+                            />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : task.category === 'Highlight Correct Summary' || task.category.includes('Multiple Choice') ? (
+                    <div className="space-y-4">
+                      {task.options?.map(option => (
+                        <label key={option} className="flex items-start gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
+                          <input
+                            type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
+                            name="listening-option"
+                            checked={selectedOptions.includes(option)}
+                            onChange={(e) => {
+                              if (task.category.includes('Multiple Answer')) {
+                                if (e.target.checked) setSelectedOptions([...selectedOptions, option]);
+                                else setSelectedOptions(selectedOptions.filter(o => o !== option));
+                              } else {
+                                setSelectedOptions([option]);
+                              }
+                            }}
+                            className="mt-1 w-5 h-5 accent-[#45A29E] shrink-0"
+                          />
+                          <span className="text-white text-sm leading-relaxed">{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <textarea
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder={task.category === 'Write from Dictation' ? "Type the sentence you heard..." : "Type your response here..."}
+                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                      />
+                      <div className="absolute bottom-4 right-6 text-[#C5C6C7] text-xs font-mono">
+                        Words: {userInput.trim() ? userInput.trim().split(/\s+/).length : 0}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <textarea
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  placeholder={task.section === 'listening' ? "Type what you hear..." : "Type your response here..."}
-                  className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
-                />
+                <div className="relative">
+                  <textarea
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Type your response here..."
+                    className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                  />
+                  <div className="absolute bottom-4 right-6 text-[#C5C6C7] text-xs font-mono">
+                    Words: {userInput.trim() ? userInput.trim().split(/\s+/).length : 0}
+                  </div>
+                </div>
               )}
               <div className="flex justify-between items-center">
                 <div className="flex gap-4">
                   {task.category !== 'Re-order Paragraphs' && !task.category.includes('Multiple Choice') && !task.category.includes('Fill in the Blanks') && (
                     <span className="text-xs text-[#C5C6C7]">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
                   )}
-                  {task.section === 'listening' && phase === 'recording' && (
+                  {task.section === 'listening' && isAudioPlaying && (
                     <span className="text-xs text-[#45A29E] font-bold animate-pulse">Audio Playing...</span>
                   )}
                 </div>
@@ -3286,7 +3446,7 @@ function TaskModal({
                   </button>
                 </div>
               </motion.div>
-            ) : (task.section === 'speaking' && (phase === 'recording' || phase === 'prep')) || phase === 'audio' ? (
+            ) : (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) ? (
               <motion.div 
                 key="active"
                 className="flex flex-col items-center py-8"
@@ -3321,16 +3481,40 @@ function TaskModal({
                   </div>
                 )}
                 
-                <button 
-                  disabled={phase === 'audio'}
-                  onClick={phase === 'recording' ? handleFinish : skipPrep}
-                  className={cn(
-                    "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
-                    phase === 'recording' ? "bg-red-500 shadow-red-500/20" : (phase === 'audio' ? "bg-blue-500/50 cursor-not-allowed" : "bg-[#45A29E] shadow-[#45A29E]/20")
+                <div className="flex flex-col items-center gap-4">
+                  <button 
+                    disabled={phase === 'audio' && isAudioPlaying}
+                    onClick={() => {
+                      if (phase === 'audio' && !isAudioPlaying) {
+                        // Manual trigger if auto-play fails
+                        if (audioRef.current) {
+                          audioRef.current.play().catch(e => console.error("Manual play failed", e));
+                          setIsAudioPlaying(true);
+                        } else {
+                          setAudioRetryCount(prev => prev + 1);
+                        }
+                      } else if (phase === 'recording') {
+                        handleFinish();
+                      } else if (phase === 'prep') {
+                        skipPrep();
+                      }
+                    }}
+                    className={cn(
+                      "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
+                      phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
+                      (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
+                      (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-[#45A29E] shadow-[#45A29E]/20"))
+                    )}
+                  >
+                    {phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : 
+                     (phase === 'audio' ? (isAudioPlaying ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-white ml-1" />) : 
+                     (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-[#0B0C10] ml-1" />))}
+                  </button>
+                  
+                  {phase === 'audio' && !isAudioPlaying && (
+                    <p className="text-[10px] text-blue-400 font-bold animate-bounce">Click to play audio if it doesn't start</p>
                   )}
-                >
-                  {phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : (phase === 'audio' ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-[#0B0C10] ml-1" />)}
-                </button>
+                </div>
                 <p className="mt-6 text-xs font-bold text-[#C5C6C7] uppercase tracking-[0.3em]">
                   {phase === 'audio' ? "Listening..." : (phase === 'prep' ? "Preparing..." : (task.section === 'speaking' ? "Recording Now" : "Starting Task"))}
                 </p>

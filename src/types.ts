@@ -10,6 +10,7 @@ export interface PTETask {
   prepTime?: number;
   recordingTime?: number;
   prompt?: string;
+  transcript?: string; // For audio-based tasks
   image?: string;
   hasAudio?: boolean;
   options?: string[];
@@ -470,7 +471,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The history of space exploration is a testament to human curiosity and ingenuity. From the first satellite launch to the moon landing, we have made incredible strides in understanding our place in the universe. Today, private companies are playing an increasingly important role in space travel, with plans for Mars colonization and asteroid mining. These developments open up new possibilities for the future of humanity beyond Earth."
+    transcript: "The history of space exploration is a testament to human curiosity and ingenuity. From the first satellite launch to the moon landing, we have made incredible strides in understanding our place in the universe. Today, private companies are playing an increasingly important role in space travel, with plans for Mars colonization and asteroid mining. These developments open up new possibilities for the future of humanity beyond Earth.",
+    prompt: "Summarize the key points of the lecture you just heard."
   },
   { 
     id: 'sst-2', 
@@ -480,7 +482,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical."
+    transcript: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical.",
+    prompt: "Summarize the key points of the lecture you just heard."
   },
   { 
     id: 'lmcq-1', 
@@ -490,7 +493,10 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "Which of the following are mentioned as impacts of the internet on society?"
+    transcript: "The internet has had a profound impact on society, from increased global connectivity to the rapid spread of information. While it has revolutionized communication and commerce, it also presents challenges related to data privacy and the spread of misinformation.",
+    prompt: "Which of the following are mentioned as impacts of the internet on society?",
+    options: ["Increased global connectivity", "Rapid spread of information", "Improved physical health", "Reduced environmental impact"],
+    correctAnswers: ["Increased global connectivity", "Rapid spread of information"]
   },
   { 
     id: 'lfib-1', 
@@ -500,7 +506,9 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The process of ________ has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution."
+    transcript: "The process of urbanization has led to the growth of megacities around the world. These cities offer many opportunities but also face significant challenges such as pollution.",
+    prompt: "The process of ________ has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution.",
+    correctAnswers: ['urbanization', 'opportunities', 'challenges']
   },
   { 
     id: 'hcs-1', 
@@ -510,7 +518,52 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The study of psychology seeks to understand the complexities of human behavior and mental processes."
+    transcript: "Psychology has moved from early philosophical roots to a rigorous scientific discipline focusing on observable behavior and cognitive processes. The study of human behavior is now primarily concerned with empirical evidence gathered through systematic research.",
+    prompt: "Select the paragraph that best summarizes the recording you heard.",
+    options: [
+      "Psychology has moved from early philosophical roots to a rigorous scientific discipline focusing on observable behavior and cognitive processes.",
+      "The study of human behavior is primarily concerned with ancient traditions and has little relevance to modern scientific methods.",
+      "Most psychological theories are based on subjective intuition rather than empirical evidence gathered through systematic research.",
+      "Understanding the human mind is impossible due to the inherent complexity of neurological structures and social influences."
+    ],
+    correctAnswers: ["Psychology has moved from early philosophical roots to a rigorous scientific discipline focusing on observable behavior and cognitive processes."]
+  },
+  { 
+    id: 'smc-1', 
+    title: 'Question 1', 
+    category: 'Multiple Choice, Single Answer',
+    description: 'Listen to the recording and answer the multiple-choice question by selecting the correct response. Only one response is correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The decline in the local bird population is primarily due to the loss of natural habitat caused by rapid urban expansion. While seasonal migration patterns have shifted slightly, the destruction of nesting sites is the most critical factor identified by researchers.",
+    prompt: "What is the main reason for the decline in the local bird population according to the speaker?",
+    options: [
+      "Loss of natural habitat due to urban expansion",
+      "Changes in seasonal migration patterns",
+      "Increased competition from invasive species",
+      "A sudden decrease in available food sources"
+    ],
+    correctAnswers: ["Loss of natural habitat due to urban expansion"]
+  },
+  { 
+    id: 'mmc-1', 
+    title: 'Question 1', 
+    category: 'Multiple Choice, Multiple Answer',
+    description: 'Listen to the recording and answer the question by selecting all the correct responses. You will need to select more than one response.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The new sustainable building project features rainwater harvesting systems and solar panel arrays on the roof. While the initial cost was high, the long-term energy savings and reduced environmental footprint make it a model for future developments.",
+    prompt: "Which of the following were mentioned as key features of the new sustainable building project?",
+    options: [
+      "Rainwater harvesting systems",
+      "Solar panel arrays on the roof",
+      "Use of recycled construction materials",
+      "Underground parking facilities",
+      "High-speed fiber optic internet"
+    ],
+    correctAnswers: ["Rainwater harvesting systems", "Solar panel arrays on the roof"]
   },
   { 
     id: 'wfd-1', 
@@ -520,7 +573,9 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The results of the study will be published in a peer-reviewed journal next month."
+    transcript: "The results of the study will be published in a peer-reviewed journal next month.",
+    prompt: "Type the sentence you hear.",
+    correctAnswers: ["The results of the study will be published in a peer-reviewed journal next month."]
   },
   { 
     id: 'wfd-2', 
@@ -530,7 +585,9 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening', 
     type: 'listening',
     hasAudio: true,
-    prompt: "The university will provide all the necessary equipment for the experiment."
+    transcript: "The university will provide all the necessary equipment for the experiment.",
+    prompt: "Type the sentence you hear.",
+    correctAnswers: ["The university will provide all the necessary equipment for the experiment."]
   },
 ];
 
@@ -857,11 +914,46 @@ categoriesToExpand.forEach(category => {
       newTask.correctAnswers = selected.correct;
     } else if (category === 'Fill in the Blanks' && template.section === 'listening') {
       const lfib_prompts = [
-        "The ________ of the new library was a major milestone for the university community. It was designed to provide students with ________ access to digital resources and ________ study spaces. The project was ________ by a generous donation.",
-        "Scientific ________ requires careful observation and ________ testing to understand the ________ world. Researchers must ________ their hypotheses based on empirical evidence.",
-        "The ________ of renewable energy is ________ for reducing our reliance on fossil fuels. Solar and wind power ________ clean alternatives that can help ________ the impacts of climate change."
+        {
+          text: "The ________ of the new library was a major milestone for the university community. It was designed to provide students with ________ access to digital resources and ________ study spaces. The project was ________ by a generous donation.",
+          correct: ['opening', 'unprecedented', 'collaborative', 'funded']
+        },
+        {
+          text: "Scientific ________ requires careful observation and ________ testing to understand the ________ world. Researchers must ________ their hypotheses based on empirical evidence.",
+          correct: ['research', 'rigorous', 'natural', 'validate']
+        },
+        {
+          text: "The ________ of renewable energy is ________ for reducing our reliance on fossil fuels. Solar and wind power ________ clean alternatives that can help ________ the impacts of climate change.",
+          correct: ['adoption', 'essential', 'provide', 'mitigate']
+        }
       ];
-      newTask.prompt = lfib_prompts[i % lfib_prompts.length];
+      const selected = lfib_prompts[i % lfib_prompts.length];
+      newTask.prompt = selected.text;
+      // Fill blanks for transcript
+      let transcript = selected.text;
+      selected.correct.forEach(word => {
+        transcript = transcript.replace('________', word);
+      });
+      newTask.transcript = transcript;
+      newTask.correctAnswers = selected.correct;
+    } else if (category === 'Highlight Correct Summary' && template.section === 'listening') {
+      const hcs_options = [
+        ["Summary A: Focuses on technology.", "Summary B: Focuses on environment.", "Summary C: Focuses on economy.", "Summary D: Focuses on society."],
+        ["Option 1: Detailed research.", "Option 2: Casual observation.", "Option 3: Theoretical framework.", "Option 4: Practical application."]
+      ];
+      newTask.options = hcs_options[i % hcs_options.length];
+      newTask.correctAnswers = [newTask.options[0]];
+      newTask.transcript = newTask.options[0]; // Use the correct summary as the transcript for simplicity
+      newTask.prompt = "Select the paragraph that best summarizes the recording you heard.";
+    } else if (category === 'Summarize Spoken Text') {
+      newTask.transcript = newTask.prompt; // The original prompt was the transcript
+      newTask.prompt = "Summarize the key points of the lecture you just heard.";
+    } else if (category === 'Write from Dictation') {
+      newTask.transcript = newTask.prompt; // The original prompt was the sentence
+      newTask.prompt = "Type the sentence you hear.";
+      newTask.correctAnswers = [newTask.transcript];
+    } else if (category.includes('Multiple Choice') && template.section === 'listening') {
+      newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript
     }
 
     PTE_TASKS.push(newTask);
