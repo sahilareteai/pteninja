@@ -165,7 +165,7 @@ export async function analyzeWriting(text: string, taskType: string) {
   try {
     const response = await callGemini({
       model,
-      contents: `Analyze this PTE ${taskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips. Return JSON.`,
+      contents: `Analyze this PTE ${taskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -179,9 +179,13 @@ export async function analyzeWriting(text: string, taskType: string) {
             tips: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
+            },
+            mistakes: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
             }
           },
-          required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips"]
+          required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"]
         }
       }
     });
@@ -195,7 +199,8 @@ export async function analyzeWriting(text: string, taskType: string) {
       vocabulary: 50,
       spelling: 50,
       content: 50,
-      tips: ["Could not analyze response correctly."]
+      tips: ["Could not analyze response correctly."],
+      mistakes: []
     };
   }
 }

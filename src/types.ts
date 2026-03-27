@@ -17,6 +17,7 @@ export interface PTETask {
   correctAnswers?: string[];
   paragraphs?: string[];
   blanks?: { [key: string]: string[] };
+  summaryExample?: string;
 }
 
 export interface UserProgress {
@@ -299,18 +300,30 @@ export const PTE_TASKS: PTETask[] = [
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 600,
-    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical."
+    prompt: "His product life cycle has 4 very clearly defined stages, each with its characteristics that mean different things for businesses that are trying to manage the life cycle of their particular products.\n\nIntroduction Stage - This stage of the cycle could be the most expensive for a company launching a new product. The size of the market for the product is small, which means sales are low, although they will be increasing. On the other hand, the cost of things like research and development, consumer testing, and the marketing needed to launch the product can be very high, especially if it's a competitive sector.\n\nGrowth Stage - The growth stage is typically characterized by strong growth in sales and profits, and because the company can start to benefit from economies of scale in production, the profit margins, as well as the overall amount of profit, will increase. This makes it possible for businesses to invest more money in promotional activity to maximize the potential of this growth stage.\n\nMaturity Stage - During the maturity stage, the product is established and the aim for the manufacturer is now to maintain the market share they have built up. This is probably the most competitive time for most products and businesses need to invest wisely in any marketing they undertake. They also need to consider any product modifications or improvements to the production process which might give them a competitive advantage.\n\nDecline Stage - Eventually, the market for a product will start to shrink, and this is what's known as the decline stage. This shrinkage could be due to the market becoming saturated (i.e. all the customers who will buy the product have already purchased it), or because the consumers are switching to a different type of product. While this decline may be inevitable, it may still be possible for companies to make some profit by switching to less expensive production methods and cheaper markets.",
+    summaryExample: "The product life cycle consists of four distinct stages—introduction, growth, maturity, and decline—each presenting unique challenges and opportunities that require businesses to adapt their marketing and production strategies to maintain profitability and market share."
   },
   { 
     id: 'swt-2', 
     title: 'Question 2', 
     category: 'Summarize Written Text',
-    description: 'Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task.', 
+    description: 'Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the passage.', 
     section: 'writing', 
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 600,
-    prompt: "The rise of e-commerce has fundamentally changed the retail landscape, offering consumers unprecedented convenience and a wider range of products. While traditional brick-and-mortar stores face challenges, many are adapting by integrating online and offline experiences. This shift has also led to significant changes in logistics and supply chain management, as businesses strive to meet the demands of fast and reliable delivery."
+    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical. Governments and organizations must collaborate to establish frameworks that protect individual privacy while fostering innovation, ensuring that AI serves as a force for good in society."
+  },
+  { 
+    id: 'swt-3', 
+    title: 'Question 3', 
+    category: 'Summarize Written Text',
+    description: 'Read the passage below and summarize it using one sentence. Type your response in the box at the bottom of the screen. You have 10 minutes to finish this task. Your response will be judged on the quality of your writing and on how well your response presents the key points in the passage.', 
+    section: 'writing', 
+    type: 'writing', 
+    prepTime: 0, 
+    recordingTime: 600,
+    prompt: "The rise of e-commerce has fundamentally changed the retail landscape, offering consumers unprecedented convenience and a wider range of products. While traditional brick-and-mortar stores face challenges, many are adapting by integrating online and offline experiences. This shift has also led to significant changes in logistics and supply chain management, as businesses strive to meet the demands of fast and reliable delivery. Furthermore, the environmental impact of increased shipping and packaging is a growing concern that requires sustainable solutions from both retailers and consumers."
   },
   { 
     id: 'we-1', 

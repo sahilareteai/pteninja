@@ -37,7 +37,8 @@ import {
   AlertCircle,
   Book,
   Search,
-  Volume2
+  Volume2,
+  Loader2
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -628,6 +629,12 @@ function AppContent() {
     setCurrentCategoryTasks(allTasks);
   };
 
+  const handleHoverTask = (task: PTETask) => {
+    if (task.hasAudio) {
+      preFetchAudio(task);
+    }
+  };
+
   const currentStreak = calculateStreak(user?.activityLog);
 
   const calculateAverageScore = () => {
@@ -782,6 +789,7 @@ function AppContent() {
                   setSelectedTask(task);
                   setActiveTab(task.section);
                 }} 
+                onHoverTask={handleHoverTask}
                 onSelectSection={setActiveTab}
                 onViewRoadmap={() => setActiveTab('roadmap')}
                 onViewVocabulary={() => setActiveTab('vocabulary')}
@@ -844,6 +852,7 @@ function AppContent() {
                 user={user}
                 onBack={() => setActiveTab('dashboard')} 
                 onSelectTask={handleSelectTask}
+                onHoverTask={handleHoverTask}
               />
             )}
           </AnimatePresence>
@@ -1494,10 +1503,11 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
   );
 }
 
-function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
+function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
   progress: UserProgress, 
   user: any,
   onStartTask: (task: PTETask) => void,
+  onHoverTask?: (task: PTETask) => void,
   onSelectSection: (section: PTESection) => void,
   onViewRoadmap: () => void,
   onViewVocabulary: () => void,
@@ -1678,7 +1688,7 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {recommendedTasks.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onStartTask(task)} />
+            <TaskCard key={task.id} task={task} onClick={() => onStartTask(task)} onHover={() => onHoverTask?.(task)} />
           ))}
         </div>
       </section>
@@ -1694,7 +1704,7 @@ function Dashboard({ progress, user, onStartTask, onSelectSection, onViewRoadmap
   );
 }
 
-function DailyShurikenView({ user, onBack, onStartTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void }) {
+function DailyShurikenView({ user, onBack, onStartTask, onHoverTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void, onHoverTask?: (task: PTETask) => void }) {
   const highPriorityTasks = PTE_TASKS
     .filter(t => !user?.completedTasks?.includes(t.id))
     .slice(0, 100);
@@ -1736,7 +1746,7 @@ function DailyShurikenView({ user, onBack, onStartTask }: { user: any, onBack: (
                 {index + 1}
               </div>
               <div className="flex-1 min-w-0">
-                <TaskCard task={task} onClick={() => onStartTask(task)} />
+                <TaskCard task={task} onClick={() => onStartTask(task)} onHover={() => onHoverTask?.(task)} />
               </div>
             </div>
           ))
@@ -2062,7 +2072,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function SectionView({ section, user, onBack, onSelectTask }: { section: PTESection, user: any, onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void }) {
+function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { section: PTESection, user: any, onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void, onHoverTask?: (task: PTETask) => void }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const tasks = PTE_TASKS.filter(t => t.section === section);
   
@@ -2174,6 +2184,7 @@ function SectionView({ section, user, onBack, onSelectTask }: { section: PTESect
                   task={task} 
                   isCompleted={user?.completedTasks?.includes(task.id)}
                   onClick={() => onSelectTask(task, filteredTasks)} 
+                  onHover={() => onHoverTask?.(task)}
                 />
             ))}
           </motion.div>
@@ -2183,7 +2194,7 @@ function SectionView({ section, user, onBack, onSelectTask }: { section: PTESect
   );
 }
 
-function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?: boolean, onClick: () => void }) {
+function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCompleted?: boolean, onClick: () => void, onHover?: () => void }) {
   const sectionColors = {
     speaking: "bg-rose-500/20 text-rose-500 border-rose-500/30",
     writing: "bg-sky-500/20 text-sky-500 border-sky-500/30",
@@ -2224,7 +2235,15 @@ function TaskCard({ task, isCompleted, onClick }: { task: PTETask, isCompleted?:
 
   return (
     <button 
-      onClick={onClick}
+      onClick={() => {
+        // Warm up AudioContext on user gesture
+        const ctx = getAudioContext();
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        onClick();
+      }}
+      onMouseEnter={onHover}
       className={cn(
         "flex items-center gap-3 md:gap-4 p-3 md:p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
         task.section === 'speaking' ? 'border-l-rose-500' :
@@ -2279,6 +2298,48 @@ function StatBox({ label, value, color, onClick }: { label: string, value: strin
   );
 }
 
+const base64ToArrayBuffer = (base64: string) => {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+};
+
+// Global Audio Cache and Context for near-instant playback
+const globalAudioCache: Record<string, { base64: string, buffer: AudioBuffer }> = {};
+let globalAudioContext: AudioContext | null = null;
+
+const getAudioContext = () => {
+  if (typeof window === 'undefined') return null;
+  if (!globalAudioContext) {
+    globalAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  return globalAudioContext;
+};
+
+const preFetchAudio = async (task: PTETask) => {
+  if (!task.hasAudio || globalAudioCache[task.id]) return;
+  
+  try {
+    const audioContent = task.transcript || task.prompt || "";
+    const base64 = await generateTTS(audioContent);
+    if (base64) {
+      const ctx = getAudioContext();
+      if (ctx) {
+        const arrayBuffer = base64ToArrayBuffer(base64);
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        globalAudioCache[task.id] = { base64, buffer: audioBuffer };
+        console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
+      }
+    }
+  } catch (err) {
+    console.error(`[Audio] Global Cache: Pre-fetch failed for task ${task.id}`, err);
+  }
+};
+
 function TaskModal({ 
   task, 
   onClose, 
@@ -2327,11 +2388,68 @@ function TaskModal({
   });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isPreparingAudio, setIsPreparingAudio] = useState(false);
+  const beepPlayedRef = useRef(false);
+
+  const needsBeep = task.section === 'listening' || 
+                   task.category === 'Repeat Sentence' || 
+                   task.category === 'Answer Short Question' || 
+                   task.category === 'Write from Dictation';
   const [hasAudioError, setHasAudioError] = useState(false);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [prefetchedAudioBase64, setPrefetchedAudioBase64] = useState<string | null>(null);
   const audioFetchPromiseRef = useRef<Promise<string | null> | null>(null);
   const [userInput, setUserInput] = useState('');
+  const [showExample, setShowExample] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleCut = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = userInput.substring(start, end);
+    if (text) {
+      navigator.clipboard.writeText(text);
+      const newValue = userInput.substring(0, start) + userInput.substring(end);
+      setUserInput(newValue);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start, start);
+      }, 0);
+    }
+  };
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = userInput.substring(start, end);
+    if (text) {
+      navigator.clipboard.writeText(text);
+    }
+  };
+
+  const handlePaste = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newValue = userInput.substring(0, start) + text + userInput.substring(end);
+      setUserInput(newValue);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + text.length, start + text.length);
+      }, 0);
+    } catch (err) {
+      console.error('Failed to read clipboard', err);
+    }
+  };
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [reorderedParagraphs, setReorderedParagraphs] = useState<string[]>(task.paragraphs || []);
   const [targetParagraphs, setTargetParagraphs] = useState<string[]>([]);
@@ -2341,18 +2459,20 @@ function TaskModal({
   const chunksRef = React.useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const prefetchedAudioBufferRef = useRef<AudioBuffer | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(getAudioContext());
 
   // Helper to play a beep sound using a persistent AudioContext
   const playBeep = () => {
     return new Promise<void>((resolve) => {
       try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const ctx = getAudioContext();
+        if (!ctx) {
+          resolve();
+          return;
         }
-        const ctx = audioContextRef.current;
-        
-        // Resume context if it was suspended (common browser policy)
+
         if (ctx.state === 'suspended') {
           ctx.resume();
         }
@@ -2366,15 +2486,15 @@ function TaskModal({
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
         gainNode.gain.setValueAtTime(0, ctx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
 
         oscillator.onended = () => {
           resolve();
         };
 
-        oscillator.start();
-        oscillator.stop(ctx.currentTime + 0.4);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.1);
       } catch (e) {
         console.error("Beep failed", e);
         resolve();
@@ -2395,11 +2515,11 @@ function TaskModal({
     
     let initialTime = 0;
     if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
-      initialTime = 3;
+      initialTime = 1; // Reduced from 3 to 1 for near-instant start
     } else if (task.category === 'Summarize Spoken Text') {
       initialTime = 12;
     } else if (task.section === 'listening' && task.hasAudio) {
-      initialTime = 7;
+      initialTime = 1; // Reduced from 7 to 1 for near-instant start
     } else if (task.hasAudio) {
       initialTime = 0;
     } else if (task.prepTime === 0 || task.section === 'reading') {
@@ -2443,8 +2563,23 @@ function TaskModal({
     audioFetchPromiseRef.current = null;
     setPrefetchedAudioBase64(null);
     prefetchedAudioRef.current = null;
+    prefetchedAudioBufferRef.current = null;
 
     if (task.hasAudio) {
+      // Check global cache first
+      if (globalAudioCache[task.id]) {
+        console.log(`[Audio] Using global cache for task ${task.id}`);
+        const cached = globalAudioCache[task.id];
+        setPrefetchedAudioBase64(cached.base64);
+        prefetchedAudioBufferRef.current = cached.buffer;
+        
+        // Fallback Audio element
+        const audio = new Audio(`data:audio/wav;base64,${cached.base64}`);
+        audio.load();
+        prefetchedAudioRef.current = audio;
+        return;
+      }
+
       const prefetch = async () => {
         const audioContent = task.transcript || task.prompt || "";
         const promise = generateTTS(audioContent);
@@ -2455,9 +2590,28 @@ function TaskModal({
           if (isCancelled) return;
           if (base64) {
             setPrefetchedAudioBase64(base64);
+            
+            // Standard Audio element pre-load (fallback)
             const audio = new Audio(`data:audio/wav;base64,${base64}`);
             audio.load();
             prefetchedAudioRef.current = audio;
+
+            // High-performance AudioBuffer pre-decode
+            try {
+              const ctx = getAudioContext();
+              if (ctx) {
+                const arrayBuffer = base64ToArrayBuffer(base64);
+                const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                if (!isCancelled) {
+                  prefetchedAudioBufferRef.current = audioBuffer;
+                  // Cache it globally for future use
+                  globalAudioCache[task.id] = { base64, buffer: audioBuffer };
+                  console.log("[Audio] Pre-fetch: AudioBuffer decoded and ready");
+                }
+              }
+            } catch (decodeErr) {
+              console.error("[Audio] Pre-fetch: Decoding failed", decodeErr);
+            }
           }
         } catch (err) {
           console.error("Pre-fetch TTS failed:", err);
@@ -2469,71 +2623,60 @@ function TaskModal({
       isCancelled = true;
       audioFetchPromiseRef.current = null;
       prefetchedAudioRef.current = null;
+      prefetchedAudioBufferRef.current = null;
     };
   }, [task.id]);
 
   // Audio logic
   useEffect(() => {
     let isCancelled = false;
+    let safetyTimeout: any = null;
+
     if (phase === 'audio' && task.hasAudio) {
+      console.log(`[Audio] Starting audio logic for task ${task.id}`);
+      
       const playAudio = async () => {
-        // Start beep immediately if needed
-        const needsBeep = task.section === 'listening' || 
-                         task.category === 'Repeat Sentence' || 
-                         task.category === 'Answer Short Question' || 
-                         task.category === 'Write from Dictation';
-        
         try {
+          if (isCancelled) return;
+          
           setHasAudioError(false);
           setIsAudioPlaying(false);
-          setIsPreparingAudio(false);
 
-          let audio = prefetchedAudioRef.current;
-          
-          if (!audio) {
-            let base64 = prefetchedAudioBase64;
-            if (!base64) {
-              setIsPreparingAudio(true);
-              if (audioFetchPromiseRef.current) {
-                console.log("Waiting for pre-fetch to complete...");
-                base64 = await audioFetchPromiseRef.current;
-              } else {
-                console.log("Starting on-demand audio generation...");
-                const audioContent = task.transcript || task.prompt || "";
-                base64 = await generateTTS(audioContent);
-              }
-              setIsPreparingAudio(false);
-            }
+          // --- HIGH-PERFORMANCE AUDIOBUFFER LOGIC ---
+          if (prefetchedAudioBufferRef.current) {
+            console.log("[Audio] Using high-performance AudioBuffer");
+            const ctx = getAudioContext();
+            if (!ctx) throw new Error("AudioContext not available");
+            if (ctx.state === 'suspended') await ctx.resume();
             
-            if (isCancelled) return;
+            const now = ctx.currentTime;
+            let startTime = now;
 
-            if (base64) {
-              audio = new Audio(`data:audio/wav;base64,${base64}`);
-              audio.load();
+            // Play beep if needed
+            if (needsBeep && !beepPlayedRef.current) {
+              console.log("[Audio] Scheduling beep and audio...");
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.frequency.setValueAtTime(1000, now);
+              gain.gain.setValueAtTime(0, now);
+              gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+              osc.start(now);
+              osc.stop(now + 0.1);
+              beepPlayedRef.current = true;
+              startTime = now + 0.1; // Start audio exactly when beep ends
             }
-          }
-          
-          if (isCancelled) return;
 
-          if (audio) {
-            audioRef.current = audio;
+            const source = ctx.createBufferSource();
+            source.buffer = prefetchedAudioBufferRef.current;
+            source.connect(ctx.destination);
+            audioSourceRef.current = source;
             
-            // Wait for beep to finish before starting audio
-            // We play the beep ONLY when the audio is ready to go
-            if (needsBeep) {
-              await playBeep();
-            }
-            
-            if (isCancelled) return;
-
-            audio.onplay = () => {
-              if (!isCancelled) {
-                setIsAudioPlaying(true);
-                setIsPreparingAudio(false);
-              }
-            };
-            audio.onended = () => {
+            source.onended = () => {
               if (isCancelled) return;
+              console.log("[Audio] AudioBuffer playback ended");
               setIsAudioPlaying(false);
               setIsPreparingAudio(false);
               // Small pause after audio before next phase
@@ -2552,7 +2695,120 @@ function TaskModal({
               }, 1000);
             };
 
+            source.start(startTime);
+            setIsAudioPlaying(true);
+            setIsPreparingAudio(false);
+            return; // Exit early as we've handled playback
+          }
+          // --- END HIGH-PERFORMANCE LOGIC ---
+
+          let audio = prefetchedAudioRef.current;
+          
+          if (!audio) {
+            let base64 = prefetchedAudioBase64;
+            if (!base64) {
+              console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
+              setIsPreparingAudio(true);
+              
+              // Safety timeout to prevent stuck loading
+              safetyTimeout = setTimeout(() => {
+                if (!isCancelled) {
+                  console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
+                  setIsPreparingAudio(false);
+                  setHasAudioError(true);
+                }
+              }, 25000);
+
+              try {
+                const timeoutPromise = new Promise<null>((_, reject) => 
+                  setTimeout(() => reject(new Error("Audio preparation timed out")), 20000)
+                );
+
+                if (audioFetchPromiseRef.current) {
+                  console.log("[Audio] Waiting for pre-fetch to complete...");
+                  base64 = await Promise.race([audioFetchPromiseRef.current, timeoutPromise]);
+                } else {
+                  console.log("[Audio] Starting on-demand audio generation...");
+                  const audioContent = task.transcript || task.prompt || "";
+                  base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
+                }
+              } catch (prepErr) {
+                console.error("[Audio] Audio preparation failed or timed out:", prepErr);
+                base64 = null;
+              } finally {
+                if (safetyTimeout) clearTimeout(safetyTimeout);
+                if (!isCancelled) setIsPreparingAudio(false);
+              }
+            }
+            
+            if (isCancelled) return;
+
+            if (base64) {
+              console.log("[Audio] Creating new Audio object from base64");
+              audio = new Audio(`data:audio/wav;base64,${base64}`);
+              audio.load();
+            }
+          } else {
+            console.log("[Audio] Using pre-fetched Audio object");
+            setIsPreparingAudio(false);
+          }
+          
+          if (isCancelled) return;
+
+          if (audio) {
+            audioRef.current = audio;
+            
+            // Wait for beep to finish before starting audio
+            if (needsBeep && !beepPlayedRef.current) {
+              await playBeep();
+              beepPlayedRef.current = true;
+            }
+            
+            if (isCancelled) return;
+            
+            // Start audio immediately after beep
+            audio.play().then(() => {
+              if (!isCancelled) {
+                console.log("[Audio] Audio playback started");
+                setIsAudioPlaying(true);
+                setIsPreparingAudio(false);
+              }
+            }).catch(err => {
+              console.error("[Audio] Playback failed:", err);
+            });
+
+            audio.onended = () => {
+              if (isCancelled) return;
+              console.log("[Audio] Audio playback ended");
+              setIsAudioPlaying(false);
+              setIsPreparingAudio(false);
+              // Small pause after audio before next phase
+              setTimeout(() => {
+                if (isCancelled) return;
+                if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+                  setPhase('prep');
+                  setTimeLeft(task.prepTime);
+                } else {
+                  setPhase('recording');
+                  // For listening tasks, recording time is usually until they finish typing
+                  if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
+                  else if (task.section === 'listening') setTimeLeft(120);
+                  else setTimeLeft(task.recordingTime ?? 15);
+                }
+              }, 1000);
+            };
+
+            audio.onerror = (e) => {
+              console.error("[Audio] Audio element error:", e);
+              if (!isCancelled) {
+                setHasAudioError(true);
+                setIsAudioPlaying(false);
+                setIsPreparingAudio(false);
+              }
+            };
+
             try {
+              console.log("[Audio] Calling audio.play()");
               const playPromise = audio.play();
               if (playPromise !== undefined) {
                 await playPromise;
@@ -2561,13 +2817,14 @@ function TaskModal({
             } catch (playErr: any) {
               // Ignore AbortError which happens when pause() is called before play() promise resolves
               if (!isCancelled && playErr.name !== 'AbortError') {
-                console.error("Audio play failed:", playErr);
+                console.error("[Audio] Audio play failed:", playErr);
                 setIsAudioPlaying(false);
                 setIsPreparingAudio(false);
+                setHasAudioError(true);
               }
             }
           } else {
-            console.warn("Audio failed to load, showing error state...");
+            console.warn("[Audio] No audio object available, showing error state");
             if (!isCancelled) {
               setHasAudioError(true);
               setIsAudioPlaying(false);
@@ -2575,8 +2832,8 @@ function TaskModal({
             }
           }
         } catch (err: any) {
-          if (!isCancelled && err.name !== 'AbortError') {
-            console.error("Audio playback failed:", err);
+          console.error("[Audio] Unexpected error in playAudio:", err);
+          if (!isCancelled) {
             setHasAudioError(true);
             setIsAudioPlaying(false);
             setIsPreparingAudio(false);
@@ -2587,12 +2844,20 @@ function TaskModal({
       playAudio();
 
       return () => {
+        console.log(`[Audio] Cleaning up audio logic for task ${task.id}`);
         isCancelled = true;
+        if (safetyTimeout) clearTimeout(safetyTimeout);
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
         }
+        if (audioSourceRef.current) {
+          try { audioSourceRef.current.stop(); } catch(e) {}
+          audioSourceRef.current = null;
+        }
         setIsAudioPlaying(false);
+        setIsPreparingAudio(false);
+        beepPlayedRef.current = false;
       };
     } else {
       // Ensure audio is stopped and state is reset if we're not in audio phase
@@ -2601,8 +2866,10 @@ function TaskModal({
         audioRef.current = null;
       }
       setIsAudioPlaying(false);
+      setIsPreparingAudio(false);
+      beepPlayedRef.current = false;
     }
-  }, [phase, task.id, task.hasAudio, prefetchedAudioBase64, audioRetryCount]);
+  }, [phase, task.id, task.hasAudio, prefetchedAudioBase64, audioRetryCount, needsBeep]);
 
   // Recording logic
   useEffect(() => {
@@ -2795,7 +3062,7 @@ function TaskModal({
           spelling: result.spelling || 70,
           details: {
             hesitations: 0,
-            mispronounced: [],
+            mispronounced: Array.isArray(result.mistakes) ? result.mistakes : [],
             pace: "N/A",
             stress: "N/A"
           },
@@ -2833,7 +3100,14 @@ function TaskModal({
   };
 
   const skipPrep = () => {
+    // Resume audio context on user interaction to avoid browser blocks
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+
     if (task.hasAudio) {
+      // We don't set isPreparingAudio here anymore to avoid stuck states
+      // The useEffect will handle it when phase changes to 'audio'
       setPhase('audio');
       setTimeLeft(0);
     } else {
@@ -3138,12 +3412,54 @@ function TaskModal({
                       </div>
                     </div>
                   ) : (
-                    <textarea
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      placeholder="Type your response here..."
-                      className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
-                    />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleCut}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Cut
+                          </button>
+                          <button 
+                            onClick={handleCopy}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Copy
+                          </button>
+                          <button 
+                            onClick={handlePaste}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Paste
+                          </button>
+                          {task.summaryExample && (
+                            <button 
+                              onClick={() => setShowExample(!showExample)}
+                              className="px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-400/10 rounded transition-all border border-amber-400/30 ml-2"
+                            >
+                              {showExample ? 'Hide Example' : 'Show Example'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                          {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
+                        </div>
+                      </div>
+                      {showExample && task.summaryExample && (
+                        <div className="p-4 bg-amber-400/5 border border-amber-400/20 rounded-lg mb-2">
+                          <p className="text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">Example Summary:</p>
+                          <p className="text-sm text-amber-100 italic leading-relaxed">{task.summaryExample}</p>
+                        </div>
+                      )}
+                      <textarea
+                        ref={textareaRef}
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder="Type your response here..."
+                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                      />
+                    </div>
                   )}
                 </div>
               ) : task.section === 'listening' ? (
@@ -3188,30 +3504,76 @@ function TaskModal({
                       ))}
                     </div>
                   ) : (
-                    <div className="relative">
+                    <div className="relative space-y-2">
+                      <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleCut}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Cut
+                          </button>
+                          <button 
+                            onClick={handleCopy}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Copy
+                          </button>
+                          <button 
+                            onClick={handlePaste}
+                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                          >
+                            Paste
+                          </button>
+                        </div>
+                        <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                          {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
+                        </div>
+                      </div>
                       <textarea
+                        ref={textareaRef}
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         placeholder={task.category === 'Write from Dictation' ? "Type the sentence you heard..." : "Type your response here..."}
-                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
                       />
-                      <div className="absolute bottom-4 right-6 text-[#C5C6C7] text-xs font-mono">
-                        Words: {userInput.trim() ? userInput.trim().split(/\s+/).length : 0}
-                      </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative space-y-2">
+                  <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleCut}
+                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                      >
+                        Cut
+                      </button>
+                      <button 
+                        onClick={handleCopy}
+                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                      >
+                        Copy
+                      </button>
+                      <button 
+                        onClick={handlePaste}
+                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                      >
+                        Paste
+                      </button>
+                    </div>
+                    <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                      {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
+                    </div>
+                  </div>
                   <textarea
+                    ref={textareaRef}
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     placeholder="Type your response here..."
-                    className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                    className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
                   />
-                  <div className="absolute bottom-4 right-6 text-[#C5C6C7] text-xs font-mono">
-                    Words: {userInput.trim() ? userInput.trim().split(/\s+/).length : 0}
-                  </div>
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -3387,23 +3749,33 @@ function TaskModal({
                 {/* Detailed Analysis */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">Diagnostic Data</h5>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                        <span>Hesitations</span>
-                        <span className="text-orange-400 font-bold">{feedback.details.hesitations}</span>
+                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                      {task.section === 'writing' ? 'Expected Answer' : 'Diagnostic Data'}
+                    </h5>
+                    {task.section === 'writing' ? (
+                      <div className="text-[10px] text-[#C5C6C7] leading-relaxed italic">
+                        {task.summaryExample || (task.correctAnswers && task.correctAnswers[0]) || "No expected answer available."}
                       </div>
-                      <div className="flex justify-between text-xs">
-                        <span>Pace</span>
-                        <span className="text-[#66FCF1] font-bold">{feedback.details.pace}</span>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span>Hesitations</span>
+                          <span className="text-orange-400 font-bold">{feedback.details.hesitations}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Pace</span>
+                          <span className="text-[#66FCF1] font-bold">{feedback.details.pace}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                   <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">Mispronounced</h5>
+                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                      {task.section === 'writing' ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
+                    </h5>
                     <div className="flex flex-wrap gap-1">
-                      {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string) => (
-                        <span key={word} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
+                      {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string, i: number) => (
+                        <span key={i} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
                           {word}
                         </span>
                       ))}
@@ -3481,40 +3853,61 @@ function TaskModal({
                   </div>
                 )}
                 
-                <div className="flex flex-col items-center gap-4">
-                  <button 
-                    disabled={phase === 'audio' && isAudioPlaying}
-                    onClick={() => {
-                      if (phase === 'audio' && !isAudioPlaying) {
-                        // Manual trigger if auto-play fails
-                        if (audioRef.current) {
-                          audioRef.current.play().catch(e => console.error("Manual play failed", e));
-                          setIsAudioPlaying(true);
-                        } else {
-                          setAudioRetryCount(prev => prev + 1);
-                        }
-                      } else if (phase === 'recording') {
-                        handleFinish();
-                      } else if (phase === 'prep') {
-                        skipPrep();
-                      }
-                    }}
-                    className={cn(
-                      "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
-                      phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
-                      (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
-                      (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-[#45A29E] shadow-[#45A29E]/20"))
-                    )}
-                  >
-                    {phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : 
-                     (phase === 'audio' ? (isAudioPlaying ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-white ml-1" />) : 
-                     (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-[#0B0C10] ml-1" />))}
-                  </button>
-                  
-                  {phase === 'audio' && !isAudioPlaying && (
-                    <p className="text-[10px] text-blue-400 font-bold animate-bounce">Click to play audio if it doesn't start</p>
-                  )}
-                </div>
+                    <div className="flex flex-col items-center gap-4">
+                      <button 
+                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
+                        onClick={() => {
+                          if (isPreparingAudio) return;
+                          
+                          if (phase === 'audio' && !isAudioPlaying) {
+                            // Manual trigger if auto-play fails
+                            if (audioRef.current) {
+                              audioRef.current.play().catch(e => console.error("Manual play failed", e));
+                              setIsAudioPlaying(true);
+                            } else {
+                              setAudioRetryCount(prev => prev + 1);
+                            }
+                          } else if (phase === 'recording') {
+                            handleFinish();
+                          } else if (phase === 'prep') {
+                            skipPrep();
+                          }
+                        }}
+                        className={cn(
+                          "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
+                          phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
+                          (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
+                          (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-[#45A29E] shadow-[#45A29E]/20")),
+                          isPreparingAudio && "bg-blue-500/50 cursor-wait",
+                          hasAudioError && "bg-red-500/50"
+                        )}
+                      >
+                        {isPreparingAudio ? <Loader2 size={40} className="text-white animate-spin" /> : 
+                         (phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : 
+                         (phase === 'audio' ? (isAudioPlaying ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-white ml-1" />) : 
+                         (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-[#0B0C10] ml-1" />)))}
+                      </button>
+                      
+                      {isPreparingAudio && (
+                        <p className="text-[10px] text-blue-400 font-bold animate-pulse">Preparing Audio...</p>
+                      )}
+
+                      {hasAudioError && (
+                        <div className="flex flex-col items-center gap-2">
+                          <p className="text-[10px] text-red-400 font-bold">Audio failed to load</p>
+                          <button 
+                            onClick={() => setAudioRetryCount(prev => prev + 1)}
+                            className="text-[10px] text-[#45A29E] font-bold underline hover:text-[#66FCF1] transition-colors"
+                          >
+                            Retry Loading
+                          </button>
+                        </div>
+                      )}
+                      
+                      {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
+                        <p className="text-[10px] text-blue-400 font-bold animate-bounce">Click to play audio if it doesn't start</p>
+                      )}
+                    </div>
                 <p className="mt-6 text-xs font-bold text-[#C5C6C7] uppercase tracking-[0.3em]">
                   {phase === 'audio' ? "Listening..." : (phase === 'prep' ? "Preparing..." : (task.section === 'speaking' ? "Recording Now" : "Starting Task"))}
                 </p>
