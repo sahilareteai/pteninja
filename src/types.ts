@@ -312,7 +312,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 600,
-    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical. Governments and organizations must collaborate to establish frameworks that protect individual privacy while fostering innovation, ensuring that AI serves as a force for good in society."
+    prompt: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical. Governments and organizations must collaborate to establish frameworks that protect individual privacy while fostering innovation, ensuring that AI serves as a force for good in society.",
+    summaryExample: "While artificial intelligence offers significant efficiency gains, its rapid development necessitates collaborative ethical frameworks and robust cybersecurity measures to protect privacy and ensure its positive impact on society."
   },
   { 
     id: 'swt-3', 
@@ -323,7 +324,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 600,
-    prompt: "The rise of e-commerce has fundamentally changed the retail landscape, offering consumers unprecedented convenience and a wider range of products. While traditional brick-and-mortar stores face challenges, many are adapting by integrating online and offline experiences. This shift has also led to significant changes in logistics and supply chain management, as businesses strive to meet the demands of fast and reliable delivery. Furthermore, the environmental impact of increased shipping and packaging is a growing concern that requires sustainable solutions from both retailers and consumers."
+    prompt: "The rise of e-commerce has fundamentally changed the retail landscape, offering consumers unprecedented convenience and a wider range of products. While traditional brick-and-mortar stores face challenges, many are adapting by integrating online and offline experiences. This shift has also led to significant changes in logistics and supply chain management, as businesses strive to meet the demands of fast and reliable delivery. Furthermore, the environmental impact of increased shipping and packaging is a growing concern that requires sustainable solutions from both retailers and consumers.",
+    summaryExample: "The e-commerce boom has transformed retail by prioritizing consumer convenience and logistics efficiency, but it also compels traditional stores to adapt and necessitates sustainable solutions to address its growing environmental footprint."
   },
   { 
     id: 'we-1', 
@@ -334,7 +336,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 1200,
-    prompt: "Some people believe that technology has made our lives more complex and stressful, while others argue that it has made them easier and more efficient. Discuss both views and give your own opinion."
+    prompt: "Some people believe that technology has made our lives more complex and stressful, while others argue that it has made them easier and more efficient. Discuss both views and give your own opinion.",
+    summaryExample: "Technology has undoubtedly simplified many aspects of life through automation and instant communication, yet it has also introduced new stressors such as information overload and the blurring of work-life boundaries. In my opinion, while technology offers immense benefits, its overall impact depends on our ability to manage its use mindfully to avoid being overwhelmed by its complexity."
   },
   { 
     id: 'we-2', 
@@ -345,7 +348,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'writing', 
     prepTime: 0, 
     recordingTime: 1200,
-    prompt: "The impact of social media on modern communication is a complex topic with both positive and negative implications for society. Discuss the role of social media in modern society and whether it should be regulated."
+    prompt: "The impact of social media on modern communication is a complex topic with both positive and negative implications for society. Discuss the role of social media in modern society and whether it should be regulated.",
+    summaryExample: "Social media has revolutionized communication by enabling global connectivity, but it also facilitates the spread of misinformation and impacts mental health. Therefore, while complete censorship is undesirable, some level of regulation is necessary to ensure platform accountability and protect users from harmful content."
   },
   
   // Reading
@@ -485,7 +489,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'listening',
     hasAudio: true,
     transcript: "The history of space exploration is a testament to human curiosity and ingenuity. From the first satellite launch to the moon landing, we have made incredible strides in understanding our place in the universe. Today, private companies are playing an increasingly important role in space travel, with plans for Mars colonization and asteroid mining. These developments open up new possibilities for the future of humanity beyond Earth.",
-    prompt: "Summarize the key points of the lecture you just heard."
+    prompt: "Summarize the key points of the lecture you just heard.",
+    summaryExample: "The lecture highlights the remarkable progress in space exploration driven by human curiosity, noting the transition from government-led missions to the increasing involvement of private companies in ambitious projects like Mars colonization and asteroid mining."
   },
   { 
     id: 'sst-2', 
@@ -496,7 +501,8 @@ export const PTE_TASKS: PTETask[] = [
     type: 'listening',
     hasAudio: true,
     transcript: "The rapid development of artificial intelligence has transformed the way we interact with technology. While it offers unprecedented efficiency, it also presents complex ethical dilemmas that must be carefully addressed. As we continue to integrate more of our lives online, the need for robust cybersecurity measures becomes increasingly critical.",
-    prompt: "Summarize the key points of the lecture you just heard."
+    prompt: "Summarize the key points of the lecture you just heard.",
+    summaryExample: "The speaker discusses how artificial intelligence has revolutionized technology interaction, emphasizing that its efficiency gains are accompanied by complex ethical challenges and a critical need for enhanced cybersecurity in our increasingly digital lives."
   },
   { 
     id: 'lmcq-1', 
@@ -607,7 +613,7 @@ export const PTE_TASKS: PTETask[] = [
 // Programmatically generate 100 questions for each category with more variety
 const categoriesToExpand = Array.from(new Set(PTE_TASKS.map(t => t.category)));
 
-const promptTemplates: Record<string, string[]> = {
+const promptTemplates: Record<string, (string | { prompt: string; example: string })[]> = {
   'Read Aloud': [
     "The study of linguistics explores the structure and evolution of human language, examining how sounds and symbols convey meaning across different cultures.",
     "Renewable energy technologies such as solar and wind power are becoming increasingly cost-effective, driving a global transition away from fossil fuels.",
@@ -657,28 +663,32 @@ const promptTemplates: Record<string, string[]> = {
     "The speaker discussed the impact of social media on political discourse and public opinion."
   ],
   'Summarize Written Text': [
-    "The impact of social media on modern communication is a complex topic with both positive and negative implications for society.",
-    "Advances in biotechnology are leading to the development of personalized medicine tailored to an individual's genetic profile.",
-    "The role of education in promoting social mobility is a key focus of public policy in many developed nations.",
-    "The challenges of managing water resources in arid regions are becoming increasingly urgent due to climate change.",
-    "The evolution of the global financial system has been marked by periods of rapid growth and significant instability.",
-    "The importance of biodiversity for ecosystem resilience is a fundamental principle of modern conservation biology.",
-    "The rise of remote work is reshaping the traditional office environment and changing the way businesses operate.",
-    "The ethical considerations surrounding the use of artificial intelligence in decision-making are a subject of intense debate.",
-    "The history of architectural styles reflects the cultural and technological changes of different historical periods.",
-    "The impact of tourism on local communities can be both economically beneficial and culturally disruptive."
+    {
+      prompt: "The impact of social media on modern communication is a complex topic with both positive and negative implications for society. While it facilitates global connectivity and information sharing, it also raises concerns about privacy, misinformation, and mental health. Consequently, there is a growing debate about the need for regulation to mitigate these risks while preserving the benefits of digital interaction.",
+      example: "Social media's complex impact on communication necessitates a balanced approach to regulation that addresses privacy and misinformation risks without stifling global connectivity."
+    },
+    {
+      prompt: "Advances in biotechnology are leading to the development of personalized medicine tailored to an individual's genetic profile. This approach promises more effective treatments and fewer side effects by targeting the specific molecular causes of disease. However, the high cost of genomic sequencing and ethical concerns regarding genetic privacy remain significant barriers to widespread implementation.",
+      example: "Personalized medicine based on genetic profiles offers more effective treatments but faces challenges related to high costs and ethical concerns about genetic privacy."
+    },
+    {
+      prompt: "The role of education in promoting social mobility is a key focus of public policy in many developed nations. Access to high-quality education can provide individuals from disadvantaged backgrounds with the skills and opportunities needed to improve their economic status. Nevertheless, systemic inequalities in school funding and resources often perpetuate existing social divides, highlighting the need for comprehensive educational reform.",
+      example: "While education is a vital tool for social mobility, systemic inequalities in resources necessitate comprehensive reform to ensure it effectively bridges social divides."
+    }
   ],
   'Write Essay': [
-    "Should governments prioritize economic growth over environmental protection? Discuss your views.",
-    "Is the use of technology in the classroom always beneficial for student learning? Provide examples.",
-    "Discuss the advantages and disadvantages of living in a large city compared to a small town.",
-    "To what extent should individuals be held responsible for their own health and well-being?",
-    "Is the globalization of culture leading to a loss of traditional values and identities?",
-    "Should higher education be free for all students regardless of their financial background?",
-    "Discuss the impact of automation on the future of work and the potential for job displacement.",
-    "Is the exploration of space a worthwhile investment for humanity given the challenges on Earth?",
-    "Should the government regulate the content of social media platforms to prevent the spread of misinformation?",
-    "Discuss the role of art and music in modern society and whether they should receive public funding."
+    {
+      prompt: "Should governments prioritize economic growth over environmental protection? Discuss your views.",
+      example: "Governments should seek a sustainable balance rather than prioritizing one over the other, as long-term economic prosperity is fundamentally dependent on a healthy environment and stable climate."
+    },
+    {
+      prompt: "Is the use of technology in the classroom always beneficial for student learning? Provide examples.",
+      example: "While technology can enhance learning through interactive resources, its benefits are only realized when integrated thoughtfully by skilled educators to avoid distractions and passive consumption."
+    },
+    {
+      prompt: "Discuss the advantages and disadvantages of living in a large city compared to a small town.",
+      example: "Large cities offer superior career opportunities and cultural diversity but often suffer from high costs and pollution, whereas small towns provide a sense of community and lower stress at the expense of limited amenities."
+    }
   ],
   'Reading: Fill in the Blanks 2': [
     "The ________ of the new library was a major milestone for the university community.",
@@ -693,16 +703,18 @@ const promptTemplates: Record<string, string[]> = {
     "Scientific ________ requires careful observation and rigorous testing."
   ],
   'Summarize Spoken Text': [
-    "The lecture discussed the history of the industrial revolution and its impact on modern society.",
-    "The speaker explored the concept of emotional intelligence and its importance in the workplace.",
-    "The presentation focused on the challenges of achieving global food security in a changing climate.",
-    "The discussion highlighted the role of innovation in driving economic growth and competitiveness.",
-    "The lecture examined the ethical implications of genetic engineering in humans and animals.",
-    "The speaker discussed the importance of early childhood education for long-term academic success.",
-    "The presentation explored the impact of urbanization on public health and well-being.",
-    "The discussion focused on the potential of renewable energy to mitigate the effects of climate change.",
-    "The lecture examined the history of the civil rights movement and its legacy today.",
-    "The speaker discussed the role of technology in transforming the healthcare industry."
+    {
+      prompt: "The lecture discussed the history of the industrial revolution and its impact on modern society. It highlighted the shift from agrarian economies to manufacturing-based ones, the rise of urbanization, and the significant technological advancements that paved the way for the modern world.",
+      example: "The lecture examines the Industrial Revolution's role in transforming agrarian societies into manufacturing powerhouses, emphasizing how urbanization and technological breakthroughs laid the foundation for contemporary civilization."
+    },
+    {
+      prompt: "The speaker explored the concept of emotional intelligence and its importance in the workplace. They argued that self-awareness, empathy, and effective communication are just as critical as technical skills for successful leadership and team collaboration in a modern corporate environment.",
+      example: "The speaker emphasizes that emotional intelligence, including self-awareness and empathy, is as vital as technical expertise for effective leadership and collaboration in today's professional landscape."
+    },
+    {
+      prompt: "The presentation focused on the challenges of achieving global food security in a changing climate. It discussed the need for sustainable agricultural practices, the impact of extreme weather events on crop yields, and the importance of international cooperation to ensure a stable food supply for a growing population.",
+      example: "The presentation addresses the urgent need for sustainable agriculture and international cooperation to overcome climate-related challenges and ensure global food security for a growing population."
+    }
   ],
   'Write from Dictation': [
     "The results of the experiment confirmed the initial hypothesis.",
@@ -838,11 +850,21 @@ categoriesToExpand.forEach(category => {
       ...template,
       id: `${template.id.split('-')[0]}-${i}`,
       title: `Question ${i}`,
-      prompt: i <= 10 ? promptBase : `${promptBase} (Version ${Math.ceil(i/10)})`
+      prompt: typeof promptBase === 'string' ? (i <= 10 ? promptBase : `${promptBase} (Version ${Math.ceil(i/10)})`) : ""
     };
 
     // Add specific properties for Reading tasks
-    if (category === 'Reading & Writing: Fill in the Blanks') {
+    if (category === 'Summarize Written Text' || category === 'Summarize Spoken Text' || category === 'Write Essay') {
+      const selected = templates[(i - 1) % templates.length];
+      if (selected && typeof selected === 'object') {
+        newTask.prompt = selected.prompt;
+        newTask.summaryExample = selected.example;
+        if (category === 'Summarize Spoken Text') {
+          newTask.transcript = selected.prompt;
+          newTask.prompt = "Summarize the key points of the lecture you just heard.";
+        }
+      }
+    } else if (category === 'Reading & Writing: Fill in the Blanks') {
       const rwf_prompts = [
         {
           text: "The rapid development of artificial intelligence has ________ the way we interact with technology. While it offers ________ efficiency, it also presents ________ ethical dilemmas that must be ________ addressed. As we continue to ________ more of our lives online, the need for robust cybersecurity measures becomes increasingly ________.",
@@ -958,9 +980,6 @@ categoriesToExpand.forEach(category => {
       newTask.correctAnswers = [newTask.options[0]];
       newTask.transcript = newTask.options[0]; // Use the correct summary as the transcript for simplicity
       newTask.prompt = "Select the paragraph that best summarizes the recording you heard.";
-    } else if (category === 'Summarize Spoken Text') {
-      newTask.transcript = newTask.prompt; // The original prompt was the transcript
-      newTask.prompt = "Summarize the key points of the lecture you just heard.";
     } else if (category === 'Write from Dictation') {
       newTask.transcript = newTask.prompt; // The original prompt was the sentence
       newTask.prompt = "Type the sentence you hear.";

@@ -3019,28 +3019,56 @@ function TaskModal({
           score = Math.round((correctPairs / maxScore) * 80) + 10;
           feedbackTips = [`You found ${correctPairs} correct adjacent pairs.`];
         } else if (task.category === 'Write from Dictation') {
-          const userWords = userInput.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/);
-          const correctWords = (task.prompt || "").toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/);
+          const userWords = userInput.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/).filter(w => w);
+          const correctWords = (task.prompt || "").toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/).filter(w => w);
           maxScore = correctWords.length;
           let correctCount = 0;
-          userWords.forEach(word => {
-            if (correctWords.includes(word)) correctCount++;
+          const mistakes: string[] = [];
+          
+          correctWords.forEach(word => {
+            if (userWords.includes(word)) {
+              correctCount++;
+            } else {
+              mistakes.push(`Missing: "${word}"`);
+            }
           });
+          
+          userWords.forEach(word => {
+            if (!correctWords.includes(word)) {
+              mistakes.push(`Incorrect: "${word}"`);
+            }
+          });
+
           score = Math.round((correctCount / maxScore) * 80) + 10;
           feedbackTips = [`You got ${correctCount} out of ${maxScore} words correct.`];
+          
+          result = {
+            overall: score,
+            content: score,
+            grammar: 90,
+            vocabulary: 90,
+            spelling: 90,
+            fluency: 90,
+            pronunciation: 90,
+            tips: feedbackTips,
+            feedback: feedbackTips,
+            mistakes: mistakes
+          };
         }
 
-        result = {
-          overall: score,
-          content: score,
-          grammar: 90,
-          vocabulary: 90,
-          spelling: 90,
-          fluency: 90,
-          pronunciation: 90,
-          tips: feedbackTips,
-          feedback: feedbackTips
-        };
+        if (!result) {
+          result = {
+            overall: score,
+            content: score,
+            grammar: 90,
+            vocabulary: 90,
+            spelling: 90,
+            fluency: 90,
+            pronunciation: 90,
+            tips: feedbackTips,
+            feedback: feedbackTips
+          };
+        }
       } else {
         let finalInput = userInput;
         
@@ -3053,7 +3081,7 @@ function TaskModal({
       const tips = result.tips || result.feedback || ["Keep practicing!"];
       const mispronounced = result.mispronounced || [];
       
-      if (task.section === 'writing') {
+      if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
         setFeedback({
           overall: result.overall || 70,
           content: result.content || 70,
@@ -3609,7 +3637,13 @@ function TaskModal({
                 </div>
                 <div className="text-center">
                   <h4 className="text-xl font-bold text-white mb-2">Sensei AI is Scoring...</h4>
-                  <p className="text-sm text-[#C5C6C7]">Analyzing fluency, pronunciation, and content accuracy.</p>
+                  <p className="text-sm text-[#C5C6C7]">
+                    {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') 
+                      ? "Analyzing grammar, spelling, and content accuracy." 
+                      : task.section === 'speaking'
+                      ? "Analyzing fluency, pronunciation, and content accuracy."
+                      : "Analyzing your response and content accuracy."}
+                  </p>
                 </div>
               </motion.div>
             ) : phase === 'feedback' ? (
@@ -3632,7 +3666,7 @@ function TaskModal({
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    {task.section === 'writing' ? (
+                    {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
                       <>
                         <ScoreMetric label="Grammar" score={feedback.grammar} max={90} />
                         <ScoreMetric label="Vocabulary" score={feedback.vocabulary} max={90} />
@@ -3747,56 +3781,69 @@ function TaskModal({
                 )}
 
                 {/* Detailed Analysis */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
-                      {task.section === 'writing' ? 'Expected Answer' : 'Diagnostic Data'}
-                    </h5>
-                    {task.section === 'writing' ? (
-                      <div className="text-[10px] text-[#C5C6C7] leading-relaxed italic">
-                        {task.summaryExample || (task.correctAnswers && task.correctAnswers[0]) || "No expected answer available."}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span>Hesitations</span>
-                          <span className="text-orange-400 font-bold">{feedback.details.hesitations}</span>
+                {(task.section === 'speaking' || task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
+                      <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                        {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? "Sensei's Wisdom" : 'Diagnostic Data'}
+                      </h5>
+                      {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
+                        <ul className="space-y-2">
+                          {Array.isArray(feedback.tips) && feedback.tips.slice(0, 3).map((tip: string, i: number) => (
+                            <li key={i} className="text-[10px] text-[#C5C6C7] flex gap-2 leading-tight">
+                              <span className="text-[#45A29E] font-bold">{i+1}</span>
+                              {tip}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span>Hesitations</span>
+                            <span className="text-orange-400 font-bold">{feedback.details.hesitations}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span>Pace</span>
+                            <span className="text-[#66FCF1] font-bold">{feedback.details.pace}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span>Pace</span>
-                          <span className="text-[#66FCF1] font-bold">{feedback.details.pace}</span>
-                        </div>
+                      )}
+                    </div>
+                    <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
+                      <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                        {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
+                      </h5>
+                      <div className="flex flex-wrap gap-1">
+                        {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string, i: number) => (
+                          <span key={i} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
+                            {word}
+                          </span>
+                        ))}
                       </div>
-                    )}
-                  </div>
-                  <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                    <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
-                      {task.section === 'writing' ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
-                    </h5>
-                    <div className="flex flex-wrap gap-1">
-                      {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string, i: number) => (
-                        <span key={i} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
-                          {word}
-                        </span>
-                      ))}
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Tips */}
+                {/* Tips / Expected Answer */}
                 <div className="bg-[#45A29E]/5 p-6 rounded-2xl border border-[#45A29E]/20">
                   <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                     <Zap size={16} className="text-[#45A29E]" />
-                    Sensei's Wisdom
+                    {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Expected Answer' : "Sensei's Wisdom"}
                   </h5>
-                  <ul className="space-y-3">
-                    {Array.isArray(feedback.tips) && feedback.tips.map((tip: string, i: number) => (
-                      <li key={i} className="text-xs text-[#C5C6C7] flex gap-3 leading-relaxed">
-                        <span className="text-[#45A29E] font-bold">0{i+1}</span>
-                        {tip}
-                      </li>
-                    ))}
-                  </ul>
+                  {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
+                    <div className="text-xs text-[#C5C6C7] leading-relaxed italic bg-[#1F2833]/50 p-4 rounded-xl border border-white/5">
+                      {task.summaryExample || (task.correctAnswers && task.correctAnswers[0]) || "No expected answer available."}
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {Array.isArray(feedback.tips) && feedback.tips.map((tip: string, i: number) => (
+                        <li key={i} className="text-xs text-[#C5C6C7] flex gap-3 leading-relaxed">
+                          <span className="text-[#45A29E] font-bold">0{i+1}</span>
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
                 <div className="flex gap-4">
