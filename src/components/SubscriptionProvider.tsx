@@ -162,8 +162,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const logout = async () => {
-    await auth.signOut();
-    setShowAuthModal(true);
+    try {
+      await auth.signOut();
+      setShowAuthModal(true);
+    } catch (error) {
+      console.error("Logout failed:", error);
+      setAuthError("Failed to sign out. Please try again.");
+    }
   };
 
   const continueAsGuest = async () => {

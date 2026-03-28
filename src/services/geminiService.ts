@@ -59,6 +59,20 @@ async function callGemini(params: any, retries: number = 3): Promise<any> {
     try {
       return await ai.models.generateContent(params);
     } catch (e: any) {
+      const isQuotaError = e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED') || (e.error?.code === 429);
+      
+      if (isQuotaError) {
+        console.warn(`Gemini Quota Exceeded (Attempt ${i + 1}/${retries + 1})`);
+        if (i < retries) {
+          // Longer delay for quota errors
+          const delay = Math.pow(3, i) * 2000 + Math.random() * 1000;
+          console.log(`Quota exceeded. Retrying in ${Math.round(delay)}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new Error("GEMINI_QUOTA_EXCEEDED");
+      }
+
       console.error(`Gemini call attempt ${i + 1} failed:`, e);
       if (i < retries) {
         const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
@@ -106,9 +120,9 @@ export async function generateTTS(text: string, retries: number = 3) {
 
     // Assume raw PCM 16-bit 24kHz Mono and add header
     return addWavHeader(base64, 24000);
-  } catch (e) {
-    console.error("All generateTTS attempts failed.");
-    return null;
+  } catch (e: any) {
+    console.error("All generateTTS attempts failed.", e);
+    throw e;
   }
 }
 
@@ -191,8 +205,9 @@ export async function analyzeWriting(text: string, taskType: string) {
     });
 
     return JSON.parse(response.text || "{}");
-  } catch (e) {
+  } catch (e: any) {
     console.error("Failed to analyze writing:", e);
+    if (e.message === "GEMINI_QUOTA_EXCEEDED") throw e;
     return {
       overall: 50,
       grammar: 50,

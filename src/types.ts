@@ -43,6 +43,7 @@ export interface ScheduledTask {
   scheduledAt: string; // ISO string
   duration: number; // minutes
   isCompleted: boolean;
+  reminderSet?: boolean;
 }
 
 export interface DailyGoal {
@@ -74,6 +75,7 @@ export interface UserData {
   completedTasksDetailed?: TaskCompletion[];
   taskScores?: Record<string, number[]>;
   targetScore?: number;
+  testDate?: string;
   roadmap?: RoadmapMilestone[];
   schedule?: ScheduledTask[];
   goals?: DailyGoal[];
@@ -81,9 +83,33 @@ export interface UserData {
 }
 
 export const SUBSCRIPTION_PLANS = [
-  { id: 'monthly', name: 'Monthly', price: 21, interval: 'month' },
-  { id: 'quarterly', name: 'Quarterly', price: 50, interval: '3 months' },
-  { id: 'annual', name: 'Annual', price: 175, interval: 'year' },
+  { 
+    id: 'monthly', 
+    name: 'Monthly', 
+    price: 21, 
+    originalPrice: 35,
+    interval: 'month',
+    badge: 'Popular',
+    isSpecial: false
+  },
+  { 
+    id: 'quarterly', 
+    name: 'Quarterly', 
+    price: 50, 
+    originalPrice: 90,
+    interval: '3 months',
+    badge: 'Best Value',
+    isSpecial: true
+  },
+  { 
+    id: 'annual', 
+    name: 'Annual', 
+    price: 175, 
+    originalPrice: 350,
+    interval: 'year',
+    badge: 'Save 50%',
+    isSpecial: false
+  },
 ] as const;
 
 export const PTE_TASKS: PTETask[] = [

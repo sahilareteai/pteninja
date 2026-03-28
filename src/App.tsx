@@ -169,9 +169,10 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
     const scheduleItem: ScheduledTask = {
       id: Math.random().toString(36).substr(2, 9),
       taskId: newSchedule.taskId,
-      scheduledAt: newSchedule.time,
+      scheduledAt: new Date().toISOString().split('T')[0] + 'T' + newSchedule.time + ':00.000Z',
       duration: newSchedule.duration,
-      isCompleted: false
+      isCompleted: false,
+      reminderSet: true
     };
 
     try {
@@ -316,8 +317,8 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               </div>
               
               <div className={cn(
-                "bg-[#1F2833] p-6 rounded-3xl border transition-all duration-300",
-                milestone.isUnlocked ? "border-[#45A29E]/30 hover:border-[#45A29E]" : "border-white/5"
+                "bg-gradient-to-br from-[#1F2833] to-[#0B0C10] p-6 rounded-3xl border transition-all duration-300",
+                milestone.isUnlocked ? "border-[#45A29E]/30 hover:border-[#45A29E] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)]" : "border-white/5"
               )}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -359,12 +360,23 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 <h3 className="text-xl font-bold text-white">Study Schedule</h3>
                 <p className="text-sm text-[#C5C6C7]">Align your study time with specific tasks.</p>
               </div>
-              <button 
-                onClick={() => setShowAddSchedule(!showAddSchedule)}
-                className="p-3 bg-[#45A29E] text-[#0B0C10] rounded-2xl hover:bg-[#66FCF1] transition-all shadow-lg"
-              >
-                <Plus size={24} className={cn("transition-transform", showAddSchedule && "rotate-45")} />
-              </button>
+              <div className="flex items-center gap-2">
+                {user.schedule && user.schedule.length > 0 && (
+                  <button 
+                    onClick={onClearSchedule}
+                    className="p-3 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all border border-red-500/20"
+                    title="Clear All Tasks"
+                  >
+                    <Trash2 size={24} />
+                  </button>
+                )}
+                <button 
+                  onClick={() => setShowAddSchedule(!showAddSchedule)}
+                  className="p-3 bg-[#45A29E] text-[#0B0C10] rounded-2xl hover:bg-[#66FCF1] transition-all shadow-lg"
+                >
+                  <Plus size={24} className={cn("transition-transform", showAddSchedule && "rotate-45")} />
+                </button>
+              </div>
             </div>
 
             {showAddSchedule && (
@@ -399,7 +411,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                   />
                 </div>
                 <button 
-                  onClick={handleAddSchedule}
+                  onClick={async () => {
+                    try {
+                      await handleAddSchedule();
+                    } catch (e) {
+                      console.error("Failed to add schedule:", e);
+                    }
+                  }}
                   className="w-full py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
                 >
                   Add to Schedule
@@ -414,16 +432,30 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                   <p className="text-[#C5C6C7]">No tasks scheduled yet.</p>
                 </div>
               ) : (
-                user.schedule.map((item: ScheduledTask) => {
+                user.schedule.sort((a: ScheduledTask, b: ScheduledTask) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((item: ScheduledTask) => {
                   const task = PTE_TASKS.find(t => t.id === item.taskId);
+                  const scheduledDate = new Date(item.scheduledAt);
+                  const isToday = scheduledDate.toDateString() === new Date().toDateString();
+                  const timeStr = scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const dateStr = scheduledDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
                   return (
                     <div key={item.id} className="flex items-center gap-6 p-4 bg-[#0B0C10] rounded-2xl border border-white/5 group hover:border-[#45A29E]/30 transition-all">
                       <div className="text-center min-w-[80px]">
-                        <p className="text-sm font-bold text-white">{item.scheduledAt}</p>
+                        <p className="text-sm font-bold text-white">{timeStr}</p>
+                        {!isToday && <p className="text-[10px] text-[#C5C6C7]/50 font-bold uppercase">{dateStr}</p>}
                         <p className="text-[10px] text-[#45A29E] font-bold uppercase">{item.duration}m</p>
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-bold text-white">{task?.category || 'Unknown Task'}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white">{task?.category || 'Unknown Task'}</h4>
+                          {item.reminderSet && (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/10 text-orange-500 rounded text-[8px] font-black uppercase tracking-widest">
+                              <Bell size={8} fill="currentColor" />
+                              Alert
+                            </div>
+                          )}
+                        </div>
                         <p className="text-xs text-[#C5C6C7] uppercase tracking-widest">{task?.section || 'N/A'}</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -434,7 +466,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                           <Play size={18} />
                         </button>
                         <button 
-                          onClick={() => handleDeleteSchedule(item.id)}
+                          onClick={async () => {
+                            try {
+                              await handleDeleteSchedule(item.id);
+                            } catch (e) {
+                              console.error("Failed to delete schedule:", e);
+                            }
+                          }}
                           className="p-2 text-[#C5C6C7] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 size={18} />
@@ -494,7 +532,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                         target={goal.target} 
                       />
                       <button 
-                        onClick={() => handleDeleteGoal(goal.id)}
+                        onClick={async () => {
+                          try {
+                            await handleDeleteGoal(goal.id);
+                          } catch (e) {
+                            console.error("Failed to delete goal:", e);
+                          }
+                        }}
                         className="absolute -right-2 -top-2 p-1 bg-red-500/20 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-all"
                       >
                         <X size={12} />
@@ -529,7 +573,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 </div>
               </div>
               <button 
-                onClick={handleAddGoal}
+                onClick={async () => {
+                  try {
+                    await handleAddGoal();
+                  } catch (e) {
+                    console.error("Failed to add goal:", e);
+                  }
+                }}
                 className="mt-8 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
               >
                 Add Goal
@@ -574,11 +624,16 @@ function AppContent() {
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
 
   const handleRequestNotificationPermission = async () => {
-    const granted = await NotificationService.requestPermission();
-    if (granted) {
-      setNotificationPermission('granted');
-    } else {
-      setNotificationPermission(typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported');
+    try {
+      const granted = await NotificationService.requestPermission();
+      if (granted) {
+        setNotificationPermission('granted');
+      } else {
+        setNotificationPermission(typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported');
+      }
+    } catch (e) {
+      console.error("Failed to request notification permission:", e);
+      setNotificationPermission('denied');
     }
   };
 
@@ -614,13 +669,98 @@ function AppContent() {
   const handleSetTargetScore = async (score: number) => {
     if (user?.uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { targetScore: score });
-        setProgress(prev => ({ ...prev, targetScore: score }));
+        const cappedScore = Math.min(90, Math.max(0, score));
+        await updateDoc(doc(db, 'users', user.uid), { targetScore: cappedScore });
+        setProgress(prev => ({ ...prev, targetScore: cappedScore }));
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
       }
     } else {
-      setProgress(prev => ({ ...prev, targetScore: score }));
+      const cappedScore = Math.min(90, Math.max(0, score));
+      setProgress(prev => ({ ...prev, targetScore: cappedScore }));
+    }
+  };
+
+  const handleSetTestDate = async (date: string) => {
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { testDate: date });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
+
+  const handleSaveToSchedule = async () => {
+    if (!user?.uid || !user?.testDate || !progress.targetScore) {
+      toast.error('Please set your target score and test date first.');
+      return;
+    }
+
+    const plan = calculateStudyPlan();
+    if (!plan || plan.daysLeft <= 0) {
+      toast.error('Invalid study plan. Please check your test date.');
+      return;
+    }
+
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const testDate = new Date(user.testDate);
+      testDate.setHours(0, 0, 0, 0);
+
+      const newScheduledTasks: ScheduledTask[] = [];
+      const totalDays = plan.daysLeft;
+
+      // For each day until the test date
+      for (let i = 0; i < totalDays; i++) {
+        const currentDate = new Date(today);
+        currentDate.setDate(today.getDate() + i);
+
+        // Pick tasks for this day
+        // We'll pick tasks randomly from different sections for variety
+        const availableTasks = [...PTE_TASKS];
+        for (let j = 0; j < plan.tasksPerDay; j++) {
+          if (availableTasks.length === 0) break;
+          
+          const randomIndex = Math.floor(Math.random() * availableTasks.length);
+          const task = availableTasks.splice(randomIndex, 1)[0];
+
+          // Set a random time during the day (e.g., between 9 AM and 9 PM)
+          const scheduledTime = new Date(currentDate);
+          scheduledTime.setHours(9 + Math.floor(Math.random() * 12), 0, 0, 0);
+
+          newScheduledTasks.push({
+            id: Math.random().toString(36).substr(2, 9),
+            taskId: task.id,
+            scheduledAt: scheduledTime.toISOString(),
+            duration: 15, // Default duration
+            isCompleted: false,
+            reminderSet: true
+          });
+        }
+      }
+
+      await updateDoc(doc(db, 'users', user.uid), {
+        schedule: newScheduledTasks
+      });
+
+      toast.success(`Successfully saved ${newScheduledTasks.length} tasks to your schedule!`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const handleResetTarget = async () => {
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { targetScore: 0, testDate: null });
+        setProgress(prev => ({ ...prev, targetScore: 0 }));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    } else {
+      setProgress(prev => ({ ...prev, targetScore: 0 }));
     }
   };
 
@@ -653,6 +793,29 @@ function AppContent() {
     });
     
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
+  };
+
+  const calculateStudyPlan = () => {
+    if (!progress.targetScore || !user?.testDate) return null;
+    
+    const today = new Date();
+    const testDate = new Date(user.testDate);
+    const diffTime = testDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 0) return { tasksPerDay: 0, daysLeft: 0 };
+    
+    // Simple heuristic: higher target score = more tasks
+    // Base tasks: 5. Additional tasks based on target score gap.
+    const baseTasks = 5;
+    const scoreGap = Math.max(0, progress.targetScore - calculateAverageScore());
+    const totalRequiredTasks = (scoreGap * 5) + 20; // Rough estimate
+    const tasksPerDay = Math.ceil(totalRequiredTasks / diffDays);
+    
+    return {
+      tasksPerDay: Math.max(2, tasksPerDay),
+      daysLeft: diffDays
+    };
   };
 
   const calculateSectionAverage = (section: PTESection) => {
@@ -797,7 +960,11 @@ function AppContent() {
                 onViewPattern={() => setActiveTab('pattern')}
                 calculateAverageScore={calculateAverageScore}
                 calculateSectionAverage={calculateSectionAverage}
+                calculateStudyPlan={calculateStudyPlan}
                 onSetTargetScore={handleSetTargetScore}
+                onSetTestDate={handleSetTestDate}
+                onSaveToSchedule={handleSaveToSchedule}
+                onResetTarget={handleResetTarget}
               />
             ) : activeTab === 'roadmap' ? (
               <RoadmapView 
@@ -808,8 +975,15 @@ function AppContent() {
                   setSelectedTask(task);
                   setActiveTab(task.section);
                 }}
+                onClearSchedule={handleClearSchedule}
                 notificationPermission={notificationPermission}
-                onRequestPermission={handleRequestNotificationPermission}
+                onRequestPermission={async () => {
+                  try {
+                    await handleRequestNotificationPermission();
+                  } catch (e) {
+                    console.error("Permission request failed:", e);
+                  }
+                }}
               />
             ) : activeTab === 'vocabulary' ? (
               <VocabularyBuilder 
@@ -1007,9 +1181,62 @@ function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], 
   );
 }
 
+import { POLICIES } from './data/policies';
+
+function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
+  const policy = POLICIES[type];
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0C10]/95 backdrop-blur-xl overflow-y-auto">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="w-full max-w-3xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8 relative"
+      >
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full transition-colors"
+        >
+          <X size={24} className="text-[#C5C6C7]" />
+        </button>
+        
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center">
+              <ShieldCheck className="text-[#45A29E]" size={28} />
+            </div>
+            <h2 className="text-3xl font-bold text-white tracking-tight">{policy.title}</h2>
+          </div>
+          
+          <div 
+            className="text-[#C5C6C7] leading-relaxed space-y-4 prose prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: policy.content }}
+          />
+          
+          <div className="pt-8 border-t border-white/5 flex justify-end">
+            <button 
+              onClick={onClose}
+              className="px-8 py-3 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: () => void, onGuest: () => void, authError: string | null, onClearError: () => void }) {
+  const [activePolicy, setActivePolicy] = useState<keyof typeof POLICIES | null>(null);
+
   return (
     <div className="min-h-screen bg-[#0B0C10] text-[#C5C6C7] font-sans selection:bg-[#45A29E]/30 overflow-x-hidden">
+      <AnimatePresence>
+        {activePolicy && (
+          <PolicyModal type={activePolicy} onClose={() => setActivePolicy(null)} />
+        )}
+      </AnimatePresence>
       {/* Auth Error Toast */}
       <AnimatePresence>
         {authError && (
@@ -1135,17 +1362,62 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 py-20 px-6 text-center border-t border-[#1F2833]">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-8 h-8 bg-[#45A29E] rounded-lg flex items-center justify-center">
-              <Zap className="text-[#0B0C10] fill-current" size={18} />
+      <footer className="relative z-10 py-20 px-6 border-t border-[#1F2833]">
+        <div className="max-w-7xl mx-auto space-y-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-[#45A29E] rounded-lg flex items-center justify-center">
+                  <Zap className="text-[#0B0C10] fill-current" size={18} />
+                </div>
+                <h1 className="text-xl font-bold tracking-tighter text-white">
+                  PTE <span className="text-[#45A29E]">NINJA</span>
+                </h1>
+              </div>
+              <p className="text-sm text-[#C5C6C7]/60 leading-relaxed">
+                The ultimate AI-powered PTE training platform. Master your future with precision scoring and real-time feedback.
+              </p>
             </div>
-            <h1 className="text-xl font-bold tracking-tighter text-white">
-              PTE <span className="text-[#45A29E]">NINJA</span>
-            </h1>
+            
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Training</h4>
+              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
+                <li><button className="hover:text-[#45A29E] transition-colors">Speaking Dojo</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">Writing Dojo</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">Reading Dojo</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">Listening Dojo</button></li>
+              </ul>
+            </div>
+
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Resources</h4>
+              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
+                <li><button className="hover:text-[#45A29E] transition-colors">Vocabulary Bank</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">Exam Patterns</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">Study Roadmap</button></li>
+                <li><button className="hover:text-[#45A29E] transition-colors">AI Scoring Guide</button></li>
+              </ul>
+            </div>
+
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Legal</h4>
+              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
+                <li><button onClick={() => setActivePolicy('disclaimer')} className="hover:text-[#45A29E] transition-colors">Disclaimer</button></li>
+                <li><button onClick={() => setActivePolicy('terms')} className="hover:text-[#45A29E] transition-colors">Terms & Conditions</button></li>
+                <li><button onClick={() => setActivePolicy('privacy')} className="hover:text-[#45A29E] transition-colors">Privacy Policy</button></li>
+                <li><button onClick={() => setActivePolicy('refund')} className="hover:text-[#45A29E] transition-colors">Refund / Cancellation Policy</button></li>
+              </ul>
+            </div>
           </div>
-          <p className="text-sm text-[#C5C6C7]/50">© 2026 PTE Ninja. All rights reserved. Master your future.</p>
+
+          <div className="pt-12 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+            <p className="text-xs text-[#C5C6C7]/30">All rights reserved © PTE Ninja, 2026</p>
+            <div className="flex items-center gap-6">
+              <span className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest flex items-center gap-2">
+                <Shield size={12} /> Secure Payments with Stripe
+              </span>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
@@ -1173,7 +1445,62 @@ function StatItem({ value, label }: { value: string, label: string }) {
   );
 }
 
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import { CheckoutForm } from './components/CheckoutForm';
+
+// Initialize Stripe
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean }) {
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSelectPlan = async (plan: any) => {
+    setSelectedPlan(plan);
+    setIsProcessing(true);
+    
+    try {
+      const response = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: plan.price * 100, currency: 'aud' }), // Australia focus
+      });
+      
+      const data = await response.json();
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+      } else {
+        toast.error(data.error || "Failed to initialize payment");
+      }
+    } catch (error) {
+      console.error("Payment initialization error:", error);
+      toast.error("Could not connect to payment server");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        subscriptionStatus: 'active',
+        subscriptionTier: selectedPlan.id,
+        subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+      });
+      
+      toast.success(`Successfully upgraded to ${selectedPlan.name}!`);
+      onClose();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#0B0C10]/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
@@ -1183,41 +1510,144 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
         className="w-full max-w-2xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8"
       >
         <div className="flex flex-col items-center text-center space-y-6">
-          <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
-            <ShieldCheck className="text-white" size={32} />
-          </div>
-          
-          <div className="space-y-2">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              {user?.subscriptionStatus === 'expired' ? 'Subscription Expired' : 'Upgrade to Pro'}
-            </h2>
-            <p className="text-[#C5C6C7] text-lg">Get unlimited access to all PTE practice materials</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-4">
-            {SUBSCRIPTION_PLANS.map((plan) => (
-              <div 
-                key={plan.id}
-                className="bg-[#0B0C10] border border-[#45A29E]/20 rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-[#45A29E] transition-all group cursor-pointer"
-              >
-                <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-[#66FCF1]">${plan.price}</span>
-                  <span className="text-xs text-[#C5C6C7]/50">/{plan.interval}</span>
-                </div>
-                <ul className="text-xs text-[#C5C6C7] space-y-2 text-left w-full">
-                  <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Full Question Bank</li>
-                  <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> AI Scoring</li>
-                  <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Detailed Feedback</li>
-                </ul>
-                <button className="w-full py-2 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl group-hover:bg-[#66FCF1] transition-all">
-                  Select
-                </button>
+          {!selectedPlan ? (
+            <>
+              <div className="w-full bg-gradient-to-r from-orange-500/20 via-red-500/20 to-orange-500/20 border border-orange-500/30 rounded-2xl p-4 mb-2 flex items-center justify-center gap-3 animate-pulse">
+                <div className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">Limited Time</div>
+                <p className="text-orange-400 font-bold text-sm tracking-wide">SPECIAL RAMADAN & EASTER OFFER: SAVE UP TO 50%!</p>
               </div>
-            ))}
-          </div>
 
-          {user?.accessType === 'guest' && (
+              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
+                <ShieldCheck className="text-white" size={32} />
+              </div>
+              
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold text-white tracking-tight">
+                  {user?.subscriptionStatus === 'expired' ? 'Subscription Expired' : 'Upgrade to Pro'}
+                </h2>
+                <p className="text-[#C5C6C7] text-lg">Master the PTE with our premium AI-powered practice platform</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-4">
+                {SUBSCRIPTION_PLANS.map((plan) => (
+                  <div 
+                    key={plan.id}
+                    onClick={async () => {
+                      try {
+                        await handleSelectPlan(plan);
+                      } catch (e) {
+                        console.error("Failed to select plan:", e);
+                      }
+                    }}
+                    className={`relative bg-[#0B0C10] border ${plan.isSpecial ? 'border-[#66FCF1] shadow-[0_0_20px_rgba(102,252,241,0.1)]' : 'border-[#45A29E]/20'} rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-[#45A29E] transition-all group cursor-pointer overflow-hidden`}
+                  >
+                    {plan.badge && (
+                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl ${plan.isSpecial ? 'bg-[#66FCF1] text-[#0B0C10]' : 'bg-[#45A29E] text-[#0B0C10]'}`}>
+                        {plan.badge}
+                      </div>
+                    )}
+                    
+                    <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                    
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-[#C5C6C7]/40 line-through font-medium">${plan.originalPrice}</span>
+                        <span className="text-3xl font-bold text-[#66FCF1]">${plan.price}</span>
+                      </div>
+                      <span className="text-xs text-[#C5C6C7]/50">/{plan.interval}</span>
+                    </div>
+
+                    <ul className="text-xs text-[#C5C6C7] space-y-2 text-left w-full">
+                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Full Question Bank</li>
+                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> AI Scoring</li>
+                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Detailed Feedback</li>
+                    </ul>
+                    <button className={`w-full py-2 ${plan.isSpecial ? 'bg-[#66FCF1]' : 'bg-[#45A29E]'} text-[#0B0C10] font-bold rounded-xl group-hover:bg-white transition-all`}>
+                      Select
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="w-full space-y-8">
+              <div className="flex items-center justify-between">
+                <div className="text-left">
+                  <h3 className="text-2xl font-bold text-white">{selectedPlan.name} Plan</h3>
+                  <p className="text-[#C5C6C7] text-sm">Secure Checkout</p>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-2 justify-end">
+                    <span className="text-sm text-[#C5C6C7]/40 line-through">${selectedPlan.originalPrice}</span>
+                    <div className="text-3xl font-bold text-[#66FCF1]">${selectedPlan.price}</div>
+                  </div>
+                  <div className="text-xs text-[#C5C6C7]/50">AUD Total</div>
+                </div>
+              </div>
+
+              {clientSecret ? (
+                stripePromise ? (
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'night',
+                        variables: {
+                          colorPrimary: '#45A29E',
+                          colorBackground: '#1F2833',
+                          colorText: '#C5C6C7',
+                          colorDanger: '#df1b41',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          spacingUnit: '4px',
+                          borderRadius: '12px',
+                        },
+                      }
+                    }}
+                  >
+                    <CheckoutForm 
+                      amount={selectedPlan.price} 
+                      clientSecret={clientSecret}
+                      onCancel={() => {
+                        setSelectedPlan(null);
+                        setClientSecret(null);
+                      }}
+                      onSuccess={async () => {
+                        try {
+                          await handlePaymentSuccess();
+                        } catch (e) {
+                          console.error("Failed to process payment success:", e);
+                        }
+                      }}
+                    />
+                  </Elements>
+                ) : (
+                  <div className="p-6 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-orange-500 text-sm space-y-4">
+                    <div className="flex items-center gap-3 font-bold">
+                      <AlertCircle size={20} />
+                      Payment Gateway Not Configured
+                    </div>
+                    <p className="text-xs text-[#C5C6C7]">
+                      The Stripe publishable key is missing. Please configure <code className="bg-black/30 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> in the environment variables to enable payments.
+                    </p>
+                    <button 
+                      onClick={() => setSelectedPlan(null)}
+                      className="w-full py-2 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors"
+                    >
+                      Go Back
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="py-20 flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="animate-spin text-[#45A29E]" size={40} />
+                  <p className="text-[#C5C6C7] animate-pulse">Initializing secure payment gateway...</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!selectedPlan && user?.accessType === 'guest' && (
             <div className={cn(
               "w-full p-4 border rounded-2xl flex items-center gap-4 text-left transition-colors",
               isAccessRestricted 
@@ -1276,7 +1706,10 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
       title: 'Getting Started', 
       description: 'Learn the basics of PTE Ninja and how to use the AI trainer.',
       icon: Play,
-      action: () => {} 
+      action: () => {
+        onNavigate('dashboard');
+        toast.success("Welcome! Start by setting your target score and test date in the Dojo to generate your personalized study plan.");
+      }
     },
     { 
       title: 'Study Roadmap', 
@@ -1503,7 +1936,7 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
   );
 }
 
-function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, onSetTargetScore }: { 
+function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
   progress: UserProgress, 
   user: any,
   onStartTask: (task: PTETask) => void,
@@ -1515,10 +1948,19 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
   onViewPattern: () => void,
   calculateAverageScore: () => number,
   calculateSectionAverage: (section: PTESection) => number,
-  onSetTargetScore: (score: number) => void
+  calculateStudyPlan: () => { tasksPerDay: number, daysLeft: number } | null,
+  onSetTargetScore: (score: number) => void | Promise<void>,
+  onSetTestDate: (date: string) => void | Promise<void>,
+  onSaveToSchedule: () => void | Promise<void>,
+  onResetTarget: () => void | Promise<void>
 }) {
+  const [isSaving, setIsSaving] = useState(false);
   const averageScore = calculateAverageScore();
+  const studyPlan = calculateStudyPlan();
   const [tempTarget, setTempTarget] = useState(79);
+  const [tempDate, setTempDate] = useState(user?.testDate || '');
+  
+  const currentStreak = calculateStreak(user?.activityLog || []);
   
   // Analysis logic
   const totalTasks = PTE_TASKS.length;
@@ -1554,38 +1996,106 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       {/* Progress Overview */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         <div className="md:col-span-2 bg-[#1F2833] rounded-3xl p-6 md:p-8 border border-[#45A29E]/10 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity hidden sm:block">
-            <Trophy size={120} />
+          <div className="absolute -top-4 -right-4 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+            <Trophy size={180} className="text-[#45A29E]" />
           </div>
-          <div className="relative z-10">
+          <div className="relative z-10 max-w-[280px]">
             {progress.targetScore === 0 ? (
               <div>
-                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Target</h2>
-                <p className="text-[#C5C6C7] mb-6 text-xs md:text-sm">What is your goal for the PTE? For a Black Belt, aim for 79+.</p>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                  <input 
-                    type="number" 
-                    value={tempTarget}
-                    onChange={(e) => setTempTarget(Number(e.target.value))}
-                    className="w-full sm:w-24 bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E]"
-                    min="10"
-                    max="90"
-                  />
+                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Goal</h2>
+                <div className="space-y-4">
+                  <div className="relative">
+                    <p className="text-[#C5C6C7] mb-2 text-xs md:text-sm">Target PTE Score (10-90)</p>
+                    <div className="relative flex items-center">
+                      <input 
+                        type="number" 
+                        value={tempTarget}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (val > 90) setTempTarget(90);
+                          else if (val < 10) setTempTarget(10);
+                          else setTempTarget(val);
+                        }}
+                        className="w-full bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 pr-12 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E] transition-colors"
+                        min="10"
+                        max="90"
+                        step="1"
+                      />
+                      <button 
+                        onClick={() => setTempTarget(79)}
+                        className="absolute right-4 p-1 text-[#C5C6C7]/50 hover:text-[#45A29E] transition-colors"
+                        title="Reset to 79"
+                      >
+                        <RefreshCw size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[#C5C6C7] mb-2 text-xs md:text-sm font-bold uppercase tracking-wider">Test Date</p>
+                    <div className="relative flex items-center group bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl hover:border-[#45A29E] transition-all focus-within:border-[#45A29E] focus-within:ring-1 focus-within:ring-[#45A29E]/20 shadow-lg overflow-hidden">
+                      <input 
+                        type="date" 
+                        value={tempDate}
+                        onChange={(e) => setTempDate(e.target.value)}
+                        className="w-full bg-transparent px-4 py-3 pr-12 text-white font-bold text-lg outline-none [color-scheme:dark] cursor-pointer relative z-10"
+                        min={new Date().toISOString().split('T')[0]}
+                        onFocus={(e) => {
+                          try {
+                            (e.target as any).showPicker?.();
+                          } catch (err) {
+                            console.warn("showPicker not supported or failed", err);
+                          }
+                        }}
+                        onClick={(e) => {
+                          try {
+                            (e.target as any).showPicker?.();
+                          } catch (err) {
+                            console.warn("showPicker not supported or failed", err);
+                          }
+                        }}
+                      />
+                      <Calendar className="absolute right-4 text-[#45A29E]/50 group-hover:text-[#45A29E] transition-colors pointer-events-none z-0" size={20} />
+                    </div>
+                  </div>
                   <button 
-                    onClick={() => onSetTargetScore(tempTarget)}
-                    className="flex-1 py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                    onClick={async () => {
+                      if (!tempDate) {
+                        toast.error("Please select a test date");
+                        return;
+                      }
+                      try {
+                        await onSetTargetScore(tempTarget);
+                        await onSetTestDate(tempDate);
+                      } catch (error) {
+                        // Error is already handled by handleFirestoreError in the parent
+                        console.error("Goal setting error:", error);
+                      }
+                    }}
+                    className="w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
                   >
-                    Set Target
+                    Create My Study Plan
                   </button>
                 </div>
               </div>
             ) : (
-              <>
-                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Average Score</h2>
-                <div className="flex items-baseline gap-2 mb-4 md:mb-6">
-                  <span className="text-4xl md:text-6xl font-black text-white">{averageScore}</span>
-                  <span className="text-lg md:text-xl text-[#C5C6C7]">/ 90</span>
+              <div className="space-y-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Current Average</h2>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl md:text-6xl font-black text-white">{averageScore}</span>
+                      <span className="text-lg md:text-xl text-[#C5C6C7]">/ 90</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={onResetTarget}
+                    className="p-2 text-[#C5C6C7]/50 hover:text-red-400 transition-colors"
+                    title="Reset Goal"
+                  >
+                    <RefreshCw size={20} />
+                  </button>
                 </div>
+
                 <div className="w-full h-2 md:h-3 bg-[#0B0C10] rounded-full overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
@@ -1593,30 +2103,135 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                     className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
                   />
                 </div>
-                <p className="mt-3 md:mt-4 text-xs md:text-sm text-[#C5C6C7]">Your target score is <span className="text-[#66FCF1] font-bold">{progress.targetScore}</span>. Keep practicing!</p>
-              </>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/10">
+                    <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">Target</p>
+                    <p className="text-xl font-black text-white">{progress.targetScore}</p>
+                  </div>
+                  <div className="p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/10">
+                    <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">Days Left</p>
+                    <p className="text-xl font-black text-white">{studyPlan?.daysLeft || 0}</p>
+                  </div>
+                </div>
+
+                {studyPlan && studyPlan.daysLeft > 0 && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-[#66FCF1]/5 border border-[#66FCF1]/20 rounded-2xl">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Calendar className="text-[#66FCF1]" size={18} />
+                        <p className="text-sm font-bold text-white">Daily Study Plan</p>
+                      </div>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-2xl font-black text-[#66FCF1]">{studyPlan.tasksPerDay}</span>
+                        <span className="text-xs text-[#C5C6C7] uppercase tracking-wider font-bold">Tasks / Day</span>
+                      </div>
+                      <p className="text-[10px] md:text-xs text-[#C5C6C7] leading-relaxed">
+                        Complete these tasks daily to reach your goal of {progress.targetScore} by {new Date(user.testDate).toLocaleDateString()}.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          setIsSaving(true);
+                          try {
+                            await onSaveToSchedule();
+                          } finally {
+                            setIsSaving(false);
+                          }
+                        }}
+                        disabled={isSaving}
+                        className={cn(
+                          "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
+                          isSaving 
+                            ? "bg-[#45A29E]/50 text-[#0B0C10]/50 cursor-not-allowed" 
+                            : "bg-[#66FCF1] text-[#0B0C10] hover:bg-[#45A29E]"
+                        )}
+                      >
+                        {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
+                        {isSaving ? 'Saving...' : 'Save to Schedule'}
+                      </button>
+                      {user.schedule && user.schedule.length > 0 && (
+                        <button
+                          onClick={onViewRoadmap}
+                          className="mt-2 w-full py-2 bg-[#1F2833] text-[#45A29E] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#45A29E]/10 transition-all flex items-center justify-center gap-2 border border-[#45A29E]/20"
+                        >
+                          <Map size={14} />
+                          View Full Schedule
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-[#45A29E]/5 border border-[#45A29E]/20 rounded-2xl">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <Flame className="text-orange-500" size={18} />
+                          <p className="text-sm font-bold text-white">Study Streak</p>
+                        </div>
+                        <span className="text-xs font-bold text-[#45A29E]">{currentStreak} / {studyPlan.daysLeft + currentStreak} Days</span>
+                      </div>
+                      
+                      <div className="flex gap-1.5 justify-between">
+                        {Array.from({ length: 7 }).map((_, i) => {
+                          const date = new Date();
+                          date.setDate(date.getDate() - (6 - i));
+                          const dateStr = date.toISOString().split('T')[0];
+                          const isLogged = user?.activityLog?.includes(dateStr);
+                          const isToday = i === 6;
+                          
+                          return (
+                            <div key={i} className="flex flex-col items-center gap-1.5">
+                              <div className={cn(
+                                "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
+                                isLogged 
+                                  ? "bg-[#45A29E] border-[#45A29E] text-[#0B0C10]" 
+                                  : "bg-[#0B0C10] border-[#45A29E]/20 text-[#C5C6C7]",
+                                isToday && !isLogged && "border-dashed border-orange-500/50"
+                              )}>
+                                {isLogged ? <Check size={14} strokeWidth={3} /> : <span className="text-[10px] font-bold">{date.getDate()}</span>}
+                              </div>
+                              <span className="text-[8px] uppercase font-bold text-[#C5C6C7]">
+                                {date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#45A29E] to-[#1F2833] rounded-3xl p-6 md:p-8 flex flex-col justify-between text-[#0B0C10]">
-          <div>
-            <Target size={28} className="mb-3 md:mb-4" />
-            <h3 className="text-lg md:text-xl font-bold leading-tight">Next Milestone: <br/>{belt.next}</h3>
-            <p className="text-[10px] md:text-xs font-bold opacity-60 mt-1 uppercase tracking-widest">Current: {belt.title}</p>
+        <div className="bg-gradient-to-br from-[#45A29E] via-[#1F2833] to-[#0B0C10] rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between border border-[#45A29E]/20 shadow-[0_20px_50px_rgba(69,162,158,0.1)] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#45A29E]/10 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-[#45A29E]/20 transition-all duration-700" />
+          <div className="relative z-10">
+            <div className="w-14 h-14 bg-[#0B0C10]/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-[#45A29E]/20">
+              <Target size={32} className="text-[#45A29E]" />
+            </div>
+            <h3 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tight">
+              Next Milestone: <br/>
+              <span className="text-[#45A29E]">{belt.next}</span>
+            </h3>
+            <p className="text-xs font-bold text-[#C5C6C7] mt-3 uppercase tracking-[0.2em] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#45A29E] animate-pulse" />
+              Current: {belt.title}
+            </p>
           </div>
-          <button 
-            onClick={onViewRoadmap}
-            className="mt-4 md:mt-6 w-full py-3 bg-[#0B0C10] text-[#45A29E] rounded-xl font-bold text-xs md:text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all"
-          >
-            View Roadmap
-          </button>
-          <button 
-            onClick={onViewPattern}
-            className="mt-2 w-full py-3 bg-[#45A29E]/10 text-[#45A29E] border border-[#45A29E]/20 rounded-xl font-bold text-xs md:text-sm uppercase tracking-widest hover:bg-[#45A29E]/20 transition-all"
-          >
-            Exam Pattern
-          </button>
+          <div className="relative z-10 space-y-3 mt-8">
+            <button 
+              onClick={onViewRoadmap}
+              className="w-full py-4 bg-white text-black rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-[#66FCF1] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl"
+            >
+              View Roadmap
+            </button>
+            <button 
+              onClick={onViewPattern}
+              className="w-full py-4 bg-[#0B0C10]/60 backdrop-blur-md text-[#C5C6C7] border border-[#45A29E]/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#0B0C10] hover:text-white transition-all duration-300"
+            >
+              Exam Pattern
+            </button>
+          </div>
         </div>
       </section>
 
@@ -1688,7 +2303,18 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {recommendedTasks.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onStartTask(task)} onHover={() => onHoverTask?.(task)} />
+            <TaskCard 
+              key={task.id} 
+              task={task} 
+              onClick={async () => {
+                try {
+                  await onStartTask(task);
+                } catch (e) {
+                  console.error("Failed to start task:", e);
+                }
+              }} 
+              onHover={() => onHoverTask?.(task)} 
+            />
           ))}
         </div>
       </section>
@@ -1746,7 +2372,17 @@ function DailyShurikenView({ user, onBack, onStartTask, onHoverTask }: { user: a
                 {index + 1}
               </div>
               <div className="flex-1 min-w-0">
-                <TaskCard task={task} onClick={() => onStartTask(task)} onHover={() => onHoverTask?.(task)} />
+                <TaskCard 
+                  task={task} 
+                  onClick={async () => {
+                    try {
+                      await onStartTask(task);
+                    } catch (e) {
+                      console.error("Failed to start task:", e);
+                    }
+                  }} 
+                  onHover={() => onHoverTask?.(task)} 
+                />
               </div>
             </div>
           ))
@@ -1769,10 +2405,14 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
   });
 
   const playPronunciation = (word: string) => {
-    const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.8;
-    window.speechSynthesis.speak(utterance);
+    try {
+      const utterance = new SpeechSynthesisUtterance(word);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.8;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error("Speech synthesis failed:", e);
+    }
   };
 
   const handleToggleFavorite = async (wordId: string) => {
@@ -1859,9 +2499,13 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
               >
                 <div className="flex items-center gap-3">
                   <button 
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      handleToggleFavorite(word.id);
+                      try {
+                        await handleToggleFavorite(word.id);
+                      } catch (err) {
+                        console.error("Failed to toggle favorite:", err);
+                      }
                     }}
                     className={cn(
                       "p-1.5 rounded-lg transition-colors hover:bg-white/5",
@@ -1901,7 +2545,13 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                 <h3 className="text-3xl font-black text-white tracking-tight">{selectedWord.word}</h3>
                 <div className="flex gap-2">
                   <button 
-                    onClick={() => handleToggleFavorite(selectedWord.id)}
+                    onClick={async () => {
+                      try {
+                        await handleToggleFavorite(selectedWord.id);
+                      } catch (e) {
+                        console.error("Failed to toggle favorite:", e);
+                      }
+                    }}
                     className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center transition-all border",
                       user?.favoriteWords?.includes(selectedWord.id)
@@ -1937,7 +2587,13 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
 
               <div className="pt-6 border-t border-[#45A29E]/10">
                 <button 
-                  onClick={() => handleToggleFavorite(selectedWord.id)}
+                  onClick={async () => {
+                    try {
+                      await handleToggleFavorite(selectedWord.id);
+                    } catch (err) {
+                      console.error("Failed to toggle favorite:", err);
+                    }
+                  }}
                   className={cn(
                     "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
                     user?.favoriteWords?.includes(selectedWord.id)
@@ -2042,7 +2698,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
               <div className="space-y-4">
                 {section.tasks.map((task, tIdx) => (
                   <div key={tIdx} className="flex items-start gap-4 p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/5 hover:border-[#45A29E]/20 transition-all group">
-                    <div className="w-10 h-10 rounded-xl bg-[#1F2833] flex items-center justify-center font-black text-[#45A29E] shrink-0 group-hover:bg-[#45A29E] group-hover:text-[#0B0C10] transition-all">
+                    <div className="min-w-[48px] h-12 px-2 rounded-xl bg-[#1F2833] flex items-center justify-center font-black text-[#45A29E] shrink-0 group-hover:bg-[#45A29E] group-hover:text-[#0B0C10] transition-all text-[10px] whitespace-nowrap">
                       {task.count}
                     </div>
                     <div className="space-y-1">
@@ -2183,7 +2839,13 @@ function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { sec
                   key={task.id} 
                   task={task} 
                   isCompleted={user?.completedTasks?.includes(task.id)}
-                  onClick={() => onSelectTask(task, filteredTasks)} 
+                  onClick={async () => {
+                    try {
+                      await onSelectTask(task, filteredTasks);
+                    } catch (e) {
+                      console.error("Failed to select task:", e);
+                    }
+                  }} 
                   onHover={() => onHoverTask?.(task)}
                 />
             ))}
@@ -2349,7 +3011,7 @@ function TaskModal({
 }: { 
   task: PTETask, 
   onClose: () => void, 
-  onFinish: (score: number) => void,
+  onFinish: (score: number) => void | Promise<void>,
   onPrev?: () => void,
   onNext?: () => void
 }) {
@@ -2402,7 +3064,7 @@ function TaskModal({
   const [showExample, setShowExample] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleCut = (e: React.MouseEvent) => {
+  const handleCut = async (e: React.MouseEvent) => {
     e.preventDefault();
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -2410,17 +3072,21 @@ function TaskModal({
     const end = textarea.selectionEnd;
     const text = userInput.substring(start, end);
     if (text) {
-      navigator.clipboard.writeText(text);
-      const newValue = userInput.substring(0, start) + userInput.substring(end);
-      setUserInput(newValue);
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start, start);
-      }, 0);
+      try {
+        await navigator.clipboard.writeText(text);
+        const newValue = userInput.substring(0, start) + userInput.substring(end);
+        setUserInput(newValue);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start, start);
+        }, 0);
+      } catch (err) {
+        console.error("Failed to cut:", err);
+      }
     }
   };
 
-  const handleCopy = (e: React.MouseEvent) => {
+  const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -2428,7 +3094,11 @@ function TaskModal({
     const end = textarea.selectionEnd;
     const text = userInput.substring(start, end);
     if (text) {
-      navigator.clipboard.writeText(text);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
     }
   };
 
@@ -2732,8 +3402,13 @@ function TaskModal({
                   const audioContent = task.transcript || task.prompt || "";
                   base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
                 }
-              } catch (prepErr) {
+              } catch (prepErr: any) {
                 console.error("[Audio] Audio preparation failed or timed out:", prepErr);
+                if (prepErr.message === "GEMINI_QUOTA_EXCEEDED") {
+                  toast.error("Audio Generation Failed", {
+                    description: "AI Quota Exceeded. The free tier limit has been reached. Please try again in a few minutes."
+                  });
+                }
                 base64 = null;
               } finally {
                 if (safetyTimeout) clearTimeout(safetyTimeout);
@@ -3111,17 +3786,32 @@ function TaskModal({
           tips: Array.isArray(tips) ? tips : [tips]
         });
       }
-      onFinish(result.overall || result.Score || 70);
+      try {
+        await onFinish(result.overall || result.Score || 70);
+      } catch (e) {
+        console.error("Failed to save progress:", e);
+      }
       setPhase('feedback');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis failed:", error);
+      const isQuotaError = error.message === "GEMINI_QUOTA_EXCEEDED";
+      const errorMessage = isQuotaError 
+        ? "AI Quota Exceeded. Please wait a few minutes before trying again." 
+        : (error instanceof Error ? error.message : "Analysis failed. Please try again.");
+      
+      if (isQuotaError) {
+        toast.error("AI Quota Exceeded", {
+          description: "The AI is currently busy or you've reached the free tier limit. Please try again in a few minutes."
+        });
+      }
+
       setFeedback({
         overall: 10,
         content: 10,
         oralFluency: 10,
         pronunciation: 10,
         details: { hesitations: 0, mispronounced: [], pace: "N/A", stress: "N/A" },
-        tips: [error instanceof Error ? error.message : "Analysis failed. Please try again."]
+        tips: [errorMessage]
       });
       setPhase('feedback');
     }
@@ -3130,7 +3820,7 @@ function TaskModal({
   const skipPrep = () => {
     // Resume audio context on user interaction to avoid browser blocks
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume();
+      audioContextRef.current.resume().catch(e => console.error("Failed to resume audio context:", e));
     }
 
     if (task.hasAudio) {
@@ -3444,19 +4134,37 @@ function TaskModal({
                       <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
                         <div className="flex gap-2">
                           <button 
-                            onClick={handleCut}
+                            onClick={async (e) => {
+                              try {
+                                await handleCut(e);
+                              } catch (err) {
+                                console.error("Failed to cut:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Cut
                           </button>
                           <button 
-                            onClick={handleCopy}
+                            onClick={async (e) => {
+                              try {
+                                await handleCopy(e);
+                              } catch (err) {
+                                console.error("Failed to copy:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Copy
                           </button>
                           <button 
-                            onClick={handlePaste}
+                            onClick={async (e) => {
+                              try {
+                                await handlePaste(e);
+                              } catch (err) {
+                                console.error("Failed to paste:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Paste
@@ -3536,19 +4244,37 @@ function TaskModal({
                       <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
                         <div className="flex gap-2">
                           <button 
-                            onClick={handleCut}
+                            onClick={async (e) => {
+                              try {
+                                await handleCut(e);
+                              } catch (err) {
+                                console.error("Failed to cut:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Cut
                           </button>
                           <button 
-                            onClick={handleCopy}
+                            onClick={async (e) => {
+                              try {
+                                await handleCopy(e);
+                              } catch (err) {
+                                console.error("Failed to copy:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Copy
                           </button>
                           <button 
-                            onClick={handlePaste}
+                            onClick={async (e) => {
+                              try {
+                                await handlePaste(e);
+                              } catch (err) {
+                                console.error("Failed to paste:", err);
+                              }
+                            }}
                             className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                           >
                             Paste
@@ -3573,13 +4299,25 @@ function TaskModal({
                   <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
                     <div className="flex gap-2">
                       <button 
-                        onClick={handleCut}
+                        onClick={async (e) => {
+                          try {
+                            await handleCut(e);
+                          } catch (err) {
+                            console.error("Failed to cut:", err);
+                          }
+                        }}
                         className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                       >
                         Cut
                       </button>
                       <button 
-                        onClick={handleCopy}
+                        onClick={async (e) => {
+                          try {
+                            await handleCopy(e);
+                          } catch (err) {
+                            console.error("Failed to copy:", err);
+                          }
+                        }}
                         className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
                       >
                         Copy
@@ -3614,7 +4352,13 @@ function TaskModal({
                   )}
                 </div>
                 <button 
-                  onClick={handleFinish}
+                  onClick={async () => {
+                    try {
+                      await handleFinish();
+                    } catch (e) {
+                      console.error("Finish failed:", e);
+                    }
+                  }}
                   className="bg-[#45A29E] text-[#0B0C10] px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
                 >
                   Submit Response
