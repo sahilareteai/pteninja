@@ -24,6 +24,7 @@ import {
   Clock,
   ArrowRight,
   Check,
+  CheckCircle,
   X,
   LogOut,
   CreditCard,
@@ -42,7 +43,8 @@ import {
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
-import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion } from './types';
+import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, UserData } from './types';
+import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
@@ -196,6 +198,18 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
     }
   };
 
+  const handleClearSchedule = async () => {
+    if (!user?.uid) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        schedule: []
+      });
+      toast.success('Schedule cleared');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
   const handleAddGoal = async () => {
     if (!user?.uid) return;
     const goalItem: DailyGoal = {
@@ -247,7 +261,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -363,7 +377,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               <div className="flex items-center gap-2">
                 {user.schedule && user.schedule.length > 0 && (
                   <button 
-                    onClick={onClearSchedule}
+                    onClick={handleClearSchedule}
                     className="p-3 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all border border-red-500/20"
                     title="Clear All Tasks"
                   >
@@ -612,9 +626,10 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests'>('dashboard');
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
+  const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<string>(
@@ -867,6 +882,22 @@ function AppContent() {
     }
   };
 
+  const handleMockTestFinish = async (result: MockTestResult) => {
+    if (!user?.uid) return;
+    
+    const userRef = doc(db, 'users', user.uid);
+    const newResults = [...(user.mockTestResults || []), result];
+    
+    try {
+      await updateDoc(userRef, { mockTestResults: newResults });
+      toast.success(`Mock Test Completed! Overall Score: ${result.overallScore}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+    setActiveMockTest(null);
+    setActiveTab('mock-tests');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0B0C10] flex items-center justify-center">
@@ -889,12 +920,12 @@ function AppContent() {
 
       <div className="relative z-10 flex flex-col h-screen">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1F2833] bg-[#0B0C10]/80 backdrop-blur-md">
+        <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#1F2833] bg-[#0B0C10]/80 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
-              <Zap className="text-[#0B0C10] fill-current" size={20} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
+              <Zap className="text-[#0B0C10] fill-current" size={16} />
             </div>
-            <h1 className="text-2xl font-bold tracking-tighter text-white font-display">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tighter text-white font-display">
               PTE <span className="text-[#45A29E]">NINJA</span>
             </h1>
           </div>
@@ -941,7 +972,7 @@ function AppContent() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' ? (
               <Dashboard 
@@ -958,6 +989,7 @@ function AppContent() {
                 onViewVocabulary={() => setActiveTab('vocabulary')}
                 onViewShuriken={() => setActiveTab('shuriken')}
                 onViewPattern={() => setActiveTab('pattern')}
+                onViewMockTests={() => setActiveTab('mock-tests')}
                 calculateAverageScore={calculateAverageScore}
                 calculateSectionAverage={calculateSectionAverage}
                 calculateStudyPlan={calculateStudyPlan}
@@ -965,6 +997,13 @@ function AppContent() {
                 onSetTestDate={handleSetTestDate}
                 onSaveToSchedule={handleSaveToSchedule}
                 onResetTarget={handleResetTarget}
+              />
+            ) : activeTab === 'mock-tests' ? (
+              <MockTestView 
+                key="mock-tests"
+                user={user}
+                onBack={() => setActiveTab('dashboard')}
+                onStartTest={(test) => setActiveMockTest(test)}
               />
             ) : activeTab === 'roadmap' ? (
               <RoadmapView 
@@ -975,7 +1014,6 @@ function AppContent() {
                   setSelectedTask(task);
                   setActiveTab(task.section);
                 }}
-                onClearSchedule={handleClearSchedule}
                 notificationPermission={notificationPermission}
                 onRequestPermission={async () => {
                   try {
@@ -1035,6 +1073,7 @@ function AppContent() {
         {/* Navigation Bar */}
         <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-[#1F2833] bg-[#0B0C10]/90 backdrop-blur-xl sticky bottom-0 z-50">
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
+          <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
           <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
           <NavButton active={activeTab === 'roadmap'} onClick={() => setActiveTab('roadmap')} icon={Map} label="Roadmap" />
           <NavButton active={activeTab === 'speaking'} onClick={() => setActiveTab('speaking')} icon={Mic} label="Speaking" />
@@ -1046,6 +1085,14 @@ function AppContent() {
 
       {/* Modals */}
       <AnimatePresence>
+        {activeMockTest && (
+          <MockTestSession 
+            key={activeMockTest.id}
+            test={activeMockTest}
+            onFinish={handleMockTestFinish}
+            onClose={() => setActiveMockTest(null)}
+          />
+        )}
         {selectedTask && (
           <TaskModal 
             key={selectedTask.id} 
@@ -1507,7 +1554,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-2xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8"
+        className="w-full max-w-4xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8"
       >
         <div className="flex flex-col items-center text-center space-y-6">
           {!selectedPlan ? (
@@ -1736,7 +1783,7 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex items-center gap-4 mb-8">
         <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
@@ -1820,7 +1867,7 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex flex-col sm:flex-row items-center gap-6 bg-[#1F2833] p-6 md:p-8 rounded-3xl border border-[#45A29E]/20">
         <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-[#45A29E] to-[#66FCF1] p-1 shrink-0">
@@ -1936,7 +1983,268 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
   );
 }
 
-function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
+function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void }) {
+  return (
+    <div className="space-y-8 pb-20">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-white font-display tracking-tight">Mock Tests</h2>
+          <p className="text-[#C5C6C7]">100 Full-length PTE Academic practice tests</p>
+        </div>
+        <button 
+          onClick={onBack}
+          className="p-2 hover:bg-[#1F2833] rounded-full transition-colors"
+        >
+          <ChevronLeft size={24} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {MOCK_TESTS.map((test, index) => {
+          const isCompleted = user.mockTestResults?.some(r => r.testId === test.id);
+          const bestScore = user.mockTestResults?.filter(r => r.testId === test.id).reduce((max, r) => Math.max(max, r.overallScore), 0) || 0;
+
+          return (
+            <motion.div
+              key={test.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.01 }}
+              className="group relative bg-[#1F2833]/40 border border-[#45A29E]/10 rounded-3xl p-6 hover:border-[#45A29E]/30 transition-all overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4">
+                {isCompleted ? (
+                  <div className="flex items-center gap-1 text-green-500 bg-green-500/10 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                    <Check size={12} />
+                    Completed
+                  </div>
+                ) : (
+                  <div className="text-[#45A29E]/40 text-[10px] font-bold uppercase tracking-widest">
+                    Test {index + 1}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Trophy className="text-[#45A29E]" size={24} />
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-1">{test.title}</h3>
+                  <p className="text-xs text-[#C5C6C7] line-clamp-2">{test.description}</p>
+                </div>
+
+                <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-[#C5C6C7]">
+                  <div className="flex items-center gap-1">
+                    <Clock size={12} className="text-[#45A29E]" />
+                    {test.sections.reduce((sum, s) => sum + s.duration, 0)} MINS
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Target size={12} className="text-[#45A29E]" />
+                    {test.sections.reduce((sum, s) => sum + s.taskIds.length, 0)} TASKS
+                  </div>
+                </div>
+
+                {isCompleted && (
+                  <div className="pt-2">
+                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest mb-1">
+                      <span className="text-[#C5C6C7]">Best Score</span>
+                      <span className="text-[#45A29E]">{bestScore}</span>
+                    </div>
+                    <div className="h-1 bg-[#0B0C10] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#45A29E]" style={{ width: `${bestScore}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => onStartTest(test)}
+                  className="w-full py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-lg shadow-[#45A29E]/10"
+                >
+                  {isCompleted ? 'Retake Test' : 'Start Mock Test'}
+                </button>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MockTestSession({ 
+  test, 
+  onFinish, 
+  onClose 
+}: { 
+  test: MockTest, 
+  onFinish: (result: MockTestResult) => void, 
+  onClose: () => void 
+}) {
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  const [sectionTimeLeft, setSectionTimeLeft] = useState(test.sections[0].duration * 60);
+  const [taskScores, setTaskScores] = useState<Record<string, number>>({});
+
+  const currentSection = test.sections[currentSectionIndex];
+  const currentTaskId = currentSection.taskIds[currentTaskIndex];
+  const currentTask = PTE_TASKS.find(t => t.id === currentTaskId)!;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSectionTimeLeft(prev => {
+        if (prev <= 1) {
+          handleNextSection();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [currentSectionIndex]);
+
+  const handleNextSection = () => {
+    if (currentSectionIndex < test.sections.length - 1) {
+      setCurrentSectionIndex(prev => prev + 1);
+      setCurrentTaskIndex(0);
+      setSectionTimeLeft(test.sections[currentSectionIndex + 1].duration * 60);
+    } else {
+      handleCompleteTest();
+    }
+  };
+
+  const handleNextTask = (score: number) => {
+    setTaskScores(prev => ({ ...prev, [currentTaskId]: score }));
+    
+    if (currentTaskIndex < currentSection.taskIds.length - 1) {
+      setCurrentTaskIndex(prev => prev + 1);
+    } else {
+      handleNextSection();
+    }
+  };
+
+  const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
+
+  const handleCompleteTest = () => {
+    const sectionScores: Record<PTESection, number> = {
+      speaking: 0,
+      writing: 0,
+      reading: 0,
+      listening: 0
+    };
+
+    test.sections.forEach(s => {
+      const scores = s.taskIds.map(id => taskScores[id] || 0);
+      const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+      sectionScores[s.section] = avg;
+    });
+
+    const overallScore = Math.round(Object.values(sectionScores).reduce((a, b) => a + b, 0) / 4);
+
+    const result: MockTestResult = {
+      testId: test.id,
+      completedAt: new Date().toISOString(),
+      sectionScores,
+      overallScore
+    };
+
+    setFinalResult(result);
+    onFinish(result);
+  };
+
+  if (finalResult) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-[#0B0C10] flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-[#1F2833] rounded-[2.5rem] p-8 md:p-12 border border-[#45A29E]/20 max-w-2xl w-full text-center space-y-8"
+        >
+          <div className="w-20 h-20 bg-[#45A29E]/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
+            <Trophy className="text-[#45A29E]" size={40} />
+          </div>
+          
+          <div>
+            <h2 className="text-3xl font-black text-white uppercase tracking-tight mb-2">Test Complete!</h2>
+            <p className="text-[#C5C6C7]">You've completed {test.title}. Here is your performance summary.</p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.entries(finalResult.sectionScores).map(([section, score]) => (
+              <div key={section} className="bg-[#0B0C10] p-4 rounded-2xl border border-[#45A29E]/10">
+                <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">{section}</p>
+                <p className="text-2xl font-black text-white">{score}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[#0B0C10] p-8 rounded-3xl border border-[#45A29E]/20">
+            <p className="text-xs font-bold text-[#C5C6C7] uppercase tracking-widest mb-2">Overall PTE Score</p>
+            <p className="text-6xl font-black text-[#66FCF1] drop-shadow-[0_0_15px_rgba(102,252,241,0.3)]">{finalResult.overallScore}</p>
+          </div>
+
+          <button 
+            onClick={onClose}
+            className="w-full py-5 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+          >
+            Back to Dojo
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-[#0B0C10] flex flex-col">
+      <div className="px-6 py-4 border-b border-[#1F2833] flex items-center justify-between bg-[#0B0C10]">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center">
+            <Trophy className="text-[#0B0C10]" size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white uppercase tracking-tight">{test.title}</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-[#45A29E] uppercase tracking-widest">
+              <span>Section {currentSectionIndex + 1}: {currentSection.section}</span>
+              <span className="text-[#1F2833]">|</span>
+              <span>Task {currentTaskIndex + 1} of {currentSection.taskIds.length}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] font-bold text-[#C5C6C7] uppercase tracking-widest mb-1">Section Time Left</span>
+            <div className={cn(
+              "text-2xl font-mono font-bold",
+              sectionTimeLeft < 300 ? "text-red-500 animate-pulse" : "text-[#66FCF1]"
+            )}>
+              {Math.floor(sectionTimeLeft / 60)}:{(sectionTimeLeft % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-[#1F2833] rounded-full transition-colors text-[#C5C6C7]"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-hidden relative">
+        <TaskModal 
+          key={currentTaskId}
+          task={currentTask}
+          onClose={onClose}
+          onFinish={handleNextTask}
+          isMockTest={true}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
   progress: UserProgress, 
   user: any,
   onStartTask: (task: PTETask) => void,
@@ -1946,6 +2254,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
   onViewVocabulary: () => void,
   onViewShuriken: () => void,
   onViewPattern: () => void,
+  onViewMockTests: () => void,
   calculateAverageScore: () => number,
   calculateSectionAverage: (section: PTESection) => number,
   calculateStudyPlan: () => { tasksPerDay: number, daysLeft: number } | null,
@@ -1966,13 +2275,32 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
   const totalTasks = PTE_TASKS.length;
   const attemptedTasks = user?.completedTasks?.length || 0;
   
-  const sectionAverages = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => ({
-    section: s,
-    average: calculateSectionAverage(s)
-  }));
-  const weakestSection = sectionAverages.reduce((prev, curr) => prev.average < curr.average ? prev : curr);
+  const sectionAverages = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => {
+    const sectionTaskIds = PTE_TASKS.filter(t => t.section === s).map(t => t.id);
+    const attempts = (user?.completedTasks || []).filter((id: string) => sectionTaskIds.includes(id)).length;
+    return {
+      section: s,
+      average: calculateSectionAverage(s),
+      attempts
+    };
+  });
   
-  const highPriorityTasks = PTE_TASKS.filter(t => t.section === weakestSection.section && !user?.completedTasks?.includes(t.id)).slice(0, 2);
+  const minAverage = Math.min(...sectionAverages.map(s => s.average));
+  let weakestSections = sectionAverages.filter(s => s.average === minAverage);
+  const attemptedWeakest = weakestSections.filter(s => s.attempts > 0);
+  
+  if (attemptedWeakest.length > 0) {
+    weakestSections = attemptedWeakest;
+  }
+
+  const weakestSectionIds = weakestSections.map(s => s.section);
+  const weakestSectionLabel = weakestSections.length === 4 
+    ? "All Sections" 
+    : weakestSections.length > 2
+      ? "Multiple Sections"
+      : weakestSections.map(s => s.section.charAt(0).toUpperCase() + s.section.slice(1)).join(" & ") + " Section" + (weakestSections.length > 1 ? "s" : "");
+  
+  const highPriorityTasks = PTE_TASKS.filter(t => weakestSectionIds.includes(t.section) && !user?.completedTasks?.includes(t.id)).slice(0, 2);
   const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : PTE_TASKS.slice(0, 4);
 
   // Calculate current belt based on score
@@ -1991,7 +2319,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
     >
       {/* Progress Overview */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
@@ -2236,7 +2564,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       </section>
 
       {/* Advanced Analysis & Vocabulary */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -2256,66 +2584,132 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
             </div>
           </div>
 
+          <div className="space-y-4">
+            <h4 className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest">Section Performance</h4>
+            <div className="space-y-3">
+              {[...sectionAverages]
+                .sort((a, b) => a.average - b.average)
+                .map((s) => (
+                  <div key={s.section} className="space-y-1.5">
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-bold text-white capitalize">{s.section}</span>
+                      <span className="text-[10px] font-mono text-[#C5C6C7]">
+                        {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-[#0B0C10] rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${s.attempts > 0 ? Math.max((s.average / 90) * 100, 5) : 0}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        className={cn(
+                          "h-full rounded-full",
+                          s.average === 0 ? "bg-gray-800" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-[#66FCF1]"
+                        )}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
           <div className="p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-center gap-4">
             <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500">
               <AlertCircle size={20} />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-orange-500/50 uppercase tracking-widest">Needs Improvement</p>
-              <p className="text-sm font-bold text-white capitalize">{weakestSection.section} Section</p>
+              <p className="text-[10px] font-bold text-orange-500/50 uppercase tracking-widest">{attemptedTasks === 0 ? "Get Started" : "Needs Improvement"}</p>
+              <p className="text-sm font-bold text-white capitalize">{weakestSectionLabel}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 flex flex-col justify-between">
-          <div className="space-y-4">
+        <div className="space-y-6">
+          <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 flex flex-col">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Book className="text-[#45A29E]" size={20} />
+                  Vocabulary Builder
+                </h3>
+                <span className="px-2 py-1 bg-[#45A29E]/10 text-[#45A29E] text-[10px] font-bold rounded-md uppercase tracking-widest">2000+ Words</span>
+              </div>
+              <p className="text-sm text-[#C5C6C7] leading-relaxed">
+                Master high-frequency academic words essential for PTE success. Includes meanings, context, and audio pronunciations.
+              </p>
+            </div>
+            <button 
+              onClick={onViewVocabulary}
+              className="mt-6 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+            >
+              Open Builder
+            </button>
+          </div>
+
+          <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Book className="text-[#45A29E]" size={20} />
-                Vocabulary Builder
+                <Zap className="text-[#45A29E]" size={20} />
+                Daily Shuriken
               </h3>
-              <span className="px-2 py-1 bg-[#45A29E]/10 text-[#45A29E] text-[10px] font-bold rounded-md uppercase tracking-widest">2000+ Words</span>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-1 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-md uppercase tracking-widest">High Priority</span>
+                <button onClick={onViewShuriken} className="text-sm text-[#45A29E] font-bold hover:underline">View All</button>
+              </div>
             </div>
-            <p className="text-sm text-[#C5C6C7] leading-relaxed">
-              Master high-frequency academic words essential for PTE success. Includes meanings, context, and audio pronunciations.
-            </p>
+            <div className="space-y-4">
+              {recommendedTasks.map((task) => (
+                <TaskCard 
+                  key={task.id} 
+                  task={task} 
+                  onClick={async () => {
+                    try {
+                      await onStartTask(task);
+                    } catch (e) {
+                      console.error("Failed to start task:", e);
+                    }
+                  }} 
+                  onHover={() => onHoverTask?.(task)} 
+                />
+              ))}
+            </div>
           </div>
-          <button 
-            onClick={onViewVocabulary}
-            className="mt-6 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
-          >
-            Open Builder
-          </button>
         </div>
       </section>
 
-      {/* Recommended Tasks */}
-      <section>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Zap className="text-[#45A29E]" size={20} />
-            Daily Shuriken
-          </h2>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-md uppercase tracking-widest">High Priority</span>
-            <button onClick={onViewShuriken} className="text-sm text-[#45A29E] font-bold hover:underline">View All</button>
-          </div>
+      {/* Mock Tests Section */}
+      <section className="bg-[#1F2833] rounded-3xl p-8 border border-[#45A29E]/10 relative overflow-hidden group">
+        <div className="absolute -top-10 -right-10 p-10 opacity-10 group-hover:opacity-20 transition-opacity">
+          <Trophy size={200} className="text-[#45A29E]" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {recommendedTasks.map((task) => (
-            <TaskCard 
-              key={task.id} 
-              task={task} 
-              onClick={async () => {
-                try {
-                  await onStartTask(task);
-                } catch (e) {
-                  console.error("Failed to start task:", e);
-                }
-              }} 
-              onHover={() => onHoverTask?.(task)} 
-            />
-          ))}
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="space-y-4 text-center md:text-left">
+            <div className="flex items-center justify-center md:justify-start gap-3">
+              <Trophy className="text-[#45A29E]" size={32} />
+              <h2 className="text-3xl font-black text-white tracking-tight uppercase">Full Mock Tests</h2>
+            </div>
+            <p className="text-[#C5C6C7] max-w-xl leading-relaxed">
+              Experience the real PTE exam environment with our 100 full-length mock tests. 
+              Timed sections, AI scoring, and detailed performance analysis.
+            </p>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-[10px] font-bold text-[#45A29E] uppercase tracking-widest">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={14} /> 100 Real Exam Papers
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock size={14} /> 2-Hour Simulation
+              </div>
+              <div className="flex items-center gap-2">
+                <Zap size={14} /> Instant AI Results
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={onViewMockTests}
+            className="px-12 py-5 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-[#66FCF1] hover:scale-105 transition-all shadow-2xl shadow-[#45A29E]/20"
+          >
+            Take a Mock Test
+          </button>
         </div>
       </section>
 
@@ -2340,7 +2734,7 @@ function DailyShurikenView({ user, onBack, onStartTask, onHoverTask }: { user: a
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -2439,7 +2833,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -2670,7 +3064,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex items-center gap-4">
         <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
@@ -2761,7 +3155,7 @@ function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { sec
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -3007,13 +3401,15 @@ function TaskModal({
   onClose, 
   onFinish,
   onPrev,
-  onNext
+  onNext,
+  isMockTest = false
 }: { 
   task: PTETask, 
   onClose: () => void, 
   onFinish: (score: number) => void | Promise<void>,
   onPrev?: () => void,
-  onNext?: () => void
+  onNext?: () => void,
+  isMockTest?: boolean
 }) {
   const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(() => {
     const isListeningPrep = task.section === 'listening' || 
@@ -3670,18 +4066,43 @@ function TaskModal({
           correct.forEach((ans, i) => {
             if (answers[i] === ans) correctCount++;
           });
-          score = Math.round((correctCount / maxScore) * 80) + 10;
+          score = correctCount === 0 ? 0 : Math.round((correctCount / maxScore) * 80) + 10;
           feedbackTips = correctCount === maxScore ? ["Perfect! All blanks filled correctly."] : [`You got ${correctCount} out of ${maxScore} blanks correct.`];
         } else if (task.category.includes('Multiple Choice')) {
           const correct = task.correctAnswers || [];
           maxScore = Math.max(correct.length, 1);
-          let correctCount = 0;
+          let correctSelected = 0;
+          let incorrectSelected = 0;
+          
           selectedOptions.forEach(opt => {
-            if (correct.includes(opt)) correctCount++;
-            else correctCount--; // Negative marking for some PTE tasks, but let's keep it simple
+            if (correct.includes(opt)) correctSelected++;
+            else incorrectSelected++;
           });
-          score = Math.max(10, Math.min(90, Math.round((correctCount / maxScore) * 80) + 10));
-          feedbackTips = [`You selected ${selectedOptions.length} options. Correct options were: ${correct.join(', ')}`];
+          
+          // PTE Multiple Answer has negative marking, but total score for task cannot be < 0
+          const netCorrect = Math.max(0, correctSelected - (task.category.includes('Multiple Answer') ? incorrectSelected : 0));
+          score = netCorrect === 0 ? 0 : Math.max(10, Math.min(90, Math.round((netCorrect / maxScore) * 80) + 10));
+          
+          feedbackTips = [
+            `You selected ${selectedOptions.length} options.`,
+            `Correct selections: ${correctSelected}/${maxScore}`,
+            incorrectSelected > 0 && task.category.includes('Multiple Answer') ? `Penalty: -${incorrectSelected} for incorrect selections.` : "",
+            `Final Score: ${netCorrect}/${maxScore} points.`
+          ].filter(t => t);
+
+          result = {
+            overall: score,
+            content: score,
+            rawContent: netCorrect,
+            maxRawContent: maxScore,
+            grammar: 90,
+            vocabulary: 90,
+            spelling: 90,
+            fluency: 90,
+            pronunciation: 90,
+            tips: feedbackTips,
+            feedback: feedbackTips
+          };
         } else if (task.category === 'Re-order Paragraphs') {
           const correct = task.correctAnswers || [];
           maxScore = Math.max(correct.length - 1, 1); // PTE scores adjacent pairs
@@ -3691,7 +4112,7 @@ function TaskModal({
             const nextIdx = correct.indexOf(targetParagraphs[i+1]);
             if (nextIdx === currentIdx + 1) correctPairs++;
           }
-          score = Math.round((correctPairs / maxScore) * 80) + 10;
+          score = correctPairs === 0 ? 0 : Math.round((correctPairs / maxScore) * 80) + 10;
           feedbackTips = [`You found ${correctPairs} correct adjacent pairs.`];
         } else if (task.category === 'Write from Dictation') {
           const userWords = userInput.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/).filter(w => w);
@@ -3714,7 +4135,7 @@ function TaskModal({
             }
           });
 
-          score = Math.round((correctCount / maxScore) * 80) + 10;
+          score = correctCount === 0 ? 0 : Math.round((correctCount / maxScore) * 80) + 10;
           feedbackTips = [`You got ${correctCount} out of ${maxScore} words correct.`];
           
           result = {
@@ -3758,11 +4179,11 @@ function TaskModal({
       
       if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
         setFeedback({
-          overall: result.overall || 70,
-          content: result.content || 70,
-          grammar: result.grammar || 70,
-          vocabulary: result.vocabulary || 70,
-          spelling: result.spelling || 70,
+          overall: result.overall ?? 70,
+          content: result.content ?? 70,
+          grammar: result.grammar ?? 70,
+          vocabulary: result.vocabulary ?? 70,
+          spelling: result.spelling ?? 70,
           details: {
             hesitations: 0,
             mispronounced: Array.isArray(result.mistakes) ? result.mistakes : [],
@@ -3773,10 +4194,12 @@ function TaskModal({
         });
       } else {
         setFeedback({
-          overall: result.overall || result.Score || 70,
-          content: result.content || result.Content || 70,
-          oralFluency: result.fluency || result.Fluency || result.oralFluency || 70,
-          pronunciation: result.pronunciation || result.Pronunciation || 70,
+          overall: result.overall ?? result.Score ?? 70,
+          content: result.content ?? result.Content ?? 70,
+          rawContent: result.rawContent,
+          maxRawContent: result.maxRawContent,
+          oralFluency: result.fluency ?? result.Fluency ?? result.oralFluency ?? 70,
+          pronunciation: result.pronunciation ?? result.Pronunciation ?? 70,
           details: {
             hesitations: result.hesitations || 0,
             mispronounced: Array.isArray(mispronounced) ? mispronounced : [mispronounced],
@@ -3786,12 +4209,15 @@ function TaskModal({
           tips: Array.isArray(tips) ? tips : [tips]
         });
       }
-      try {
-        await onFinish(result.overall || result.Score || 70);
-      } catch (e) {
-        console.error("Failed to save progress:", e);
+      if (isMockTest) {
+        try {
+          await onFinish(result.overall || result.Score || 70);
+        } catch (e) {
+          console.error("Failed to save progress:", e);
+        }
+      } else {
+        setPhase('feedback');
       }
-      setPhase('feedback');
     } catch (error: any) {
       console.error("Analysis failed:", error);
       const isQuotaError = error.message === "GEMINI_QUOTA_EXCEEDED";
@@ -3851,7 +4277,7 @@ function TaskModal({
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-[#1F2833] w-full max-w-2xl rounded-3xl border border-[#45A29E]/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
+        className="bg-[#1F2833] w-full max-w-2xl lg:max-w-5xl rounded-3xl border border-[#45A29E]/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
       >
         {/* Header */}
         <div className="p-6 border-b border-[#45A29E]/20 flex items-center justify-between bg-[#1F2833]">
@@ -3904,7 +4330,7 @@ function TaskModal({
                   phase === 'prep' ? "bg-yellow-500" : (phase === 'audio' ? "bg-blue-500" : "bg-red-500")
                 )} />
                 <span className="text-xs font-bold uppercase tracking-widest text-white">
-                  {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : "Listening") : (phase === 'prep' ? (task.hasAudio ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : "Writing"))}
+                  {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : "Listening") : (phase === 'prep' ? (task.hasAudio ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : task.section.charAt(0).toUpperCase() + task.section.slice(1)))}
                 </span>
               </div>
               <div className="flex items-center gap-4">
@@ -3931,99 +4357,165 @@ function TaskModal({
             </p>
           </div>
 
-          {/* Prompt Area */}
-          {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && (
-            <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/10 relative group">
-              <p className={cn(
-                "text-white leading-relaxed font-medium",
-                task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
-              )}>
-                {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
-                {task.section === 'listening' 
-                  ? (hasAudioError 
-                      ? "Audio failed to load. Please check your connection and try again." 
-                      : (phase === 'audio' ? "Listen carefully to the recording..." : (task.category === 'Fill in the Blanks' ? "Type the missing words in each blank." : (task.prompt || "Complete the task based on the recording."))))
-                  : (task.prompt || "No prompt available for this task.")}
-              </p>
-              {hasAudioError && (
-                <button 
-                  onClick={() => {
-                    setHasAudioError(false);
-                    setAudioRetryCount(prev => prev + 1);
-                  }}
-                  className="mt-4 px-6 py-2 bg-[#45A29E] text-[#0B0C10] rounded-lg font-bold hover:bg-[#66FCF1] transition-all flex items-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Retry Audio
-                </button>
-              )}
-              {task.image && (
-                <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
-                  <img 
-                    src={task.image} 
-                    alt="Task Prompt" 
-                    className="w-full h-auto object-cover"
-                    referrerPolicy="no-referrer"
-                  />
+          {/* Main Content Area */}
+          {task.passage ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+              {/* Left Column: Passage */}
+              <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20 h-full overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-[#45A29E]/20 scrollbar-track-transparent">
+                <div className="text-white/90 leading-relaxed text-base font-normal">
+                  {task.passage}
+                </div>
+              </div>
+
+              {/* Right Column: Question and Options */}
+              <div className="space-y-6">
+                {task.prompt && (
+                  <div className="bg-[#1F2833]/30 p-6 rounded-2xl border border-[#45A29E]/20">
+                    <p className="text-[#66FCF1] font-bold text-xl leading-relaxed">
+                      {task.prompt}
+                    </p>
+                  </div>
+                )}
+
+                {phase === 'recording' && (
+                  <div className="space-y-6">
+                    <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                      <div className="space-y-4">
+                        {task.options?.map(option => (
+                          <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all group">
+                            <input
+                              type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
+                              name="reading-option"
+                              checked={selectedOptions.includes(option)}
+                              onChange={(e) => {
+                                if (task.category.includes('Multiple Answer')) {
+                                  if (e.target.checked) setSelectedOptions([...selectedOptions, option]);
+                                  else setSelectedOptions(selectedOptions.filter(o => o !== option));
+                                } else {
+                                  setSelectedOptions([option]);
+                                }
+                              }}
+                              className="w-5 h-5 accent-[#45A29E]"
+                            />
+                            <span className="text-white group-hover:text-[#66FCF1] transition-colors">{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await handleFinish();
+                          } catch (e) {
+                            console.error("Finish failed:", e);
+                          }
+                        }}
+                        className="bg-[#45A29E] text-[#0B0C10] px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-lg shadow-[#45A29E]/10"
+                      >
+                        {isMockTest ? 'Next Task' : 'Submit Response'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Prompt Area */}
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && (
+                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20 relative group">
+                  <p className={cn(
+                    "text-white leading-relaxed font-medium",
+                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
+                  )}>
+                    {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
+                    {task.section === 'listening' 
+                      ? (hasAudioError 
+                          ? "Audio failed to load. Please check your connection and try again." 
+                          : (phase === 'audio' ? "Listen carefully to the recording..." : (task.category === 'Fill in the Blanks' ? "Type the missing words in each blank." : (task.prompt || "Complete the task based on the recording."))))
+                      : (task.prompt || "No prompt available for this task.")}
+                  </p>
+                  {hasAudioError && (
+                    <button 
+                      onClick={() => {
+                        setHasAudioError(false);
+                        setAudioRetryCount(prev => prev + 1);
+                      }}
+                      className="mt-4 px-6 py-2 bg-[#45A29E] text-[#0B0C10] rounded-lg font-bold hover:bg-[#66FCF1] transition-all flex items-center gap-2"
+                    >
+                      <RefreshCw size={16} />
+                      Retry Audio
+                    </button>
+                  )}
+                  {task.image && (
+                    <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
+                      <img 
+                        src={task.image} 
+                        alt="Task Prompt" 
+                        className="w-full h-auto object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Input Area (Writing, Reading, Listening) */}
-          {task.section !== 'speaking' && phase === 'recording' && (
-            <div className="space-y-6">
-              {task.section === 'reading' ? (
-                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
-                  {task.category === 'Reading & Writing: Fill in the Blanks' ? (
-                    <div className="text-white leading-relaxed text-lg">
-                      {task.prompt?.split('________').map((part, i, arr) => (
-                        <React.Fragment key={i}>
-                          {part}
-                          {i < arr.length - 1 && (
-                            <select
-                              value={blankAnswers[i] || ''}
-                              onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
-                              className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10 appearance-none pr-8 relative"
-                              style={{
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2366FCF1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'right 0.5rem center',
-                                backgroundSize: '1.5em 1.5em'
-                              }}
-                            >
-                              <option value="" className="bg-[#1F2833] text-[#66FCF1]">[Select]</option>
-                              {task.blanks?.[i]?.map(opt => (
-                                <option key={opt} value={opt} className="bg-[#1F2833] text-white">{opt}</option>
-                              ))}
-                            </select>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  ) : task.category === 'Multiple Choice, Multiple Answer' || task.category === 'Multiple Choice, Single Answer' ? (
-                    <div className="space-y-4">
-                      {task.options?.map(option => (
-                        <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
-                          <input
-                            type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
-                            name="reading-option"
-                            checked={selectedOptions.includes(option)}
-                            onChange={(e) => {
-                              if (task.category.includes('Multiple Answer')) {
-                                if (e.target.checked) setSelectedOptions([...selectedOptions, option]);
-                                else setSelectedOptions(selectedOptions.filter(o => o !== option));
-                              } else {
-                                setSelectedOptions([option]);
-                              }
-                            }}
-                            className="w-5 h-5 accent-[#45A29E]"
-                          />
-                          <span className="text-white">{option}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : task.category === 'Re-order Paragraphs' ? (
+              {/* Input Area (Writing, Reading, Listening) */}
+              {task.section !== 'speaking' && phase === 'recording' && (
+                <div className="space-y-6">
+                  {task.section === 'reading' ? (
+                    <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                      {task.category === 'Reading & Writing: Fill in the Blanks' ? (
+                        <div className="text-white leading-relaxed text-lg">
+                          {task.prompt?.split('________').map((part, i, arr) => (
+                            <React.Fragment key={i}>
+                              {part}
+                              {i < arr.length - 1 && (
+                                <select
+                                  value={blankAnswers[i] || ''}
+                                  onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
+                                  className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10 appearance-none pr-8 relative"
+                                  style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2366FCF1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundPosition: 'right 0.5rem center',
+                                    backgroundSize: '1.5em 1.5em'
+                                  }}
+                                >
+                                  <option value="" className="bg-[#1F2833] text-[#66FCF1]">[Select]</option>
+                                  {task.blanks?.[i]?.map(opt => (
+                                    <option key={opt} value={opt} className="bg-[#1F2833] text-white">{opt}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : task.category === 'Multiple Choice, Multiple Answer' || task.category === 'Multiple Choice, Single Answer' ? (
+                        <div className="space-y-4">
+                          {task.options?.map(option => (
+                            <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
+                              <input
+                                type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
+                                name="reading-option"
+                                checked={selectedOptions.includes(option)}
+                                onChange={(e) => {
+                                  if (task.category.includes('Multiple Answer')) {
+                                    if (e.target.checked) setSelectedOptions([...selectedOptions, option]);
+                                    else setSelectedOptions(selectedOptions.filter(o => o !== option));
+                                  } else {
+                                    setSelectedOptions([option]);
+                                  }
+                                }}
+                                className="w-5 h-5 accent-[#45A29E]"
+                              />
+                              <span className="text-white">{option}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : task.category === 'Re-order Paragraphs' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[400px]">
                       {/* Source Panel */}
                       <div className="flex flex-col gap-3 p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/20 overflow-y-auto">
@@ -4193,7 +4685,7 @@ function TaskModal({
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         placeholder="Type your response here..."
-                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                        className="w-full h-64 lg:h-96 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
                       />
                     </div>
                   )}
@@ -4289,7 +4781,7 @@ function TaskModal({
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         placeholder={task.category === 'Write from Dictation' ? "Type the sentence you heard..." : "Type your response here..."}
-                        className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                        className="w-full h-64 lg:h-96 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
                       />
                     </div>
                   )}
@@ -4361,13 +4853,15 @@ function TaskModal({
                   }}
                   className="bg-[#45A29E] text-[#0B0C10] px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
                 >
-                  Submit Response
+                  {isMockTest ? 'Next Task' : 'Submit Response'}
                 </button>
               </div>
             </div>
           )}
+          </>
+        )}
 
-          <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait">
             {phase === 'analyzing' ? (
               <motion.div 
                 key="analyzing"
@@ -4409,26 +4903,35 @@ function TaskModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
-                      <>
-                        <ScoreMetric label="Grammar" score={feedback.grammar} max={90} />
-                        <ScoreMetric label="Vocabulary" score={feedback.vocabulary} max={90} />
-                        <ScoreMetric label="Spelling" score={feedback.spelling} max={90} />
-                      </>
-                    ) : task.section === 'speaking' ? (
-                      <>
-                        <ScoreMetric label="Content" score={feedback.content} max={90} />
-                        <ScoreMetric label="Oral Fluency" score={feedback.oralFluency} max={90} />
-                        <ScoreMetric label="Pronunciation" score={feedback.pronunciation} max={90} />
-                      </>
-                    ) : (
-                      <>
-                        <ScoreMetric label="Content" score={feedback.content} max={90} />
-                        <div className="col-span-2" />
-                      </>
-                    )}
-                  </div>
+        {task.category.includes('Multiple Choice') ? (
+          <div className="grid grid-cols-3 gap-4">
+            <ScoreMetric 
+              label="Content" 
+              score={feedback.content} 
+              max={90} 
+              rawScore={feedback.rawContent} 
+              maxRawScore={feedback.maxRawContent} 
+            />
+            <div className="col-span-2" />
+          </div>
+        ) : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
+          <div className="grid grid-cols-3 gap-4">
+            <ScoreMetric label="Grammar" score={feedback.grammar} max={90} />
+            <ScoreMetric label="Vocabulary" score={feedback.vocabulary} max={90} />
+            <ScoreMetric label="Spelling" score={feedback.spelling} max={90} />
+          </div>
+        ) : task.section === 'speaking' ? (
+          <div className="grid grid-cols-3 gap-4">
+            <ScoreMetric label="Content" score={feedback.content} max={90} />
+            <ScoreMetric label="Oral Fluency" score={feedback.oralFluency} max={90} />
+            <ScoreMetric label="Pronunciation" score={feedback.pronunciation} max={90} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            <ScoreMetric label="Content" score={feedback.content} max={90} />
+            <div className="col-span-2" />
+          </div>
+        )}
                 </div>
 
                 {/* Reading Answer Key */}
@@ -4591,21 +5094,71 @@ function TaskModal({
                 </div>
 
                 <div className="flex gap-4">
+                  {!isMockTest && (
+                    <button 
+                      onClick={() => {
+                        setFeedback(null);
+                        setUserInput('');
+                        setSelectedOptions([]);
+                        setBlankAnswers({});
+                        setReorderedParagraphs(task.paragraphs || []);
+                        setTargetParagraphs([]);
+                        
+                        const isListeningPrep = task.section === 'listening' || 
+                                               task.category === 'Repeat Sentence' || 
+                                               task.category === 'Answer Short Question' || 
+                                               task.category === 'Write from Dictation';
+                        
+                        const initialPhase = isListeningPrep ? 'prep' : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
+                        setPhase(initialPhase);
+                        
+                        let initialTime = 0;
+                        if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
+                          initialTime = 1;
+                        } else if (task.category === 'Summarize Spoken Text') {
+                          initialTime = 12;
+                        } else if (task.section === 'listening' && task.hasAudio) {
+                          initialTime = 1;
+                        } else if (task.hasAudio) {
+                          initialTime = 0;
+                        } else if (task.prepTime === 0 || task.section === 'reading') {
+                          if (task.category === 'Summarize Written Text') initialTime = 600;
+                          else if (task.category === 'Write Essay') initialTime = 1200;
+                          else if (task.category === 'Summarize Spoken Text') initialTime = 600;
+                          else if (task.section === 'reading') {
+                            if (task.category.includes('Fill in the Blanks')) initialTime = 120;
+                            else if (task.category.includes('Multiple Choice')) initialTime = 90;
+                            else if (task.category === 'Re-order Paragraphs') initialTime = 120;
+                            else initialTime = 120;
+                          }
+                          else if (task.section === 'listening') initialTime = 90;
+                          else initialTime = task.recordingTime ?? 10;
+                        } else {
+                          initialTime = task.prepTime ?? 35;
+                        }
+                        setTimeLeft(initialTime);
+                        
+                        setIsAudioPlaying(false);
+                        setIsPreparingAudio(false);
+                        setHasAudioError(false);
+                        beepPlayedRef.current = false;
+                      }}
+                      className="flex-1 py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                    >
+                      Reset
+                    </button>
+                  )}
                   <button 
                     onClick={() => {
-                      setFeedback(null);
-                      setPhase('prep');
-                      setTimeLeft(35);
+                      if (isMockTest) {
+                        onFinish(feedback.overall);
+                      } else {
+                        onClose();
+                      }
                     }}
-                    className="flex-1 py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
-                  >
-                    Retrain
-                  </button>
-                  <button 
-                    onClick={onClose}
                     className="flex-1 py-4 border border-[#45A29E]/20 text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-white/5 transition-all"
                   >
-                    Next Task
+                    {isMockTest ? 'Next Task' : 'Next Task'}
                   </button>
                 </div>
               </motion.div>
@@ -4711,12 +5264,14 @@ function TaskModal({
   );
 }
 
-function ScoreMetric({ label, score, max }: { label: string, score: number, max: number }) {
+function ScoreMetric({ label, score, max, rawScore, maxRawScore }: { label: string, score: number, max: number, rawScore?: number, maxRawScore?: number }) {
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-end">
         <span className="text-[10px] font-bold text-[#C5C6C7] uppercase tracking-wider">{label}</span>
-        <span className="text-sm font-bold text-white">{score}</span>
+        <span className="text-sm font-bold text-white">
+          {rawScore !== undefined && maxRawScore !== undefined ? `${rawScore}/${maxRawScore}` : score}
+        </span>
       </div>
       <div className="h-1.5 bg-[#1F2833] rounded-full overflow-hidden">
         <motion.div 
@@ -4728,5 +5283,3 @@ function ScoreMetric({ label, score, max }: { label: string, score: number, max:
     </div>
   );
 }
-
-

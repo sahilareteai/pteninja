@@ -11,6 +11,7 @@ export interface PTETask {
   recordingTime?: number;
   prompt?: string;
   transcript?: string; // For audio-based tasks
+  passage?: string; // For reading tasks with long texts
   image?: string;
   hasAudio?: boolean;
   options?: string[];
@@ -60,6 +61,24 @@ export interface TaskCompletion {
   completedAt: string; // ISO string
 }
 
+export interface MockTest {
+  id: string;
+  title: string;
+  description: string;
+  sections: {
+    section: PTESection;
+    taskIds: string[];
+    duration: number; // minutes
+  }[];
+}
+
+export interface MockTestResult {
+  testId: string;
+  completedAt: string;
+  sectionScores: Record<PTESection, number>;
+  overallScore: number;
+}
+
 export interface UserData {
   uid: string;
   email?: string | null;
@@ -80,6 +99,7 @@ export interface UserData {
   schedule?: ScheduledTask[];
   goals?: DailyGoal[];
   favoriteWords?: string[];
+  mockTestResults?: MockTestResult[];
 }
 
 export const SUBSCRIPTION_PLANS = [
@@ -422,7 +442,8 @@ export const PTE_TASKS: PTETask[] = [
     description: "Read the passage below and answer the multiple-choice question by selecting all the correct responses. More than one response may be correct.", 
     section: 'reading', 
     type: 'reading',
-    prompt: "The widespread use of the internet has transformed the way we communicate, work, and access information. While it has brought numerous benefits, such as instant connectivity and global reach, it has also raised significant concerns regarding privacy and security. As we continue to conduct more of our lives online, the need for robust cybersecurity measures becomes increasingly critical.",
+    passage: "The widespread use of the internet has transformed the way we communicate, work, and access information. While it has brought numerous benefits, such as instant connectivity and global reach, it has also raised significant concerns regarding privacy and security. As we continue to conduct more of our lives online, the need for robust cybersecurity measures becomes increasingly critical.",
+    prompt: "Which of the following are mentioned as impacts of the internet on society?",
     options: [
       'Facilitation of rapid information exchange across borders.',
       'Complete replacement of traditional educational institutions.',
@@ -441,7 +462,8 @@ export const PTE_TASKS: PTETask[] = [
     description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
     section: 'reading', 
     type: 'reading',
-    prompt: "The study of psychology seeks to understand the complexities of human behavior and mental processes. Researchers use various methods, including experiments and surveys, to collect data and test hypotheses. One of the key themes in modern psychology is the interaction between genetics and environment, often referred to as the nature versus nurture debate.",
+    passage: "The study of psychology seeks to understand the complexities of human behavior and mental processes. Researchers use various methods, including experiments and surveys, to collect data and test hypotheses. One of the key themes in modern psychology is the interaction between genetics and environment, often referred to as the nature versus nurture debate.",
+    prompt: "What is one of the key themes in modern psychology mentioned in the text?",
     options: [
       'The study of physical health and biological systems.',
       'The interaction between genetic factors and environmental influences.',
@@ -768,7 +790,7 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
   ],
   'Multiple Choice, Multiple Answer': [
     "Which of the following are considered renewable energy sources? Select all that apply.",
-    "According to the text, what are the main causes of urban sprawl? Select all that apply.",
+    "Which of the following are potential impacts of climate change? Select all that apply.",
     "Which of the following factors influence consumer behavior? Select all that apply.",
     "What are the key benefits of regular physical activity? Select all that apply.",
     "Which of the following are examples of cognitive biases? Select all that apply.",
@@ -922,18 +944,43 @@ categoriesToExpand.forEach(category => {
       newTask.blanks = selected.blanks;
       newTask.correctAnswers = selected.correct;
     } else if (category === 'Multiple Choice, Multiple Answer' || category === 'Multiple Choice, Single Answer') {
-      const mc_options = [
-        ['Increased global connectivity', 'Reduced environmental impact', 'Enhanced data privacy', 'Improved economic efficiency'],
-        ['Rising sea levels', 'Increased biodiversity', 'Extreme weather events', 'Changes in migration patterns'],
-        ['Technological innovation', 'Policy shifts', 'Consumer behavior changes', 'Economic stagnation'],
-        ['Better physical health', 'Improved mental well-being', 'Reduced risk of chronic disease', 'Increased sedentary behavior']
+      const mc_data = [
+        {
+          passage: "During Jackson's second term, his opponents had gradually come together to form the Whig party. Whigs and Democrats held different attitudes toward the changes brought about by the market, banks, and commerce. The Democrats tended to view society as a continuing conflict between 'the people'—farmers, planters, and workers—and a set of greedy aristocrats. This 'paper money aristocracy' of bankers and investors manipulated the banking system for their own profit, Democrats claimed, and sapped the nation's virtue by encouraging speculation and the desire for sudden, unearned wealth. The Democrats wanted the rewards of the market without sacrificing the features of a simple agrarian republic. They wanted the wealth that the market offered without the competitive, changing society; the complex dealing; the dominance of urban centers; and the loss of independence that came with it.",
+          question: "The author mentions bankers and investors in the passage as an example of which of the following?",
+          options: ["The Democratic Party's main source of support", "The people that Democrats claimed were unfairly becoming rich", "The people most interested in a return to a simple agrarian republic", "One of the groups might be not in favor of Whig party and Democrats"],
+          correct: ["The people that Democrats claimed were unfairly becoming rich"]
+        },
+        {
+          passage: "The Industrial Revolution, which began in the 18th century, transformed societies from agrarian to industrial. This period was marked by significant technological advancements, such as the steam engine and the power loom. These innovations led to increased production efficiency and the growth of urban centers as people moved from rural areas to work in factories. However, the rapid urbanization also brought about challenges, including poor living conditions and environmental pollution. Despite these issues, the Industrial Revolution laid the foundation for modern economic growth and technological progress.",
+          question: "Which of the following were impacts of the Industrial Revolution mentioned in the text? Select all that apply.",
+          options: ["Increased production efficiency", "Growth of urban centers", "Improved rural living conditions", "Environmental pollution", "Decrease in technological progress"],
+          correct: ["Increased production efficiency", "Growth of urban centers", "Environmental pollution"]
+        },
+        {
+          passage: "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy. This energy is stored in carbohydrate molecules, such as sugars, which are synthesized from carbon dioxide and water. In most cases, oxygen is also released as a waste product. Photosynthesis is crucial for life on Earth as it provides the primary source of energy for nearly all food chains and maintains atmospheric oxygen levels. The process occurs in organelles called chloroplasts, which contain the pigment chlorophyll.",
+          question: "According to the passage, which of the following are products or outcomes of photosynthesis? Select all that apply.",
+          options: ["Carbohydrate molecules", "Oxygen", "Carbon dioxide", "Light energy", "Water"],
+          correct: ["Carbohydrate molecules", "Oxygen"]
+        },
+        {
+          passage: "The concept of sustainable development emerged in the late 20th century as a response to growing concerns about environmental degradation and social inequality. It is defined as development that meets the needs of the present without compromising the ability of future generations to meet their own needs. Sustainable development requires a balanced approach that considers economic growth, social inclusion, and environmental protection. Key goals include ending poverty, protecting the planet, and ensuring prosperity for all. Achieving these goals requires collaboration between governments, businesses, and civil society.",
+          question: "Which of the following are key pillars or goals of sustainable development according to the text? Select all that apply.",
+          options: ["Economic growth", "Social inclusion", "Environmental protection", "Short-term profit maximization", "Unregulated industrial expansion"],
+          correct: ["Economic growth", "Social inclusion", "Environmental protection"]
+        },
+        {
+          passage: "Cognitive biases are systematic patterns of deviation from norm or rationality in judgment. They often result from the brain's attempt to simplify information processing through heuristics, which are mental shortcuts. While heuristics can be useful in making quick decisions, they can also lead to errors in judgment and decision-making. Common cognitive biases include confirmation bias, where individuals favor information that confirms their existing beliefs, and the availability heuristic, where people overestimate the importance of information that is easily available to them. Understanding these biases is essential for improving critical thinking and decision-making.",
+          question: "Based on the passage, what are the characteristics or examples of cognitive biases? Select all that apply.",
+          options: ["Systematic patterns of deviation from rationality", "Result from mental shortcuts called heuristics", "Always lead to perfectly rational decisions", "Include confirmation bias", "Help individuals ignore their existing beliefs"],
+          correct: ["Systematic patterns of deviation from rationality", "Result from mental shortcuts called heuristics", "Include confirmation bias"]
+        }
       ];
-      newTask.options = mc_options[i % mc_options.length];
-      if (category === 'Multiple Choice, Multiple Answer') {
-        newTask.correctAnswers = [newTask.options[0], newTask.options[2]];
-      } else {
-        newTask.correctAnswers = [newTask.options[0]];
-      }
+      const selected = mc_data[i % mc_data.length];
+      newTask.passage = selected.passage;
+      newTask.prompt = selected.question;
+      newTask.options = selected.options;
+      newTask.correctAnswers = selected.correct;
     } else if (category === 'Re-order Paragraphs') {
       const rop_prompts = [
         [
