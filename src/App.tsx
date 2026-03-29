@@ -3701,6 +3701,68 @@ function TaskModal({
     if (phase === 'audio' && task.hasAudio) {
       console.log(`[Audio] Starting audio logic for task ${task.id}`);
       
+      const handleAudioEnd = () => {
+        if (isCancelled) return;
+        console.log("[Audio] Audio playback ended");
+        setIsAudioPlaying(false);
+        setIsPreparingAudio(false);
+        // Small pause after audio before next phase
+        setTimeout(() => {
+          if (isCancelled) return;
+          if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+            setPhase('prep');
+            setTimeLeft(task.prepTime);
+          } else {
+            setPhase('recording');
+            // For listening tasks, recording time is usually until they finish typing
+            if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
+            else if (task.section === 'listening') setTimeLeft(120);
+            else setTimeLeft(task.recordingTime ?? 15);
+          }
+        }, 1000);
+      };
+
+      const speakFallback = (text: string) => {
+        if (typeof window === 'undefined' || !window.speechSynthesis) {
+          handleAudioEnd();
+          return;
+        }
+        
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        // Try to find a natural sounding English voice
+        const englishVoice = voices.find(v => v.lang.startsWith('en-') && v.name.includes('Google')) || 
+                            voices.find(v => v.lang.startsWith('en-')) || 
+                            voices[0];
+        
+        if (englishVoice) utterance.voice = englishVoice;
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
+        
+        utterance.onstart = () => {
+          if (isCancelled) {
+            window.speechSynthesis.cancel();
+            return;
+          }
+          console.log("[Audio] Browser TTS started");
+          setIsAudioPlaying(true);
+          setIsPreparingAudio(false);
+        };
+        
+        utterance.onend = () => {
+          console.log("[Audio] Browser TTS ended");
+          handleAudioEnd();
+        };
+        
+        utterance.onerror = (err) => {
+          console.error("[Audio] Browser TTS error:", err);
+          handleAudioEnd();
+        };
+        
+        window.speechSynthesis.speak(utterance);
+      };
+
       const playAudio = async () => {
         try {
           if (isCancelled) return;
@@ -3740,26 +3802,7 @@ function TaskModal({
             source.connect(ctx.destination);
             audioSourceRef.current = source;
             
-            source.onended = () => {
-              if (isCancelled) return;
-              console.log("[Audio] AudioBuffer playback ended");
-              setIsAudioPlaying(false);
-              setIsPreparingAudio(false);
-              // Small pause after audio before next phase
-              setTimeout(() => {
-                if (isCancelled) return;
-                if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
-                  setPhase('prep');
-                  setTimeLeft(task.prepTime);
-                } else {
-                  setPhase('recording');
-                  // For listening tasks, recording time is usually until they finish typing
-                  if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
-                  else if (task.section === 'listening') setTimeLeft(120);
-                  else setTimeLeft(task.recordingTime ?? 15);
-                }
-              }, 1000);
-            };
+            source.onended = handleAudioEnd;
 
             source.start(startTime);
             setIsAudioPlaying(true);
@@ -3801,8 +3844,8 @@ function TaskModal({
               } catch (prepErr: any) {
                 console.error("[Audio] Audio preparation failed or timed out:", prepErr);
                 if (prepErr.message === "GEMINI_QUOTA_EXCEEDED") {
-                  toast.error("Audio Generation Failed", {
-                    description: "AI Quota Exceeded. The free tier limit has been reached. Please try again in a few minutes."
+                  toast.error("AI Quota Exceeded", {
+                    description: "Switching to browser-native voice for this task."
                   });
                 }
                 base64 = null;
@@ -3818,6 +3861,17 @@ function TaskModal({
               console.log("[Audio] Creating new Audio object from base64");
               audio = new Audio(`data:audio/wav;base64,${base64}`);
               audio.load();
+            } else {
+              console.log("[Audio] No base64 audio, using browser TTS fallback");
+              const fallbackText = task.transcript || task.prompt || "";
+              if (fallbackText) {
+                if (needsBeep && !beepPlayedRef.current) {
+                  await playBeep();
+                  beepPlayedRef.current = true;
+                }
+                speakFallback(fallbackText);
+                return;
+              }
             }
           } else {
             console.log("[Audio] Using pre-fetched Audio object");
@@ -3848,26 +3902,7 @@ function TaskModal({
               console.error("[Audio] Playback failed:", err);
             });
 
-            audio.onended = () => {
-              if (isCancelled) return;
-              console.log("[Audio] Audio playback ended");
-              setIsAudioPlaying(false);
-              setIsPreparingAudio(false);
-              // Small pause after audio before next phase
-              setTimeout(() => {
-                if (isCancelled) return;
-                if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
-                  setPhase('prep');
-                  setTimeLeft(task.prepTime);
-                } else {
-                  setPhase('recording');
-                  // For listening tasks, recording time is usually until they finish typing
-                  if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
-                  else if (task.section === 'listening') setTimeLeft(120);
-                  else setTimeLeft(task.recordingTime ?? 15);
-                }
-              }, 1000);
-            };
+            audio.onended = handleAudioEnd;
 
             audio.onerror = (e) => {
               console.error("[Audio] Audio element error:", e);
@@ -3917,6 +3952,9 @@ function TaskModal({
       return () => {
         console.log(`[Audio] Cleaning up audio logic for task ${task.id}`);
         isCancelled = true;
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
         if (safetyTimeout) clearTimeout(safetyTimeout);
         if (audioRef.current) {
           audioRef.current.pause();
@@ -4209,11 +4247,14 @@ function TaskModal({
           tips: Array.isArray(tips) ? tips : [tips]
         });
       }
+      const finalScore = result.overall ?? result.Score ?? 0;
+      
       if (isMockTest) {
         try {
-          await onFinish(result.overall || result.Score || 70);
+          await onFinish(finalScore);
         } catch (e) {
           console.error("Failed to save progress:", e);
+          setPhase('feedback'); // Fallback to feedback if navigation fails
         }
       } else {
         setPhase('feedback');

@@ -70,7 +70,9 @@ async function callGemini(params: any, retries: number = 3): Promise<any> {
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        throw new Error("GEMINI_QUOTA_EXCEEDED");
+        const quotaError = new Error("GEMINI_QUOTA_EXCEEDED");
+        (quotaError as any).status = 429;
+        throw quotaError;
       }
 
       console.error(`Gemini call attempt ${i + 1} failed:`, e);
