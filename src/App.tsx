@@ -39,10 +39,13 @@ import {
   Book,
   Search,
   Volume2,
-  Loader2
+  Loader2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
+import { Logo } from './components/Logo';
 import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, UserData } from './types';
 import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
@@ -265,23 +268,23 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
             <ChevronRight className="rotate-180" size={24} />
           </button>
-          <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
-            <Map className="text-[#45A29E]" size={28} />
+          <div className="p-3 rounded-2xl bg-app-primary/10 shrink-0">
+            <Map className="text-app-primary" size={28} />
           </div>
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight sm:hidden">Roadmap</h2>
+          <h2 className="text-2xl font-black text-app-text uppercase tracking-tight sm:hidden">Roadmap</h2>
         </div>
         <div className="flex-1 hidden sm:block">
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight">Your Roadmap</h2>
+          <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Your Roadmap</h2>
         </div>
-        <div className="flex bg-[#1F2833] p-1 rounded-xl border border-white/5 w-full sm:w-auto overflow-x-auto no-scrollbar">
+        <div className="flex bg-app-surface p-1 rounded-xl border border-app-border w-full sm:w-auto overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveView('roadmap')}
             className={cn(
               "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
-              activeView === 'roadmap' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+              activeView === 'roadmap' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
             )}
           >
             Path
@@ -290,7 +293,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
             onClick={() => setActiveView('schedule')}
             className={cn(
               "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
-              activeView === 'schedule' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+              activeView === 'schedule' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
             )}
           >
             Schedule
@@ -299,7 +302,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
             onClick={() => setActiveView('goals')}
             className={cn(
               "flex-1 sm:flex-none px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap",
-              activeView === 'goals' ? "bg-[#45A29E] text-[#0B0C10]" : "text-[#C5C6C7] hover:text-white"
+              activeView === 'goals' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
             )}
           >
             Goals
@@ -310,7 +313,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
       {activeView === 'roadmap' && (
         <div className="space-y-8 relative">
           {/* Connecting Line */}
-          <div className="absolute left-8 top-10 bottom-10 w-0.5 bg-gradient-to-b from-[#45A29E] via-[#45A29E]/20 to-transparent" />
+          <div className="absolute left-8 top-10 bottom-10 w-0.5 bg-gradient-to-b from-app-primary via-app-primary/20 to-transparent" />
           
           {milestones.map((milestone, index) => (
             <motion.div 
@@ -324,38 +327,38 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               )}
             >
               <div className={cn(
-                "absolute left-4 top-0 w-8 h-8 rounded-full border-4 border-[#0B0C10] z-10 flex items-center justify-center transition-all duration-500",
-                milestone.isUnlocked ? "bg-[#45A29E] shadow-[0_0_15px_rgba(69,162,158,0.5)]" : "bg-[#1F2833]"
+                "absolute left-4 top-0 w-8 h-8 rounded-full border-4 border-app-bg z-10 flex items-center justify-center transition-all duration-500",
+                milestone.isUnlocked ? "bg-app-primary shadow-[0_0_15px_rgba(69,162,158,0.5)]" : "bg-app-surface"
               )}>
-                {milestone.isUnlocked ? <Check size={14} className="text-[#0B0C10]" /> : <Lock size={12} className="text-[#C5C6C7]" />}
+                {milestone.isUnlocked ? <Check size={14} className="text-app-bg" /> : <Lock size={12} className="text-app-text-muted" />}
               </div>
               
               <div className={cn(
-                "bg-gradient-to-br from-[#1F2833] to-[#0B0C10] p-6 rounded-3xl border transition-all duration-300",
-                milestone.isUnlocked ? "border-[#45A29E]/30 hover:border-[#45A29E] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)]" : "border-white/5"
+                "bg-gradient-to-br from-app-surface to-app-bg p-6 rounded-3xl border transition-all duration-300",
+                milestone.isUnlocked ? "border-app-primary/30 hover:border-app-primary hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)]" : "border-app-border"
               )}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{milestone.title}</h3>
-                    <p className="text-xs text-[#45A29E] font-bold uppercase tracking-widest">Target: {milestone.targetScore}</p>
+                    <h3 className="text-lg font-bold text-app-text">{milestone.title}</h3>
+                    <p className="text-xs text-app-primary font-bold uppercase tracking-widest">Target: {milestone.targetScore}</p>
                   </div>
                   {milestone.isUnlocked && milestone.id === currentMilestone.id && (
-                    <span className="px-3 py-1 bg-[#45A29E]/10 text-[#45A29E] rounded-full text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                    <span className="px-3 py-1 bg-app-primary/10 text-app-primary rounded-full text-[10px] font-bold uppercase tracking-widest animate-pulse">
                       Current Level
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-[#C5C6C7] leading-relaxed">{milestone.description}</p>
+                <p className="text-sm text-app-text-muted leading-relaxed">{milestone.description}</p>
                 
                 {milestone.isUnlocked && (
                   <div className="mt-6 grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => onStartTask(PTE_TASKS[0])}
-                      className="py-2 bg-[#0B0C10] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#45A29E] hover:text-[#0B0C10] transition-all"
+                      className="py-2 bg-app-bg text-app-text rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-primary hover:text-app-bg transition-all"
                     >
                       Practice Now
                     </button>
-                    <button className="py-2 border border-white/5 text-[#C5C6C7] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
+                    <button className="py-2 border border-app-border text-app-text-muted rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-text/5 transition-all">
                       View Details
                     </button>
                   </div>
@@ -368,11 +371,11 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
 
       {activeView === 'schedule' && (
         <div className="space-y-6">
-          <div className="bg-[#1F2833] p-8 rounded-[2.5rem] border border-[#45A29E]/10">
+          <div className="bg-app-surface p-8 rounded-[2.5rem] border border-app-primary/10">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-xl font-bold text-white">Study Schedule</h3>
-                <p className="text-sm text-[#C5C6C7]">Align your study time with specific tasks.</p>
+                <h3 className="text-xl font-bold text-app-text">Study Schedule</h3>
+                <p className="text-sm text-app-text-muted">Align your study time with specific tasks.</p>
               </div>
               <div className="flex items-center gap-2">
                 {user.schedule && user.schedule.length > 0 && (
@@ -386,7 +389,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 )}
                 <button 
                   onClick={() => setShowAddSchedule(!showAddSchedule)}
-                  className="p-3 bg-[#45A29E] text-[#0B0C10] rounded-2xl hover:bg-[#66FCF1] transition-all shadow-lg"
+                  className="p-3 bg-app-primary text-app-bg rounded-2xl hover:bg-app-accent transition-all shadow-lg"
                 >
                   <Plus size={24} className={cn("transition-transform", showAddSchedule && "rotate-45")} />
                 </button>
@@ -397,13 +400,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-8 p-6 bg-[#0B0C10] rounded-3xl border border-[#45A29E]/30 space-y-4"
+                className="mb-8 p-6 bg-app-bg rounded-3xl border border-app-primary/30 space-y-4"
               >
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <select 
                     value={newSchedule.taskId}
                     onChange={(e) => setNewSchedule({ ...newSchedule, taskId: e.target.value })}
-                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                    className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   >
                     <option value="">Select Task</option>
                     {PTE_TASKS.map(t => (
@@ -414,14 +417,14 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                     type="time"
                     value={newSchedule.time}
                     onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
-                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                    className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   />
                   <input 
                     type="number"
                     placeholder="Duration (min)"
                     value={newSchedule.duration}
                     onChange={(e) => setNewSchedule({ ...newSchedule, duration: parseInt(e.target.value) || 0 })}
-                    className="bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                    className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   />
                 </div>
                 <button 
@@ -432,7 +435,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                       console.error("Failed to add schedule:", e);
                     }
                   }}
-                  className="w-full py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                  className="w-full py-3 bg-app-primary text-app-bg rounded-xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all"
                 >
                   Add to Schedule
                 </button>
@@ -441,9 +444,9 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
 
             <div className="space-y-4">
               {(!user.schedule || user.schedule.length === 0) ? (
-                <div className="text-center py-12 bg-[#0B0C10] rounded-3xl border border-dashed border-white/10">
-                  <Calendar className="mx-auto text-[#C5C6C7]/20 mb-4" size={48} />
-                  <p className="text-[#C5C6C7]">No tasks scheduled yet.</p>
+                <div className="text-center py-12 bg-app-bg rounded-3xl border border-dashed border-app-border">
+                  <Calendar className="mx-auto text-app-text-muted/20 mb-4" size={48} />
+                  <p className="text-app-text-muted">No tasks scheduled yet.</p>
                 </div>
               ) : (
                 user.schedule.sort((a: ScheduledTask, b: ScheduledTask) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((item: ScheduledTask) => {
@@ -454,15 +457,15 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                   const dateStr = scheduledDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
                   return (
-                    <div key={item.id} className="flex items-center gap-6 p-4 bg-[#0B0C10] rounded-2xl border border-white/5 group hover:border-[#45A29E]/30 transition-all">
+                    <div key={item.id} className="flex items-center gap-6 p-4 bg-app-bg rounded-2xl border border-app-border group hover:border-app-primary/30 transition-all">
                       <div className="text-center min-w-[80px]">
-                        <p className="text-sm font-bold text-white">{timeStr}</p>
-                        {!isToday && <p className="text-[10px] text-[#C5C6C7]/50 font-bold uppercase">{dateStr}</p>}
-                        <p className="text-[10px] text-[#45A29E] font-bold uppercase">{item.duration}m</p>
+                        <p className="text-sm font-bold text-app-text">{timeStr}</p>
+                        {!isToday && <p className="text-[10px] text-app-text-muted/50 font-bold uppercase">{dateStr}</p>}
+                        <p className="text-[10px] text-app-primary font-bold uppercase">{item.duration}m</p>
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white">{task?.category || 'Unknown Task'}</h4>
+                          <h4 className="font-bold text-app-text">{task?.category || 'Unknown Task'}</h4>
                           {item.reminderSet && (
                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/10 text-orange-500 rounded text-[8px] font-black uppercase tracking-widest">
                               <Bell size={8} fill="currentColor" />
@@ -470,12 +473,12 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                             </div>
                           )}
                         </div>
-                        <p className="text-xs text-[#C5C6C7] uppercase tracking-widest">{task?.section || 'N/A'}</p>
+                        <p className="text-xs text-app-text-muted uppercase tracking-widest">{task?.section || 'N/A'}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => task && onStartTask(task)}
-                          className="p-2 text-[#45A29E] hover:bg-[#45A29E]/10 rounded-lg transition-all"
+                          className="p-2 text-app-primary hover:bg-app-primary/10 rounded-lg transition-all"
                         >
                           <Play size={18} />
                         </button>
@@ -487,7 +490,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                               console.error("Failed to delete schedule:", e);
                             }
                           }}
-                          className="p-2 text-[#C5C6C7] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          className="p-2 text-app-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -499,13 +502,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
             </div>
           </div>
 
-          <div className="bg-[#45A29E]/5 p-6 rounded-3xl border border-[#45A29E]/20 flex items-center gap-4">
-            <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center">
-              <Bell className="text-[#45A29E]" size={24} />
+          <div className="bg-app-primary/5 p-6 rounded-3xl border border-app-primary/20 flex items-center gap-4">
+            <div className="w-12 h-12 bg-app-primary/10 rounded-2xl flex items-center justify-center">
+              <Bell className="text-app-primary" size={24} />
             </div>
             <div>
-              <h4 className="font-bold text-white">Enable Notifications</h4>
-              <p className="text-xs text-[#C5C6C7]">Get reminded before your scheduled study sessions.</p>
+              <h4 className="font-bold text-app-text">Enable Notifications</h4>
+              <p className="text-xs text-app-text-muted">Get reminded before your scheduled study sessions.</p>
             </div>
             <button 
               onClick={onRequestPermission}
@@ -514,7 +517,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 "ml-auto px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
                 notificationPermission === 'granted' 
                   ? "bg-green-500/20 text-green-500 cursor-default" 
-                  : "bg-[#45A29E] text-[#0B0C10] hover:bg-[#66FCF1]"
+                  : "bg-app-primary text-app-bg hover:bg-app-accent"
               )}
             >
               {notificationPermission === 'granted' ? 'Enabled' : 'Enable'}
@@ -526,16 +529,16 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
       {activeView === 'goals' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-[#1F2833] p-8 rounded-[2.5rem] border border-[#45A29E]/10">
+            <div className="bg-app-surface p-8 rounded-[2.5rem] border border-app-primary/10">
               <div className="flex items-center gap-3 mb-6">
-                <TrendingUp className="text-[#45A29E]" size={24} />
-                <h3 className="text-xl font-bold text-white">Daily Goals</h3>
+                <TrendingUp className="text-app-primary" size={24} />
+                <h3 className="text-xl font-bold text-app-text">Daily Goals</h3>
               </div>
               
               <div className="space-y-6">
                 {(!user.goals || user.goals.length === 0) ? (
                   <div className="text-center py-8">
-                    <p className="text-[#C5C6C7] text-sm">No goals set for today.</p>
+                    <p className="text-app-text-muted text-sm">No goals set for today.</p>
                   </div>
                 ) : (
                   user.goals.map((goal: DailyGoal) => (
@@ -563,16 +566,16 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               </div>
             </div>
 
-            <div className="bg-[#0B0C10] p-8 rounded-[2.5rem] border border-[#45A29E]/10 flex flex-col justify-between">
+            <div className="bg-app-bg p-8 rounded-[2.5rem] border border-app-primary/10 flex flex-col justify-between">
               <div>
-                <h3 className="text-xl font-bold text-white mb-2">Set New Goal</h3>
-                <p className="text-sm text-[#C5C6C7] mb-6">Challenge yourself to improve faster.</p>
+                <h3 className="text-xl font-bold text-app-text mb-2">Set New Goal</h3>
+                <p className="text-sm text-app-text-muted mb-6">Challenge yourself to improve faster.</p>
                 
                 <div className="space-y-4">
                   <select 
                     value={newGoal.type}
                     onChange={(e) => setNewGoal({ ...newGoal, type: e.target.value as 'tasks' | 'time' })}
-                    className="w-full bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                    className="w-full bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   >
                     <option value="tasks">Tasks per day</option>
                     <option value="time">Minutes per day</option>
@@ -582,7 +585,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                     placeholder="Enter target value"
                     value={newGoal.target}
                     onChange={(e) => setNewGoal({ ...newGoal, target: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-[#1F2833] text-white border border-white/10 rounded-xl p-3 outline-none focus:border-[#45A29E]"
+                    className="w-full bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   />
                 </div>
               </div>
@@ -594,7 +597,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                     console.error("Failed to add goal:", e);
                   }
                 }}
-                className="mt-8 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                className="mt-8 w-full py-4 bg-app-primary text-app-bg rounded-2xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all"
               >
                 Add Goal
               </button>
@@ -611,14 +614,14 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-end">
-        <span className="text-xs font-bold text-[#C5C6C7] uppercase tracking-wider">{label}</span>
-        <span className="text-sm font-bold text-white">{current} / {target}</span>
+        <span className="text-xs font-bold text-app-text-muted uppercase tracking-wider">{label}</span>
+        <span className="text-sm font-bold text-app-text">{current} / {target}</span>
       </div>
-      <div className="h-2 bg-[#0B0C10] rounded-full overflow-hidden">
+      <div className="h-2 bg-app-bg rounded-full overflow-hidden">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${percent}%` }}
-          className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1]"
+          className="h-full bg-gradient-to-r from-app-primary to-app-accent"
         />
       </div>
     </div>
@@ -627,6 +630,22 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests'>('dashboard');
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('isDarkMode');
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
+    if (!isDarkMode) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [isDarkMode]);
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
@@ -900,37 +919,51 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0B0C10] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-[#45A29E]/20 border-t-[#45A29E] rounded-full animate-spin" />
+      <div className="min-h-screen bg-app-bg flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-app-primary/20 border-t-app-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!user) {
-    return <LandingPage onLogin={login} onGuest={continueAsGuest} authError={authError} onClearError={() => setAuthError(null)} />;
+    return (
+      <LandingPage 
+        onLogin={login} 
+        onGuest={continueAsGuest} 
+        authError={authError} 
+        onClearError={() => setAuthError(null)} 
+        isDarkMode={isDarkMode}
+        setIsDarkMode={setIsDarkMode}
+      />
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-[#C5C6C7] font-sans selection:bg-[#45A29E]/30">
+    <div className="min-h-screen bg-app-bg text-app-text font-sans selection:bg-app-primary/30 transition-colors duration-300">
       {/* Background Glows */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#45A29E]/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#66FCF1]/5 blur-[120px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-app-primary/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-app-accent/5 blur-[120px] rounded-full" />
       </div>
 
       <div className="relative z-10 flex flex-col h-screen">
         {/* Header */}
-        <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#1F2833] bg-[#0B0C10]/80 backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
-              <Zap className="text-[#0B0C10] fill-current" size={16} />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tighter text-white font-display">
-              PTE <span className="text-[#45A29E]">NINJA</span>
+        <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <Logo size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tighter text-app-text font-display">
+              PTE <span className="text-app-primary">NINJA</span>
             </h1>
           </div>
           
           <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
+              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
             {user && (
               <div className={cn(
                 "hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
@@ -945,26 +978,26 @@ function AppContent() {
             )}
             <button 
               onClick={() => setShowStreakModal(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#1F2833] rounded-full border border-[#45A29E]/20 hover:border-[#45A29E]/50 transition-all"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-app-surface rounded-full border border-app-primary/20 hover:border-app-primary/50 transition-all"
             >
               <Flame className="text-orange-500" size={16} />
-              <span className="text-sm font-bold text-white">{currentStreak} DAY STREAK</span>
+              <span className="text-sm font-bold text-app-text">{currentStreak} DAY STREAK</span>
             </button>
             <button 
               onClick={() => setActiveTab('help')}
-              className="p-2 hover:bg-[#1F2833] rounded-full transition-colors"
+              className="p-2 hover:bg-app-surface rounded-full transition-colors"
             >
-              <Settings size={20} />
+              <Settings size={20} className="text-app-text-muted hover:text-app-primary" />
             </button>
             <button 
               onClick={() => setActiveTab('profile')}
-              className="w-10 h-10 rounded-full bg-gradient-to-br from-[#45A29E] to-[#66FCF1] p-[2px]"
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-app-primary to-app-accent p-[2px]"
             >
-              <div className="w-full h-full rounded-full bg-[#0B0C10] flex items-center justify-center overflow-hidden">
+              <div className="w-full h-full rounded-full bg-app-bg flex items-center justify-center overflow-hidden">
                 {user?.displayName ? (
                   <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=45A29E&color=0B0C10`} alt="User" className="w-full h-full object-cover" />
                 ) : (
-                  <User size={20} className="text-[#45A29E]" />
+                  <User size={20} className="text-app-primary" />
                 )}
               </div>
             </button>
@@ -981,6 +1014,7 @@ function AppContent() {
                 user={user}
                 onStartTask={(task) => {
                   setSelectedTask(task);
+                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }} 
                 onHoverTask={handleHoverTask}
@@ -1012,6 +1046,7 @@ function AppContent() {
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
                   setSelectedTask(task);
+                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }}
                 notificationPermission={notificationPermission}
@@ -1036,6 +1071,7 @@ function AppContent() {
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
                   setSelectedTask(task);
+                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }}
               />
@@ -1045,6 +1081,7 @@ function AppContent() {
                 user={user} 
                 onLogout={logout} 
                 onUpgrade={() => setShowSubscriptionModal(true)}
+                isDarkMode={isDarkMode}
               />
             ) : activeTab === 'help' ? (
               <HelpView 
@@ -1071,7 +1108,7 @@ function AppContent() {
         </main>
 
         {/* Navigation Bar */}
-        <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-[#1F2833] bg-[#0B0C10]/90 backdrop-blur-xl sticky bottom-0 z-50">
+        <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/90 backdrop-blur-xl sticky bottom-0 z-50">
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
           <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
           <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
@@ -1116,6 +1153,7 @@ function AppContent() {
             onClose={() => !isAccessRestricted && setShowSubscriptionModal(false)}
             onLogin={login}
             isAccessRestricted={isAccessRestricted}
+            isDarkMode={isDarkMode}
           />
         )}
         {showStreakModal && (
@@ -1154,32 +1192,32 @@ function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], 
   const todayStr = new Date().toISOString().split('T')[0];
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0C10]/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/90 backdrop-blur-md">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="w-full max-w-md bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-6 shadow-2xl"
+        className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-6 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+          <h3 className="text-xl font-bold text-app-text flex items-center gap-2">
             <Flame className="text-orange-500" size={24} />
             Training Streak
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-app-text-muted hover:text-app-primary">
             <X size={20} />
           </button>
         </div>
         
         <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} className="p-1 hover:text-[#45A29E] transition-colors"><ChevronRight className="rotate-180" /></button>
-          <span className="font-bold text-white">{monthName} {year}</span>
-          <button onClick={nextMonth} className="p-1 hover:text-[#45A29E] transition-colors"><ChevronRight /></button>
+          <button onClick={prevMonth} className="p-1 hover:text-app-primary transition-colors"><ChevronRight className="rotate-180" /></button>
+          <span className="font-bold text-app-text">{monthName} {year}</span>
+          <button onClick={nextMonth} className="p-1 hover:text-app-primary transition-colors"><ChevronRight /></button>
         </div>
         
         <div className="grid grid-cols-7 gap-1 mb-2">
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-            <div key={`${d}-${i}`} className="text-center text-[10px] font-bold text-[#C5C6C7]/50 py-2">{d}</div>
+            <div key={`${d}-${i}`} className="text-center text-[10px] font-bold text-app-text-muted/50 py-2">{d}</div>
           ))}
           {Array.from({ length: startDay }).map((_, i) => (
             <div key={`empty-${i}`} />
@@ -1195,32 +1233,32 @@ function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], 
                 key={day} 
                 className={cn(
                   "aspect-square flex items-center justify-center rounded-lg text-sm font-bold transition-all relative",
-                  logged ? "bg-[#45A29E] text-[#0B0C10] shadow-[0_0_10px_rgba(69,162,158,0.3)]" : "bg-[#0B0C10] text-[#C5C6C7]/30",
-                  isToday && !logged && "border border-[#45A29E]/50"
+                  logged ? "bg-app-primary text-app-bg shadow-[0_0_10px_rgba(69,162,158,0.3)]" : "bg-app-bg text-app-text-muted/30",
+                  isToday && !logged && "border border-app-primary/50"
                 )}
               >
                 {day}
                 {isToday && (
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#66FCF1] rounded-full" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full" />
                 )}
               </div>
             );
           })}
         </div>
         
-        <div className="mt-6 p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10 flex items-center justify-between">
+        <div className="mt-6 p-4 bg-app-bg rounded-2xl border border-app-primary/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
               <Flame className="text-orange-500" size={20} />
             </div>
             <div>
-              <p className="text-xs text-[#C5C6C7]/50 uppercase font-bold tracking-widest">Current Streak</p>
-              <p className="text-xl font-black text-white">{calculateStreak(activityLog)} Days</p>
+              <p className="text-xs text-app-text-muted/50 uppercase font-bold tracking-widest">Current Streak</p>
+              <p className="text-xl font-black text-app-text">{calculateStreak(activityLog)} Days</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[#C5C6C7]/50 uppercase font-bold tracking-widest">Total Days</p>
-            <p className="text-xl font-black text-[#45A29E]">{activityLog.length}</p>
+            <p className="text-xs text-app-text-muted/50 uppercase font-bold tracking-widest">Total Days</p>
+            <p className="text-xl font-black text-app-primary">{activityLog.length}</p>
           </div>
         </div>
       </motion.div>
@@ -1233,37 +1271,37 @@ import { POLICIES } from './data/policies';
 function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
   const policy = POLICIES[type];
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0C10]/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-3xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8 relative"
+        className="w-full max-w-3xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-8 relative"
       >
         <button 
           onClick={onClose}
           className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full transition-colors"
         >
-          <X size={24} className="text-[#C5C6C7]" />
+          <X size={24} className="text-app-text-muted hover:text-app-primary" />
         </button>
         
         <div className="space-y-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center">
-              <ShieldCheck className="text-[#45A29E]" size={28} />
+            <div className="w-12 h-12 bg-app-primary/10 rounded-2xl flex items-center justify-center">
+              <ShieldCheck className="text-app-primary" size={28} />
             </div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">{policy.title}</h2>
+            <h2 className="text-3xl font-bold text-app-text tracking-tight">{policy.title}</h2>
           </div>
           
           <div 
-            className="text-[#C5C6C7] leading-relaxed space-y-4 prose prose-invert max-w-none"
+            className="text-app-text-muted leading-relaxed space-y-4 prose prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: policy.content }}
           />
           
-          <div className="pt-8 border-t border-white/5 flex justify-end">
+          <div className="pt-8 border-t border-app-border flex justify-end">
             <button 
               onClick={onClose}
-              className="px-8 py-3 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all"
+              className="px-8 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
             >
               Close
             </button>
@@ -1274,11 +1312,18 @@ function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: 
   );
 }
 
-function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: () => void, onGuest: () => void, authError: string | null, onClearError: () => void }) {
+function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, setIsDarkMode }: { 
+  onLogin: () => void, 
+  onGuest: () => void, 
+  authError: string | null, 
+  onClearError: () => void,
+  isDarkMode: boolean,
+  setIsDarkMode: (val: boolean) => void
+}) {
   const [activePolicy, setActivePolicy] = useState<keyof typeof POLICIES | null>(null);
 
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-[#C5C6C7] font-sans selection:bg-[#45A29E]/30 overflow-x-hidden">
+    <div className="min-h-screen bg-app-bg text-app-text-muted font-sans selection:bg-app-primary/30 overflow-x-hidden transition-colors duration-300">
       <AnimatePresence>
         {activePolicy && (
           <PolicyModal type={activePolicy} onClose={() => setActivePolicy(null)} />
@@ -1313,25 +1358,30 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       </AnimatePresence>
       {/* Background Glows */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[#45A29E]/5 blur-[150px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[#66FCF1]/5 blur-[150px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-app-primary/5 blur-[150px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-app-accent/5 blur-[150px] rounded-full" />
       </div>
 
       {/* Navbar */}
       <nav className="relative z-20 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(69,162,158,0.3)] flex-shrink-0 overflow-hidden">
-            <Zap className="text-[#0B0C10] fill-current" size={20} />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tighter text-white font-display">
-            PTE <span className="text-[#45A29E]">NINJA</span>
+        <div className="flex items-center gap-3">
+          <Logo size={48} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
+          <h1 className="text-2xl font-bold tracking-tighter text-app-text font-display">
+            PTE <span className="text-app-primary">NINJA</span>
           </h1>
         </div>
-        <div className="flex items-center gap-6">
-          <button onClick={onLogin} className="text-sm font-bold text-white hover:text-[#45A29E] transition-colors">Sign In</button>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
+            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button onClick={onLogin} className="text-sm font-bold text-app-text hover:text-app-primary transition-colors">Sign In</button>
           <button 
             onClick={onLogin}
-            className="px-6 py-2.5 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+            className="px-6 py-2.5 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.2)]"
           >
             Get Started
           </button>
@@ -1346,28 +1396,28 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
           transition={{ duration: 0.8 }}
           className="space-y-8"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1F2833] rounded-full border border-[#45A29E]/20 text-xs font-bold tracking-widest text-[#45A29E] uppercase">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase">
             <Star size={14} className="fill-current" />
             The Ultimate AI PTE Trainer
           </div>
-          <h2 className="text-6xl md:text-8xl font-black text-white tracking-tighter leading-[0.9]">
+          <h2 className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
             MASTER THE PTE <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#45A29E] to-[#66FCF1]">WITH AI PRECISION</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">WITH AI PRECISION</span>
           </h2>
-          <p className="text-xl text-[#C5C6C7] max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
             Stop guessing your score. Get real-time AI feedback on your speaking, writing, reading, and listening. Practice with the most accurate PTE simulation available.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button 
               onClick={onLogin}
-              className="group flex items-center gap-3 px-10 py-5 bg-[#45A29E] text-[#0B0C10] font-bold text-lg rounded-2xl hover:bg-[#66FCF1] transition-all shadow-[0_0_30px_rgba(69,162,158,0.3)]"
+              className="group flex items-center gap-3 px-10 py-5 bg-app-primary text-app-bg font-bold text-lg rounded-2xl hover:bg-app-accent transition-all shadow-lg shadow-app-primary/30"
             >
               Start Training Now
               <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
             <button 
               onClick={onGuest}
-              className="px-10 py-5 bg-transparent border border-[#45A29E]/30 text-[#45A29E] font-bold text-lg rounded-2xl hover:bg-[#45A29E]/10 transition-all"
+              className="px-10 py-5 bg-transparent border border-app-primary/30 text-app-primary font-bold text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
             >
               Try Guest Access
             </button>
@@ -1376,7 +1426,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       </header>
 
       {/* Features Grid */}
-      <section className="relative z-10 py-32 px-6 bg-[#0B0C10]">
+      <section className="relative z-10 py-32 px-6 bg-app-bg">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <FeatureCard 
@@ -1399,7 +1449,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       </section>
 
       {/* Stats Section */}
-      <section className="relative z-10 py-32 px-6 border-y border-[#1F2833]">
+      <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
           <StatItem value="98%" label="Accuracy Rate" />
           <StatItem value="50k+" label="Practice Tasks" />
@@ -1409,58 +1459,56 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 py-20 px-6 border-t border-[#1F2833]">
+      <footer className="relative z-10 py-20 px-6 border-t border-app-border">
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
             <div className="space-y-6">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#45A29E] rounded-lg flex items-center justify-center">
-                  <Zap className="text-[#0B0C10] fill-current" size={18} />
-                </div>
-                <h1 className="text-xl font-bold tracking-tighter text-white">
-                  PTE <span className="text-[#45A29E]">NINJA</span>
+              <div className="flex items-center gap-3">
+                <Logo size={32} />
+                <h1 className="text-xl font-bold tracking-tighter text-app-text">
+                  PTE <span className="text-app-primary">NINJA</span>
                 </h1>
               </div>
-              <p className="text-sm text-[#C5C6C7]/60 leading-relaxed">
+              <p className="text-sm text-app-text-muted/60 leading-relaxed">
                 The ultimate AI-powered PTE training platform. Master your future with precision scoring and real-time feedback.
               </p>
             </div>
             
             <div className="space-y-6">
-              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Training</h4>
-              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
-                <li><button className="hover:text-[#45A29E] transition-colors">Speaking Dojo</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">Writing Dojo</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">Reading Dojo</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">Listening Dojo</button></li>
+              <h4 className="text-sm font-bold text-app-text uppercase tracking-widest">Training</h4>
+              <ul className="space-y-4 text-sm text-app-text-muted/60">
+                <li><button className="hover:text-app-primary transition-colors">Speaking Dojo</button></li>
+                <li><button className="hover:text-app-primary transition-colors">Writing Dojo</button></li>
+                <li><button className="hover:text-app-primary transition-colors">Reading Dojo</button></li>
+                <li><button className="hover:text-app-primary transition-colors">Listening Dojo</button></li>
               </ul>
             </div>
 
             <div className="space-y-6">
-              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Resources</h4>
-              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
-                <li><button className="hover:text-[#45A29E] transition-colors">Vocabulary Bank</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">Exam Patterns</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">Study Roadmap</button></li>
-                <li><button className="hover:text-[#45A29E] transition-colors">AI Scoring Guide</button></li>
+              <h4 className="text-sm font-bold text-app-text uppercase tracking-widest">Resources</h4>
+              <ul className="space-y-4 text-sm text-app-text-muted/60">
+                <li><button className="hover:text-app-primary transition-colors">Vocabulary Bank</button></li>
+                <li><button className="hover:text-app-primary transition-colors">Exam Patterns</button></li>
+                <li><button className="hover:text-app-primary transition-colors">Study Roadmap</button></li>
+                <li><button className="hover:text-app-primary transition-colors">AI Scoring Guide</button></li>
               </ul>
             </div>
 
             <div className="space-y-6">
-              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Legal</h4>
-              <ul className="space-y-4 text-sm text-[#C5C6C7]/60">
-                <li><button onClick={() => setActivePolicy('disclaimer')} className="hover:text-[#45A29E] transition-colors">Disclaimer</button></li>
-                <li><button onClick={() => setActivePolicy('terms')} className="hover:text-[#45A29E] transition-colors">Terms & Conditions</button></li>
-                <li><button onClick={() => setActivePolicy('privacy')} className="hover:text-[#45A29E] transition-colors">Privacy Policy</button></li>
-                <li><button onClick={() => setActivePolicy('refund')} className="hover:text-[#45A29E] transition-colors">Refund / Cancellation Policy</button></li>
+              <h4 className="text-sm font-bold text-app-text uppercase tracking-widest">Legal</h4>
+              <ul className="space-y-4 text-sm text-app-text-muted/60">
+                <li><button onClick={() => setActivePolicy('disclaimer')} className="hover:text-app-primary transition-colors">Disclaimer</button></li>
+                <li><button onClick={() => setActivePolicy('terms')} className="hover:text-app-primary transition-colors">Terms & Conditions</button></li>
+                <li><button onClick={() => setActivePolicy('privacy')} className="hover:text-app-primary transition-colors">Privacy Policy</button></li>
+                <li><button onClick={() => setActivePolicy('refund')} className="hover:text-app-primary transition-colors">Refund / Cancellation Policy</button></li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-12 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
-            <p className="text-xs text-[#C5C6C7]/30">All rights reserved © PTE Ninja, 2026</p>
+          <div className="pt-12 border-t border-app-border flex flex-col md:flex-row items-center justify-between gap-6">
+            <p className="text-xs text-app-text-muted/30">All rights reserved © PTE Ninja, 2026</p>
             <div className="flex items-center gap-6">
-              <span className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest flex items-center gap-2">
+              <span className="text-[10px] font-bold text-app-primary uppercase tracking-widest flex items-center gap-2">
                 <Shield size={12} /> Secure Payments with Stripe
               </span>
             </div>
@@ -1473,12 +1521,12 @@ function LandingPage({ onLogin, onGuest, authError, onClearError }: { onLogin: (
 
 function FeatureCard({ icon: Icon, title, description }: { icon: any, title: string, description: string }) {
   return (
-    <div className="p-10 bg-[#1F2833] border border-[#45A29E]/10 rounded-3xl hover:border-[#45A29E]/40 transition-all group">
-      <div className="w-14 h-14 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-[#45A29E] transition-colors">
-        <Icon className="text-[#45A29E] group-hover:text-[#0B0C10]" size={28} />
+    <div className="p-10 bg-app-surface border border-app-primary/10 rounded-3xl hover:border-app-primary/40 transition-all group">
+      <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-app-primary transition-colors">
+        <Icon className="text-app-primary group-hover:text-app-bg" size={28} />
       </div>
-      <h3 className="text-2xl font-bold text-white mb-4">{title}</h3>
-      <p className="text-[#C5C6C7] leading-relaxed">{description}</p>
+      <h3 className="text-2xl font-bold text-app-text mb-4">{title}</h3>
+      <p className="text-app-text-muted leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -1486,8 +1534,8 @@ function FeatureCard({ icon: Icon, title, description }: { icon: any, title: str
 function StatItem({ value, label }: { value: string, label: string }) {
   return (
     <div className="space-y-2">
-      <div className="text-5xl font-black text-white tracking-tighter">{value}</div>
-      <div className="text-sm font-bold text-[#45A29E] uppercase tracking-widest">{label}</div>
+      <div className="text-5xl font-black text-app-text tracking-tighter">{value}</div>
+      <div className="text-sm font-bold text-app-primary uppercase tracking-widest">{label}</div>
     </div>
   );
 }
@@ -1500,7 +1548,7 @@ import { CheckoutForm } from './components/CheckoutForm';
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
-function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean }) {
+function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean }) {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1549,12 +1597,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#0B0C10]/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-4xl bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 shadow-2xl my-8"
+        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-8"
       >
         <div className="flex flex-col items-center text-center space-y-6">
           {!selectedPlan ? (
@@ -1569,10 +1617,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
               </div>
               
               <div className="space-y-2">
-                <h2 className="text-3xl font-bold text-white tracking-tight">
+                <h2 className="text-3xl font-bold text-app-text tracking-tight">
                   {user?.subscriptionStatus === 'expired' ? 'Subscription Expired' : 'Upgrade to Pro'}
                 </h2>
-                <p className="text-[#C5C6C7] text-lg">Master the PTE with our premium AI-powered practice platform</p>
+                <p className="text-app-text-muted text-lg">Master the PTE with our premium AI-powered practice platform</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-4">
@@ -1586,30 +1634,30 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
                         console.error("Failed to select plan:", e);
                       }
                     }}
-                    className={`relative bg-[#0B0C10] border ${plan.isSpecial ? 'border-[#66FCF1] shadow-[0_0_20px_rgba(102,252,241,0.1)]' : 'border-[#45A29E]/20'} rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-[#45A29E] transition-all group cursor-pointer overflow-hidden`}
+                    className={`relative bg-app-bg border ${plan.isSpecial ? 'border-app-accent shadow-[0_0_20px_rgba(102,252,241,0.1)]' : 'border-app-primary/20'} rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-app-primary transition-all group cursor-pointer overflow-hidden`}
                   >
                     {plan.badge && (
-                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl ${plan.isSpecial ? 'bg-[#66FCF1] text-[#0B0C10]' : 'bg-[#45A29E] text-[#0B0C10]'}`}>
+                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl ${plan.isSpecial ? 'bg-app-accent text-app-bg' : 'bg-app-primary text-app-bg'}`}>
                         {plan.badge}
                       </div>
                     )}
                     
-                    <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                    <h3 className="text-lg font-bold text-app-text">{plan.name}</h3>
                     
                     <div className="flex flex-col items-center">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#C5C6C7]/40 line-through font-medium">${plan.originalPrice}</span>
-                        <span className="text-3xl font-bold text-[#66FCF1]">${plan.price}</span>
+                        <span className="text-sm text-app-text-muted/40 line-through font-medium">${plan.originalPrice}</span>
+                        <span className="text-3xl font-bold text-app-accent">${plan.price}</span>
                       </div>
-                      <span className="text-xs text-[#C5C6C7]/50">/{plan.interval}</span>
+                      <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
                     </div>
 
-                    <ul className="text-xs text-[#C5C6C7] space-y-2 text-left w-full">
-                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Full Question Bank</li>
-                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> AI Scoring</li>
-                      <li className="flex items-center gap-2"><Check size={12} className="text-[#45A29E]" /> Detailed Feedback</li>
+                    <ul className="text-xs text-app-text-muted space-y-2 text-left w-full">
+                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Full Question Bank</li>
+                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> AI Scoring</li>
+                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Detailed Feedback</li>
                     </ul>
-                    <button className={`w-full py-2 ${plan.isSpecial ? 'bg-[#66FCF1]' : 'bg-[#45A29E]'} text-[#0B0C10] font-bold rounded-xl group-hover:bg-white transition-all`}>
+                    <button className={`w-full py-2 ${plan.isSpecial ? 'bg-app-accent' : 'bg-app-primary'} text-app-bg font-bold rounded-xl group-hover:bg-white transition-all`}>
                       Select
                     </button>
                   </div>
@@ -1620,15 +1668,15 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
             <div className="w-full space-y-8">
               <div className="flex items-center justify-between">
                 <div className="text-left">
-                  <h3 className="text-2xl font-bold text-white">{selectedPlan.name} Plan</h3>
-                  <p className="text-[#C5C6C7] text-sm">Secure Checkout</p>
+                  <h3 className="text-2xl font-bold text-app-text">{selectedPlan.name} Plan</h3>
+                  <p className="text-app-text-muted text-sm">Secure Checkout</p>
                 </div>
                 <div className="text-right">
                   <div className="flex items-center gap-2 justify-end">
-                    <span className="text-sm text-[#C5C6C7]/40 line-through">${selectedPlan.originalPrice}</span>
-                    <div className="text-3xl font-bold text-[#66FCF1]">${selectedPlan.price}</div>
+                    <span className="text-sm text-app-text-muted/40 line-through">${selectedPlan.originalPrice}</span>
+                    <div className="text-3xl font-bold text-app-accent">${selectedPlan.price}</div>
                   </div>
-                  <div className="text-xs text-[#C5C6C7]/50">AUD Total</div>
+                  <div className="text-xs text-app-text-muted/50">AUD Total</div>
                 </div>
               </div>
 
@@ -1639,11 +1687,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
                     options={{ 
                       clientSecret,
                       appearance: {
-                        theme: 'night',
+                        theme: isDarkMode ? 'night' : 'stripe',
                         variables: {
-                          colorPrimary: '#45A29E',
-                          colorBackground: '#1F2833',
-                          colorText: '#C5C6C7',
+                          colorPrimary: isDarkMode ? '#45A29E' : '#0D9488',
+                          colorBackground: isDarkMode ? '#1F2833' : '#FFFFFF',
+                          colorText: isDarkMode ? '#C5C6C7' : '#0F172A',
                           colorDanger: '#df1b41',
                           fontFamily: 'Inter, system-ui, sans-serif',
                           spacingUnit: '4px',
@@ -1674,7 +1722,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
                       <AlertCircle size={20} />
                       Payment Gateway Not Configured
                     </div>
-                    <p className="text-xs text-[#C5C6C7]">
+                    <p className="text-xs text-app-text-muted">
                       The Stripe publishable key is missing. Please configure <code className="bg-black/30 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> in the environment variables to enable payments.
                     </p>
                     <button 
@@ -1687,8 +1735,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
                 )
               ) : (
                 <div className="py-20 flex flex-col items-center justify-center space-y-4">
-                  <Loader2 className="animate-spin text-[#45A29E]" size={40} />
-                  <p className="text-[#C5C6C7] animate-pulse">Initializing secure payment gateway...</p>
+                  <Loader2 className="animate-spin text-app-primary" size={40} />
+                  <p className="text-app-text-muted animate-pulse">Initializing secure payment gateway...</p>
                 </div>
               )}
             </div>
@@ -1699,14 +1747,14 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
               "w-full p-4 border rounded-2xl flex items-center gap-4 text-left transition-colors",
               isAccessRestricted 
                 ? "bg-orange-500/10 border-orange-500/20" 
-                : "bg-[#45A29E]/10 border-[#45A29E]/20"
+                : "bg-app-primary/10 border-app-primary/20"
             )}>
-              <User className={isAccessRestricted ? "text-orange-500" : "text-[#45A29E]"} size={24} />
+              <User className={isAccessRestricted ? "text-orange-500" : "text-app-primary"} size={24} />
               <div>
-                <p className={cn("font-bold", isAccessRestricted ? "text-orange-500" : "text-[#45A29E]")}>
+                <p className={cn("font-bold", isAccessRestricted ? "text-orange-500" : "text-app-primary")}>
                   {isAccessRestricted ? 'Guest Access Expired' : 'Guest Access Active'}
                 </p>
-                <p className="text-xs text-[#C5C6C7]">
+                <p className="text-xs text-app-text-muted">
                   {isAccessRestricted 
                     ? 'Sign up now to get a 14-day free trial!' 
                     : 'You have 3 days of free access. Sign up to save your progress!'}
@@ -1716,7 +1764,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
                 onClick={onLogin}
                 className={cn(
                   "ml-auto px-4 py-2 font-bold rounded-xl transition-all",
-                  isAccessRestricted ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-[#45A29E] text-[#0B0C10] hover:bg-[#66FCF1]"
+                  isAccessRestricted ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-app-primary text-app-bg hover:bg-app-accent"
                 )}
               >
                 Sign Up
@@ -1727,7 +1775,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted }: { use
           {!isAccessRestricted && (
             <button 
               onClick={onClose}
-              className="text-[#C5C6C7]/50 hover:text-white transition-colors"
+              className="text-app-text-muted/50 hover:text-app-text transition-colors"
             >
               Maybe later
             </button>
@@ -1786,15 +1834,15 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
       className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+        <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
           <ChevronRight className="rotate-180" size={24} />
         </button>
-        <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
-          <Settings className="text-[#45A29E]" size={28} />
+        <div className="p-3 rounded-2xl bg-app-primary/10 shrink-0">
+          <Settings className="text-app-primary" size={28} />
         </div>
         <div>
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight">Help & Support</h2>
-          <p className="text-sm text-[#C5C6C7]">How can we help you today?</p>
+          <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Help & Support</h2>
+          <p className="text-sm text-app-text-muted">How can we help you today?</p>
         </div>
       </div>
 
@@ -1806,27 +1854,27 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
             onClick={option.action}
-            className="flex items-start gap-4 p-6 bg-[#1F2833] border border-[#45A29E]/10 rounded-3xl hover:border-[#45A29E]/40 transition-all text-left group"
+            className="flex items-start gap-4 p-6 bg-app-surface border border-app-primary/10 rounded-3xl hover:border-app-primary/40 transition-all text-left group"
           >
-            <div className="w-12 h-12 bg-[#0B0C10] rounded-2xl flex items-center justify-center group-hover:bg-[#45A29E] transition-colors shrink-0">
-              <option.icon size={24} className="text-[#45A29E] group-hover:text-[#0B0C10] transition-colors" />
+            <div className="w-12 h-12 bg-app-bg rounded-2xl flex items-center justify-center group-hover:bg-app-primary transition-colors shrink-0">
+              <option.icon size={24} className="text-app-primary group-hover:text-app-bg transition-colors" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white group-hover:text-[#66FCF1] transition-colors">{option.title}</h3>
-              <p className="text-sm text-[#C5C6C7] leading-relaxed mt-1">{option.description}</p>
+              <h3 className="text-lg font-bold text-app-text group-hover:text-app-accent transition-colors">{option.title}</h3>
+              <p className="text-sm text-app-text-muted leading-relaxed mt-1">{option.description}</p>
             </div>
           </motion.button>
         ))}
       </div>
 
-      <div className="bg-[#45A29E]/5 p-8 rounded-[2.5rem] border border-[#45A29E]/10 text-center space-y-4">
-        <h3 className="text-xl font-bold text-white">Still have questions?</h3>
-        <p className="text-[#C5C6C7] max-w-md mx-auto">Check out our comprehensive FAQ or join our community of PTE Ninjas.</p>
+      <div className="bg-app-primary/5 p-8 rounded-[2.5rem] border border-app-primary/10 text-center space-y-4">
+        <h3 className="text-xl font-bold text-app-text">Still have questions?</h3>
+        <p className="text-app-text-muted max-w-md mx-auto">Check out our comprehensive FAQ or join our community of PTE Ninjas.</p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-          <button className="px-8 py-3 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all">
+          <button className="px-8 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all">
             View FAQ
           </button>
-          <button className="px-8 py-3 bg-transparent border border-[#45A29E]/30 text-[#45A29E] font-bold rounded-xl hover:bg-[#45A29E]/10 transition-all">
+          <button className="px-8 py-3 bg-transparent border border-app-primary/30 text-app-primary font-bold rounded-xl hover:bg-app-primary/10 transition-all">
             Join Discord
           </button>
         </div>
@@ -1835,7 +1883,7 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
   );
 }
 
-function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () => void, onUpgrade: () => void }) {
+function ProfileView({ user, onLogout, onUpgrade, isDarkMode }: { user: any, onLogout: () => void, onUpgrade: () => void, isDarkMode: boolean }) {
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
   const isActive = user?.subscriptionStatus === 'active';
@@ -1869,25 +1917,25 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
       exit={{ opacity: 0, y: -20 }}
       className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex flex-col sm:flex-row items-center gap-6 bg-[#1F2833] p-6 md:p-8 rounded-3xl border border-[#45A29E]/20">
-        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-[#45A29E] to-[#66FCF1] p-1 shrink-0">
-          <div className="w-full h-full rounded-full bg-[#0B0C10] flex items-center justify-center overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-center gap-6 bg-app-surface p-6 md:p-8 rounded-3xl border border-app-primary/20">
+        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-app-primary to-app-accent p-1 shrink-0">
+          <div className="w-full h-full rounded-full bg-app-bg flex items-center justify-center overflow-hidden">
             {user?.displayName ? (
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&size=128&background=45A29E&color=0B0C10`} alt="User" className="w-full h-full object-cover" />
+              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&size=128&background=${isDarkMode ? '45A29E' : '0D9488'}&color=${isDarkMode ? '0B0C10' : 'FFFFFF'}`} alt="User" className="w-full h-full object-cover" />
             ) : (
-              <User size={40} className="text-[#45A29E] md:w-12 md:h-12" />
+              <User size={40} className="text-app-primary md:w-12 md:h-12" />
             )}
           </div>
         </div>
         <div className="flex-1 text-center sm:text-left min-w-0">
-          <h2 className="text-2xl md:text-3xl font-bold text-white truncate">{user?.displayName || 'Sensei'}</h2>
-          <p className="text-[#C5C6C7] truncate text-sm md:text-base">{user?.email || 'Guest User'}</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-app-text truncate">{user?.displayName || 'Sensei'}</h2>
+          <p className="text-app-text-muted truncate text-sm md:text-base">{user?.email || 'Guest User'}</p>
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 md:gap-3 mt-3">
             <span className={cn("px-3 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase tracking-widest", getStatusColor())}>
               {user?.subscriptionStatus}
             </span>
             {(isTrial || isGuest) && (
-              <span className="text-[10px] md:text-xs text-[#C5C6C7]/50">
+              <span className="text-[10px] md:text-xs text-app-text-muted/50">
                 {getRemainingDays()} days remaining
               </span>
             )}
@@ -1902,15 +1950,15 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <div className="bg-[#1F2833] p-6 md:p-8 rounded-3xl border border-[#45A29E]/20 space-y-4 md:space-y-6">
+        <div className="bg-app-surface p-6 md:p-8 rounded-3xl border border-app-primary/20 space-y-4 md:space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-              <CreditCard className="text-[#45A29E]" size={20} /> Subscription
+            <h3 className="text-lg md:text-xl font-bold text-app-text flex items-center gap-2">
+              <CreditCard className="text-app-primary" size={20} /> Subscription
             </h3>
             {!isActive && (
               <button 
                 onClick={onUpgrade}
-                className="w-full sm:w-auto px-4 py-2 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all text-sm"
+                className="w-full sm:w-auto px-4 py-2 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all text-sm"
               >
                 Upgrade
               </button>
@@ -1918,17 +1966,17 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
           </div>
           
           <div className="space-y-3 md:space-y-4">
-            <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10">
-              <p className="text-[10px] md:text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Current Plan</p>
-              <p className="text-base md:text-lg font-bold text-white mt-1">
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
+              <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Current Plan</p>
+              <p className="text-base md:text-lg font-bold text-app-text mt-1">
                 {isActive ? `${user.planId?.toUpperCase()} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
             {isActive && (
-              <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10">
-                <p className="text-[10px] md:text-xs text-[#C5C6C7]/50 uppercase tracking-widest font-bold">Next Billing Date</p>
-                <p className="text-base md:text-lg font-bold text-white mt-1">
+              <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
+                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Next Billing Date</p>
+                <p className="text-base md:text-lg font-bold text-app-text mt-1">
                   {new Date(user.subscriptionEndsAt).toLocaleDateString()}
                 </p>
               </div>
@@ -1936,15 +1984,15 @@ function ProfileView({ user, onLogout, onUpgrade }: { user: any, onLogout: () =>
           </div>
         </div>
 
-        <div className="bg-[#1F2833] p-8 rounded-3xl border border-[#45A29E]/20 space-y-6">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="text-[#45A29E]" /> Account Security
+        <div className="bg-app-surface p-8 rounded-3xl border border-app-primary/20 space-y-6">
+          <h3 className="text-xl font-bold text-app-text flex items-center gap-2">
+            <ShieldCheck className="text-app-primary" /> Account Security
           </h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/10">
+            <div className="flex items-center justify-between p-4 bg-app-bg rounded-2xl border border-app-primary/10">
               <div>
-                <p className="text-sm font-bold text-white">Email Verified</p>
-                <p className="text-xs text-[#C5C6C7]/50">{user?.email ? 'Your email is verified' : 'Sign in to verify'}</p>
+                <p className="text-sm font-bold text-app-text">Email Verified</p>
+                <p className="text-xs text-app-text-muted/50">{user?.email ? 'Your email is verified' : 'Sign in to verify'}</p>
               </div>
               <div className={cn("w-6 h-6 rounded-full flex items-center justify-center", user?.email ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500")}>
                 {user?.email ? <Check size={14} /> : <X size={14} />}
@@ -1963,12 +2011,12 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1 transition-all duration-300 relative group flex-1 md:flex-none py-1",
-        active ? "text-[#45A29E]" : "text-[#C5C6C7] hover:text-white"
+        active ? "text-app-primary" : "text-app-text-muted hover:text-app-text"
       )}
     >
       <div className={cn(
         "p-1.5 md:p-2 rounded-xl transition-all",
-        active ? "bg-[#45A29E]/10" : "group-hover:bg-[#1F2833]"
+        active ? "bg-app-primary/10" : "group-hover:bg-app-surface"
       )}>
         <Icon size={20} className="md:w-6 md:h-6" />
       </div>
@@ -1976,7 +2024,7 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
       {active && (
         <motion.div 
           layoutId="nav-indicator"
-          className="absolute -bottom-1 md:-bottom-3 w-1 h-1 bg-[#45A29E] rounded-full shadow-[0_0_8px_#45A29E]"
+          className="absolute -bottom-1 md:-bottom-3 w-1 h-1 bg-app-primary rounded-full shadow-lg shadow-app-primary"
         />
       )}
     </button>
@@ -1988,12 +2036,12 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
     <div className="space-y-8 pb-20">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white font-display tracking-tight">Mock Tests</h2>
-          <p className="text-[#C5C6C7]">100 Full-length PTE Academic practice tests</p>
+          <h2 className="text-3xl font-bold text-app-text font-display tracking-tight">Mock Tests</h2>
+          <p className="text-app-text-muted">100 Full-length PTE Academic practice tests</p>
         </div>
         <button 
           onClick={onBack}
-          className="p-2 hover:bg-[#1F2833] rounded-full transition-colors"
+          className="p-2 hover:bg-app-surface rounded-full transition-colors"
         >
           <ChevronLeft size={24} />
         </button>
@@ -2010,7 +2058,7 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.01 }}
-              className="group relative bg-[#1F2833]/40 border border-[#45A29E]/10 rounded-3xl p-6 hover:border-[#45A29E]/30 transition-all overflow-hidden"
+              className="group relative bg-app-surface border border-app-primary/10 rounded-3xl p-6 hover:border-app-primary/30 transition-all overflow-hidden"
             >
               <div className="absolute top-0 right-0 p-4">
                 {isCompleted ? (
@@ -2019,29 +2067,29 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
                     Completed
                   </div>
                 ) : (
-                  <div className="text-[#45A29E]/40 text-[10px] font-bold uppercase tracking-widest">
+                  <div className="text-app-primary/40 text-[10px] font-bold uppercase tracking-widest">
                     Test {index + 1}
                   </div>
                 )}
               </div>
 
               <div className="space-y-4">
-                <div className="w-12 h-12 bg-[#45A29E]/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Trophy className="text-[#45A29E]" size={24} />
+                <div className="w-12 h-12 bg-app-primary/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Trophy className="text-app-primary" size={24} />
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold text-white mb-1">{test.title}</h3>
-                  <p className="text-xs text-[#C5C6C7] line-clamp-2">{test.description}</p>
+                  <h3 className="text-xl font-bold text-app-text mb-1">{test.title}</h3>
+                  <p className="text-xs text-app-text-muted line-clamp-2">{test.description}</p>
                 </div>
 
-                <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-[#C5C6C7]">
+                <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-app-text-muted">
                   <div className="flex items-center gap-1">
-                    <Clock size={12} className="text-[#45A29E]" />
+                    <Clock size={12} className="text-app-primary" />
                     {test.sections.reduce((sum, s) => sum + s.duration, 0)} MINS
                   </div>
                   <div className="flex items-center gap-1">
-                    <Target size={12} className="text-[#45A29E]" />
+                    <Target size={12} className="text-app-primary" />
                     {test.sections.reduce((sum, s) => sum + s.taskIds.length, 0)} TASKS
                   </div>
                 </div>
@@ -2049,18 +2097,18 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
                 {isCompleted && (
                   <div className="pt-2">
                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest mb-1">
-                      <span className="text-[#C5C6C7]">Best Score</span>
-                      <span className="text-[#45A29E]">{bestScore}</span>
+                      <span className="text-app-text-muted">Best Score</span>
+                      <span className="text-app-primary">{bestScore}</span>
                     </div>
-                    <div className="h-1 bg-[#0B0C10] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#45A29E]" style={{ width: `${bestScore}%` }} />
+                    <div className="h-1 bg-app-bg rounded-full overflow-hidden">
+                      <div className="h-full bg-app-primary" style={{ width: `${bestScore}%` }} />
                     </div>
                   </div>
                 )}
 
                 <button
                   onClick={() => onStartTest(test)}
-                  className="w-full py-3 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-lg shadow-[#45A29E]/10"
+                  className="w-full py-3 bg-app-primary text-app-bg rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
                 >
                   {isCompleted ? 'Retake Test' : 'Start Mock Test'}
                 </button>
@@ -2155,38 +2203,38 @@ function MockTestSession({
 
   if (finalResult) {
     return (
-      <div className="fixed inset-0 z-[100] bg-[#0B0C10] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] bg-app-bg/95 backdrop-blur-xl flex items-center justify-center p-4">
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-[#1F2833] rounded-[2.5rem] p-8 md:p-12 border border-[#45A29E]/20 max-w-2xl w-full text-center space-y-8"
+          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full text-center space-y-8 shadow-2xl"
         >
-          <div className="w-20 h-20 bg-[#45A29E]/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
-            <Trophy className="text-[#45A29E]" size={40} />
+          <div className="w-20 h-20 bg-app-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
+            <Trophy className="text-app-primary" size={40} />
           </div>
           
           <div>
-            <h2 className="text-3xl font-black text-white uppercase tracking-tight mb-2">Test Complete!</h2>
-            <p className="text-[#C5C6C7]">You've completed {test.title}. Here is your performance summary.</p>
+            <h2 className="text-3xl font-black text-app-text uppercase tracking-tight mb-2">Test Complete!</h2>
+            <p className="text-app-text-muted">You've completed {test.title}. Here is your performance summary.</p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(finalResult.sectionScores).map(([section, score]) => (
-              <div key={section} className="bg-[#0B0C10] p-4 rounded-2xl border border-[#45A29E]/10">
-                <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">{section}</p>
-                <p className="text-2xl font-black text-white">{score}</p>
+              <div key={section} className="bg-app-bg p-4 rounded-2xl border border-app-primary/10">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">{section}</p>
+                <p className="text-2xl font-black text-app-text">{score}</p>
               </div>
             ))}
           </div>
 
-          <div className="bg-[#0B0C10] p-8 rounded-3xl border border-[#45A29E]/20">
-            <p className="text-xs font-bold text-[#C5C6C7] uppercase tracking-widest mb-2">Overall PTE Score</p>
-            <p className="text-6xl font-black text-[#66FCF1] drop-shadow-[0_0_15px_rgba(102,252,241,0.3)]">{finalResult.overallScore}</p>
+          <div className="bg-app-bg p-8 rounded-3xl border border-app-primary/20">
+            <p className="text-xs font-bold text-app-text-muted uppercase tracking-widest mb-2">Overall PTE Score</p>
+            <p className="text-6xl font-black text-app-accent drop-shadow-lg shadow-app-accent/30">{finalResult.overallScore}</p>
           </div>
 
           <button 
             onClick={onClose}
-            className="w-full py-5 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+            className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20"
           >
             Back to Dojo
           </button>
@@ -2196,17 +2244,17 @@ function MockTestSession({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#0B0C10] flex flex-col">
-      <div className="px-6 py-4 border-b border-[#1F2833] flex items-center justify-between bg-[#0B0C10]">
+    <div className="fixed inset-0 z-[100] bg-app-bg flex flex-col">
+      <div className="px-6 py-4 border-b border-app-border flex items-center justify-between bg-app-bg">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-[#45A29E] rounded-xl flex items-center justify-center">
-            <Trophy className="text-[#0B0C10]" size={20} />
+          <div className="w-10 h-10 bg-app-primary rounded-xl flex items-center justify-center">
+            <Trophy className="text-app-bg" size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white uppercase tracking-tight">{test.title}</h2>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-[#45A29E] uppercase tracking-widest">
+            <h2 className="text-lg font-bold text-app-text uppercase tracking-tight">{test.title}</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-app-primary uppercase tracking-widest">
               <span>Section {currentSectionIndex + 1}: {currentSection.section}</span>
-              <span className="text-[#1F2833]">|</span>
+              <span className="text-app-border">|</span>
               <span>Task {currentTaskIndex + 1} of {currentSection.taskIds.length}</span>
             </div>
           </div>
@@ -2214,17 +2262,17 @@ function MockTestSession({
 
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[10px] font-bold text-[#C5C6C7] uppercase tracking-widest mb-1">Section Time Left</span>
+            <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-widest mb-1">Section Time Left</span>
             <div className={cn(
               "text-2xl font-mono font-bold",
-              sectionTimeLeft < 300 ? "text-red-500 animate-pulse" : "text-[#66FCF1]"
+              sectionTimeLeft < 300 ? "text-red-500 animate-pulse" : "text-app-accent"
             )}>
               {Math.floor(sectionTimeLeft / 60)}:{(sectionTimeLeft % 60).toString().padStart(2, '0')}
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 hover:bg-[#1F2833] rounded-full transition-colors text-[#C5C6C7]"
+            className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
           >
             <X size={24} />
           </button>
@@ -2323,17 +2371,17 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
     >
       {/* Progress Overview */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <div className="md:col-span-2 bg-[#1F2833] rounded-3xl p-6 md:p-8 border border-[#45A29E]/10 relative overflow-hidden group">
+        <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative overflow-hidden group">
           <div className="absolute -top-4 -right-4 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-            <Trophy size={180} className="text-[#45A29E]" />
+            <Trophy size={180} className="text-app-primary" />
           </div>
           <div className="relative z-10 max-w-[280px]">
             {progress.targetScore === 0 ? (
               <div>
-                <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-4">Set Your Goal</h2>
+                <h2 className="text-xs md:text-sm font-bold text-app-primary uppercase tracking-[0.2em] mb-4">Set Your Goal</h2>
                 <div className="space-y-4">
                   <div className="relative">
-                    <p className="text-[#C5C6C7] mb-2 text-xs md:text-sm">Target PTE Score (10-90)</p>
+                    <p className="text-app-text-muted mb-2 text-xs md:text-sm">Target PTE Score (10-90)</p>
                     <div className="relative flex items-center">
                       <input 
                         type="number" 
@@ -2344,14 +2392,14 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                           else if (val < 10) setTempTarget(10);
                           else setTempTarget(val);
                         }}
-                        className="w-full bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl px-4 py-3 pr-12 text-white font-bold text-xl focus:outline-none focus:border-[#45A29E] transition-colors"
+                        className="w-full bg-app-bg border border-app-primary/30 rounded-xl px-4 py-3 pr-12 text-app-text font-bold text-xl focus:outline-none focus:border-app-primary transition-colors"
                         min="10"
                         max="90"
                         step="1"
                       />
                       <button 
                         onClick={() => setTempTarget(79)}
-                        className="absolute right-4 p-1 text-[#C5C6C7]/50 hover:text-[#45A29E] transition-colors"
+                        className="absolute right-4 p-1 text-app-text-muted/50 hover:text-app-primary transition-colors"
                         title="Reset to 79"
                       >
                         <RefreshCw size={18} />
@@ -2359,13 +2407,13 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                     </div>
                   </div>
                   <div>
-                    <p className="text-[#C5C6C7] mb-2 text-xs md:text-sm font-bold uppercase tracking-wider">Test Date</p>
-                    <div className="relative flex items-center group bg-[#0B0C10] border border-[#45A29E]/30 rounded-xl hover:border-[#45A29E] transition-all focus-within:border-[#45A29E] focus-within:ring-1 focus-within:ring-[#45A29E]/20 shadow-lg overflow-hidden">
+                    <p className="text-app-text-muted mb-2 text-xs md:text-sm font-bold uppercase tracking-wider">Test Date</p>
+                    <div className="relative flex items-center group bg-app-bg border border-app-primary/30 rounded-xl hover:border-app-primary transition-all focus-within:border-app-primary focus-within:ring-1 focus-within:ring-app-primary/20 shadow-lg overflow-hidden">
                       <input 
                         type="date" 
                         value={tempDate}
                         onChange={(e) => setTempDate(e.target.value)}
-                        className="w-full bg-transparent px-4 py-3 pr-12 text-white font-bold text-lg outline-none [color-scheme:dark] cursor-pointer relative z-10"
+                        className="w-full bg-transparent px-4 py-3 pr-12 text-app-text font-bold text-lg outline-none [color-scheme:dark] cursor-pointer relative z-10"
                         min={new Date().toISOString().split('T')[0]}
                         onFocus={(e) => {
                           try {
@@ -2382,7 +2430,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                           }
                         }}
                       />
-                      <Calendar className="absolute right-4 text-[#45A29E]/50 group-hover:text-[#45A29E] transition-colors pointer-events-none z-0" size={20} />
+                      <Calendar className="absolute right-4 text-app-primary/50 group-hover:text-app-primary transition-colors pointer-events-none z-0" size={20} />
                     </div>
                   </div>
                   <button 
@@ -2399,7 +2447,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                         console.error("Goal setting error:", error);
                       }
                     }}
-                    className="w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+                    className="w-full py-4 bg-app-primary text-app-bg rounded-xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20"
                   >
                     Create My Study Plan
                   </button>
@@ -2409,52 +2457,52 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
               <div className="space-y-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h2 className="text-xs md:text-sm font-bold text-[#45A29E] uppercase tracking-[0.2em] mb-2">Current Average</h2>
+                    <h2 className="text-xs md:text-sm font-bold text-app-primary uppercase tracking-[0.2em] mb-2">Current Average</h2>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-4xl md:text-6xl font-black text-white">{averageScore}</span>
-                      <span className="text-lg md:text-xl text-[#C5C6C7]">/ 90</span>
+                      <span className="text-4xl md:text-6xl font-black text-app-text">{averageScore}</span>
+                      <span className="text-lg md:text-xl text-app-text-muted">/ 90</span>
                     </div>
                   </div>
                   <button 
                     onClick={onResetTarget}
-                    className="p-2 text-[#C5C6C7]/50 hover:text-red-400 transition-colors"
+                    className="p-2 text-app-text-muted/50 hover:text-red-400 transition-colors"
                     title="Reset Goal"
                   >
                     <RefreshCw size={20} />
                   </button>
                 </div>
 
-                <div className="w-full h-2 md:h-3 bg-[#0B0C10] rounded-full overflow-hidden">
+                <div className="w-full h-2 md:h-3 bg-app-bg rounded-full overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${(averageScore / 90) * 100}%` }}
-                    className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] shadow-[0_0_15px_rgba(69,162,158,0.5)]"
+                    className="h-full bg-gradient-to-r from-app-primary to-app-accent shadow-md shadow-app-primary/50"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div className="p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/10">
-                    <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">Target</p>
-                    <p className="text-xl font-black text-white">{progress.targetScore}</p>
+                  <div className="p-4 bg-app-bg/50 rounded-2xl border border-app-primary/10">
+                    <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Target</p>
+                    <p className="text-xl font-black text-app-text">{progress.targetScore}</p>
                   </div>
-                  <div className="p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/10">
-                    <p className="text-[10px] font-bold text-[#45A29E] uppercase tracking-widest mb-1">Days Left</p>
-                    <p className="text-xl font-black text-white">{studyPlan?.daysLeft || 0}</p>
+                  <div className="p-4 bg-app-bg/50 rounded-2xl border border-app-primary/10">
+                    <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Days Left</p>
+                    <p className="text-xl font-black text-app-text">{studyPlan?.daysLeft || 0}</p>
                   </div>
                 </div>
 
                 {studyPlan && studyPlan.daysLeft > 0 && (
                   <div className="space-y-4">
-                    <div className="p-4 bg-[#66FCF1]/5 border border-[#66FCF1]/20 rounded-2xl">
+                    <div className="p-4 bg-app-accent/5 border border-app-accent/20 rounded-2xl">
                       <div className="flex items-center gap-3 mb-2">
-                        <Calendar className="text-[#66FCF1]" size={18} />
-                        <p className="text-sm font-bold text-white">Daily Study Plan</p>
+                        <Calendar className="text-app-accent" size={18} />
+                        <p className="text-sm font-bold text-app-text">Daily Study Plan</p>
                       </div>
                       <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-2xl font-black text-[#66FCF1]">{studyPlan.tasksPerDay}</span>
-                        <span className="text-xs text-[#C5C6C7] uppercase tracking-wider font-bold">Tasks / Day</span>
+                        <span className="text-2xl font-black text-app-accent">{studyPlan.tasksPerDay}</span>
+                        <span className="text-xs text-app-text-muted uppercase tracking-wider font-bold">Tasks / Day</span>
                       </div>
-                      <p className="text-[10px] md:text-xs text-[#C5C6C7] leading-relaxed">
+                      <p className="text-[10px] md:text-xs text-app-text-muted leading-relaxed">
                         Complete these tasks daily to reach your goal of {progress.targetScore} by {new Date(user.testDate).toLocaleDateString()}.
                       </p>
                       <button
@@ -2470,8 +2518,8 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                         className={cn(
                           "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
                           isSaving 
-                            ? "bg-[#45A29E]/50 text-[#0B0C10]/50 cursor-not-allowed" 
-                            : "bg-[#66FCF1] text-[#0B0C10] hover:bg-[#45A29E]"
+                            ? "bg-app-primary/50 text-app-bg/50 cursor-not-allowed" 
+                            : "bg-app-accent text-app-bg hover:bg-app-primary"
                         )}
                       >
                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
@@ -2480,7 +2528,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                       {user.schedule && user.schedule.length > 0 && (
                         <button
                           onClick={onViewRoadmap}
-                          className="mt-2 w-full py-2 bg-[#1F2833] text-[#45A29E] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#45A29E]/10 transition-all flex items-center justify-center gap-2 border border-[#45A29E]/20"
+                          className="mt-2 w-full py-2 bg-app-surface text-app-primary text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-app-primary/10 transition-all flex items-center justify-center gap-2 border border-app-primary/20"
                         >
                           <Map size={14} />
                           View Full Schedule
@@ -2488,13 +2536,13 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                       )}
                     </div>
 
-                    <div className="p-4 bg-[#45A29E]/5 border border-[#45A29E]/20 rounded-2xl">
+                    <div className="p-4 bg-app-primary/5 border border-app-primary/20 rounded-2xl">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <Flame className="text-orange-500" size={18} />
-                          <p className="text-sm font-bold text-white">Study Streak</p>
+                          <p className="text-sm font-bold text-app-text">Study Streak</p>
                         </div>
-                        <span className="text-xs font-bold text-[#45A29E]">{currentStreak} / {studyPlan.daysLeft + currentStreak} Days</span>
+                        <span className="text-xs font-bold text-app-primary">{currentStreak} / {studyPlan.daysLeft + currentStreak} Days</span>
                       </div>
                       
                       <div className="flex gap-1.5 justify-between">
@@ -2510,13 +2558,13 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                               <div className={cn(
                                 "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
                                 isLogged 
-                                  ? "bg-[#45A29E] border-[#45A29E] text-[#0B0C10]" 
-                                  : "bg-[#0B0C10] border-[#45A29E]/20 text-[#C5C6C7]",
+                                  ? "bg-app-primary border-app-primary text-app-bg" 
+                                  : "bg-app-bg border-app-primary/20 text-app-text-muted",
                                 isToday && !isLogged && "border-dashed border-orange-500/50"
                               )}>
                                 {isLogged ? <Check size={14} strokeWidth={3} /> : <span className="text-[10px] font-bold">{date.getDate()}</span>}
                               </div>
-                              <span className="text-[8px] uppercase font-bold text-[#C5C6C7]">
+                              <span className="text-[8px] uppercase font-bold text-app-text-muted">
                                 {date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
                               </span>
                             </div>
@@ -2531,31 +2579,31 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#45A29E] via-[#1F2833] to-[#0B0C10] rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between border border-[#45A29E]/20 shadow-[0_20px_50px_rgba(69,162,158,0.1)] relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[#45A29E]/10 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-[#45A29E]/20 transition-all duration-700" />
+        <div className="bg-gradient-to-br from-app-primary via-app-surface to-app-bg rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between border border-app-primary/20 shadow-xl shadow-app-primary/10 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-app-primary/10 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-app-primary/20 transition-all duration-700" />
           <div className="relative z-10">
-            <div className="w-14 h-14 bg-[#0B0C10]/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-[#45A29E]/20">
-              <Target size={32} className="text-[#45A29E]" />
+            <div className="w-14 h-14 bg-app-bg/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-app-primary/20">
+              <Target size={32} className="text-app-primary" />
             </div>
-            <h3 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tight">
+            <h3 className="text-2xl md:text-3xl font-black text-app-text leading-tight tracking-tight">
               Next Milestone: <br/>
-              <span className="text-[#45A29E]">{belt.next}</span>
+              <span className="text-app-primary">{belt.next}</span>
             </h3>
-            <p className="text-xs font-bold text-[#C5C6C7] mt-3 uppercase tracking-[0.2em] flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#45A29E] animate-pulse" />
+            <p className="text-xs font-bold text-app-text-muted mt-3 uppercase tracking-[0.2em] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-app-primary animate-pulse" />
               Current: {belt.title}
             </p>
           </div>
           <div className="relative z-10 space-y-3 mt-8">
             <button 
               onClick={onViewRoadmap}
-              className="w-full py-4 bg-white text-black rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-[#66FCF1] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl"
+              className="w-full py-4 bg-app-text text-app-bg rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-app-accent hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl"
             >
               View Roadmap
             </button>
             <button 
               onClick={onViewPattern}
-              className="w-full py-4 bg-[#0B0C10]/60 backdrop-blur-md text-[#C5C6C7] border border-[#45A29E]/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#0B0C10] hover:text-white transition-all duration-300"
+              className="w-full py-4 bg-app-bg/60 backdrop-blur-md text-app-text-muted border border-app-primary/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-app-bg hover:text-app-text transition-all duration-300"
             >
               Exam Pattern
             </button>
@@ -2565,46 +2613,46 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
 
       {/* Advanced Analysis & Vocabulary */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 space-y-6">
+        <div className="bg-app-surface rounded-3xl p-6 border border-app-primary/10 space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <BarChart3 className="text-[#45A29E]" size={20} />
+            <h3 className="text-lg font-bold text-app-text flex items-center gap-2">
+              <BarChart3 className="text-app-primary" size={20} />
               Training Analysis
             </h3>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/5">
-              <p className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-1">Attempted</p>
-              <p className="text-2xl font-black text-white">{attemptedTasks} <span className="text-xs text-[#C5C6C7]/30">/ {totalTasks}</span></p>
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/5">
+              <p className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest mb-1">Attempted</p>
+              <p className="text-2xl font-black text-app-text">{attemptedTasks} <span className="text-xs text-app-text-muted/30">/ {totalTasks}</span></p>
             </div>
-            <div className="p-4 bg-[#0B0C10] rounded-2xl border border-[#45A29E]/5">
-              <p className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-1">Available</p>
-              <p className="text-2xl font-black text-[#45A29E]">{totalTasks - attemptedTasks}</p>
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/5">
+              <p className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest mb-1">Available</p>
+              <p className="text-2xl font-black text-app-primary">{totalTasks - attemptedTasks}</p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <h4 className="text-[10px] font-bold text-[#C5C6C7]/50 uppercase tracking-widest">Section Performance</h4>
+            <h4 className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest">Section Performance</h4>
             <div className="space-y-3">
               {[...sectionAverages]
                 .sort((a, b) => a.average - b.average)
                 .map((s) => (
                   <div key={s.section} className="space-y-1.5">
                     <div className="flex justify-between items-end">
-                      <span className="text-xs font-bold text-white capitalize">{s.section}</span>
-                      <span className="text-[10px] font-mono text-[#C5C6C7]">
+                      <span className="text-xs font-bold text-app-text capitalize">{s.section}</span>
+                      <span className="text-[10px] font-mono text-app-text-muted">
                         {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
                       </span>
                     </div>
-                    <div className="h-1.5 w-full bg-[#0B0C10] rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-app-bg rounded-full overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${s.attempts > 0 ? Math.max((s.average / 90) * 100, 5) : 0}%` }}
                         transition={{ duration: 1, ease: "easeOut" }}
                         className={cn(
                           "h-full rounded-full",
-                          s.average === 0 ? "bg-gray-800" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-[#66FCF1]"
+                          s.average === 0 ? "bg-gray-800" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-app-accent"
                         )}
                       />
                     </div>
@@ -2619,42 +2667,42 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
             </div>
             <div>
               <p className="text-[10px] font-bold text-orange-500/50 uppercase tracking-widest">{attemptedTasks === 0 ? "Get Started" : "Needs Improvement"}</p>
-              <p className="text-sm font-bold text-white capitalize">{weakestSectionLabel}</p>
+              <p className="text-sm font-bold text-app-text capitalize">{weakestSectionLabel}</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 flex flex-col">
+          <div className="bg-app-surface rounded-3xl p-6 border border-app-primary/10 flex flex-col">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Book className="text-[#45A29E]" size={20} />
+                <h3 className="text-lg font-bold text-app-text flex items-center gap-2">
+                  <Book className="text-app-primary" size={20} />
                   Vocabulary Builder
                 </h3>
-                <span className="px-2 py-1 bg-[#45A29E]/10 text-[#45A29E] text-[10px] font-bold rounded-md uppercase tracking-widest">2000+ Words</span>
+                <span className="px-2 py-1 bg-app-primary/10 text-app-primary text-[10px] font-bold rounded-md uppercase tracking-widest">2000+ Words</span>
               </div>
-              <p className="text-sm text-[#C5C6C7] leading-relaxed">
+              <p className="text-sm text-app-text-muted leading-relaxed">
                 Master high-frequency academic words essential for PTE success. Includes meanings, context, and audio pronunciations.
               </p>
             </div>
             <button 
               onClick={onViewVocabulary}
-              className="mt-6 w-full py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+              className="mt-6 w-full py-4 bg-app-primary text-app-bg rounded-2xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all shadow-[0_0_20px_rgba(69,162,158,0.2)]"
             >
               Open Builder
             </button>
           </div>
 
-          <div className="bg-[#1F2833] rounded-3xl p-6 border border-[#45A29E]/10 space-y-6">
+          <div className="bg-app-surface rounded-3xl p-6 border border-app-primary/10 space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Zap className="text-[#45A29E]" size={20} />
+              <h3 className="text-lg font-bold text-app-text flex items-center gap-2">
+                <Zap className="text-app-primary" size={20} />
                 Daily Shuriken
               </h3>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-1 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-md uppercase tracking-widest">High Priority</span>
-                <button onClick={onViewShuriken} className="text-sm text-[#45A29E] font-bold hover:underline">View All</button>
+                <button onClick={onViewShuriken} className="text-sm text-app-primary font-bold hover:underline">View All</button>
               </div>
             </div>
             <div className="space-y-4">
@@ -2678,21 +2726,21 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       </section>
 
       {/* Mock Tests Section */}
-      <section className="bg-[#1F2833] rounded-3xl p-8 border border-[#45A29E]/10 relative overflow-hidden group">
+      <section className="bg-app-surface rounded-3xl p-8 border border-app-primary/10 relative overflow-hidden group">
         <div className="absolute -top-10 -right-10 p-10 opacity-10 group-hover:opacity-20 transition-opacity">
-          <Trophy size={200} className="text-[#45A29E]" />
+          <Trophy size={200} className="text-app-primary" />
         </div>
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="space-y-4 text-center md:text-left">
             <div className="flex items-center justify-center md:justify-start gap-3">
-              <Trophy className="text-[#45A29E]" size={32} />
-              <h2 className="text-3xl font-black text-white tracking-tight uppercase">Full Mock Tests</h2>
+              <Trophy className="text-app-primary" size={32} />
+              <h2 className="text-3xl font-black text-app-text tracking-tight uppercase">Full Mock Tests</h2>
             </div>
-            <p className="text-[#C5C6C7] max-w-xl leading-relaxed">
+            <p className="text-app-text-muted max-w-xl leading-relaxed">
               Experience the real PTE exam environment with our 100 full-length mock tests. 
               Timed sections, AI scoring, and detailed performance analysis.
             </p>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-[10px] font-bold text-[#45A29E] uppercase tracking-widest">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-[10px] font-bold text-app-primary uppercase tracking-widest">
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} /> 100 Real Exam Papers
               </div>
@@ -2706,7 +2754,7 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
           </div>
           <button 
             onClick={onViewMockTests}
-            className="px-12 py-5 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-[#66FCF1] hover:scale-105 transition-all shadow-2xl shadow-[#45A29E]/20"
+            className="px-12 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent hover:scale-105 transition-all shadow-2xl shadow-app-primary/20"
           >
             Take a Mock Test
           </button>
@@ -2715,9 +2763,9 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
 
       {/* Quick Stats */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatBox label="Speaking" value={calculateSectionAverage('speaking').toString()} color="text-[#66FCF1]" onClick={() => onSelectSection('speaking')} />
+        <StatBox label="Speaking" value={calculateSectionAverage('speaking').toString()} color="text-app-accent" onClick={() => onSelectSection('speaking')} />
         <StatBox label="Writing" value={calculateSectionAverage('writing').toString()} color="text-orange-500" onClick={() => onSelectSection('writing')} />
-        <StatBox label="Reading" value={calculateSectionAverage('reading').toString()} color="text-[#66FCF1]" onClick={() => onSelectSection('reading')} />
+        <StatBox label="Reading" value={calculateSectionAverage('reading').toString()} color="text-app-accent" onClick={() => onSelectSection('reading')} />
         <StatBox label="Listening" value={calculateSectionAverage('listening').toString()} color="text-yellow-500" onClick={() => onSelectSection('listening')} />
       </section>
     </motion.div>
@@ -2738,31 +2786,31 @@ function DailyShurikenView({ user, onBack, onStartTask, onHoverTask }: { user: a
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
             <ChevronRight className="rotate-180" size={24} />
           </button>
           <div className="p-3 rounded-2xl bg-orange-500/10 shrink-0">
             <Zap className="text-orange-500" size={28} />
           </div>
-          <h2 className="text-2xl font-bold text-white sm:hidden">Daily Shuriken</h2>
+          <h2 className="text-2xl font-bold text-app-text sm:hidden">Daily Shuriken</h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white hidden sm:block">Daily Shuriken</h2>
-          <p className="text-sm text-[#C5C6C7]">100 High-priority tasks to boost your score across all sections</p>
+          <h2 className="text-2xl font-bold text-app-text hidden sm:block">Daily Shuriken</h2>
+          <p className="text-sm text-app-text-muted">100 High-priority tasks to boost your score across all sections</p>
         </div>
       </div>
 
       <div className="space-y-4">
         {highPriorityTasks.length === 0 ? (
-          <div className="text-center py-20 bg-[#1F2833] rounded-3xl border border-[#45A29E]/10">
-            <Check className="mx-auto text-[#45A29E] mb-4" size={48} />
-            <h3 className="text-xl font-bold text-white">All Tasks Completed!</h3>
-            <p className="text-[#C5C6C7]">You've mastered all current high-priority tasks.</p>
+          <div className="text-center py-20 bg-app-surface rounded-3xl border border-app-primary/10">
+            <Check className="mx-auto text-app-primary mb-4" size={48} />
+            <h3 className="text-xl font-bold text-app-text">All Tasks Completed!</h3>
+            <p className="text-app-text-muted">You've mastered all current high-priority tasks.</p>
           </div>
         ) : (
           highPriorityTasks.map((task, index) => (
             <div key={task.id} className="flex items-center gap-2 md:gap-4 group">
-              <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-[#1F2833] border border-[#45A29E]/20 flex items-center justify-center text-[10px] md:text-xs font-bold text-[#45A29E] shrink-0">
+              <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-app-surface border border-app-primary/20 flex items-center justify-center text-[10px] md:text-xs font-bold text-app-primary shrink-0">
                 {index + 1}
               </div>
               <div className="flex-1 min-w-0">
@@ -2837,29 +2885,29 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
             <ChevronRight className="rotate-180" size={24} />
           </button>
-          <div className="p-3 rounded-2xl bg-[#45A29E]/10 shrink-0">
-            <BookOpen className="text-[#45A29E]" size={28} />
+          <div className="p-3 rounded-2xl bg-app-primary/10 shrink-0">
+            <BookOpen className="text-app-primary" size={28} />
           </div>
-          <h2 className="text-2xl font-bold text-white sm:hidden">Vocabulary</h2>
+          <h2 className="text-2xl font-bold text-app-text sm:hidden">Vocabulary</h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white hidden sm:block">Vocabulary Builder</h2>
-          <p className="text-sm text-[#C5C6C7]">Master 2000+ essential PTE words</p>
+          <h2 className="text-2xl font-bold text-app-text hidden sm:block">Vocabulary Builder</h2>
+          <p className="text-sm text-app-text-muted">Master 2000+ essential PTE words</p>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C5C6C7]/50" size={20} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-app-text-muted/50" size={20} />
           <input 
             type="text" 
             placeholder="Search words or meanings..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-[#1F2833] border border-[#45A29E]/20 rounded-2xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-[#45A29E] transition-all"
+            className="w-full bg-app-surface border border-app-primary/20 rounded-2xl pl-12 pr-4 py-4 text-app-text focus:outline-none focus:border-app-primary transition-all"
           />
         </div>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
@@ -2867,7 +2915,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
             onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
             className={cn(
               "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap flex items-center gap-2",
-              showFavoritesOnly ? "bg-amber-500 text-[#0B0C10] border-amber-500" : "bg-[#1F2833] text-[#C5C6C7] border-[#45A29E]/20 hover:border-[#45A29E]/50"
+              showFavoritesOnly ? "bg-amber-500 text-app-bg border-amber-500" : "bg-app-surface text-app-text-muted border-app-primary/20 hover:border-app-primary/50"
             )}
           >
             <Star size={16} fill={showFavoritesOnly ? "currentColor" : "none"} />
@@ -2876,7 +2924,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="flex flex-col gap-4">
         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           {filteredWords.map(word => {
             const isFavorite = user?.favoriteWords?.includes(word.id);
@@ -2887,8 +2935,8 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all flex items-center justify-between group cursor-pointer",
                   selectedWord?.id === word.id 
-                    ? "bg-[#45A29E] border-[#45A29E] text-[#0B0C10]" 
-                    : "bg-[#1F2833] border-[#45A29E]/10 text-white hover:border-[#45A29E]/40"
+                    ? "bg-app-primary border-app-primary text-app-bg" 
+                    : "bg-app-surface border-app-primary/10 text-app-text hover:border-app-primary/40"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -2903,14 +2951,14 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                     }}
                     className={cn(
                       "p-1.5 rounded-lg transition-colors hover:bg-white/5",
-                      isFavorite ? "text-yellow-400" : "text-[#C5C6C7]/30"
+                      isFavorite ? "text-yellow-400" : "text-app-text-muted/30"
                     )}
                   >
                     <Star size={16} fill={isFavorite ? "currentColor" : "none"} />
                   </button>
                   <div>
                     <div className="font-bold text-lg">{word.word}</div>
-                    <div className={cn("text-xs uppercase font-bold tracking-widest opacity-60", selectedWord?.id === word.id ? "text-[#0B0C10]" : "text-[#45A29E]")}>
+                    <div className={cn("text-xs uppercase font-bold tracking-widest opacity-60", selectedWord?.id === word.id ? "text-app-bg" : "text-app-primary")}>
                       {word.partOfSpeech}
                     </div>
                   </div>
@@ -2932,11 +2980,11 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
           })}
         </div>
 
-        <div className="bg-[#1F2833] border border-[#45A29E]/20 rounded-3xl p-8 sticky top-6 h-fit">
+        <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 sticky top-6 h-fit">
           {selectedWord ? (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-3xl font-black text-white tracking-tight">{selectedWord.word}</h3>
+                <h3 className="text-3xl font-black text-app-text tracking-tight">{selectedWord.word}</h3>
                 <div className="flex gap-2">
                   <button 
                     onClick={async () => {
@@ -2950,36 +2998,36 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                       "w-12 h-12 rounded-xl flex items-center justify-center transition-all border",
                       user?.favoriteWords?.includes(selectedWord.id)
                         ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
-                        : "bg-white/5 border-white/10 text-[#C5C6C7] hover:border-[#45A29E]/50"
+                        : "bg-white/5 border-white/10 text-app-text-muted hover:border-app-primary/50"
                     )}
                   >
                     <Star size={24} fill={user?.favoriteWords?.includes(selectedWord.id) ? "currentColor" : "none"} />
                   </button>
                   <button 
                     onClick={() => playPronunciation(selectedWord.word)}
-                    className="w-12 h-12 bg-[#45A29E]/10 rounded-xl flex items-center justify-center text-[#45A29E] hover:bg-[#45A29E] hover:text-[#0B0C10] transition-all"
+                    className="w-12 h-12 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary hover:bg-app-primary hover:text-app-bg transition-all"
                   >
                     <Volume2 size={24} />
                   </button>
                 </div>
               </div>
               
-              <div className="inline-block px-3 py-1 bg-[#45A29E]/10 border border-[#45A29E]/20 rounded-lg text-[#45A29E] text-xs font-bold uppercase tracking-widest">
+              <div className="inline-block px-3 py-1 bg-app-primary/10 border border-app-primary/20 rounded-lg text-app-primary text-xs font-bold uppercase tracking-widest">
                 {selectedWord.partOfSpeech}
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-xs font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-2">Meaning</h4>
-                  <p className="text-white leading-relaxed">{selectedWord.meaning}</p>
+                  <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Meaning</h4>
+                  <p className="text-app-text leading-relaxed">{selectedWord.meaning}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-[#C5C6C7]/50 uppercase tracking-widest mb-2">Context</h4>
-                  <p className="text-[#C5C6C7] italic leading-relaxed">"{selectedWord.context}"</p>
+                  <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Context</h4>
+                  <p className="text-app-text-muted italic leading-relaxed">"{selectedWord.context}"</p>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-[#45A29E]/10">
+              <div className="pt-6 border-t border-app-primary/10">
                 <button 
                   onClick={async () => {
                     try {
@@ -2991,8 +3039,8 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                   className={cn(
                     "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
                     user?.favoriteWords?.includes(selectedWord.id)
-                      ? "bg-[#1F2833] text-[#45A29E] border border-[#45A29E]/20"
-                      : "bg-[#45A29E] text-[#0B0C10] hover:bg-[#66FCF1]"
+                      ? "bg-app-surface text-app-primary border border-app-primary/20"
+                      : "bg-app-primary text-app-bg hover:bg-app-accent"
                   )}
                 >
                   {user?.favoriteWords?.includes(selectedWord.id) ? 'Remove from Flashcards' : 'Add to Flashcards'}
@@ -3001,10 +3049,10 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20">
-              <div className="w-20 h-20 bg-[#0B0C10] rounded-3xl flex items-center justify-center text-[#45A29E]/20">
+              <div className="w-20 h-20 bg-app-bg rounded-3xl flex items-center justify-center text-app-primary/20">
                 <Book size={40} />
               </div>
-              <p className="text-[#C5C6C7]/50 font-medium">Select a word to view details</p>
+              <p className="text-app-text-muted/50 font-medium">Select a word to view details</p>
             </div>
           )}
         </div>
@@ -3018,7 +3066,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
     {
       title: "Speaking & Writing",
       duration: "54–67 minutes",
-      color: "text-[#45A29E]",
+      color: "text-app-primary",
       tasks: [
         { name: "Personal Introduction", count: "1", description: "Not scored; used for security and identification." },
         { name: "Read Aloud", count: "6–7", description: "Read a short text aloud with natural fluency and pronunciation." },
@@ -3067,37 +3115,37 @@ function PatternView({ onBack }: { onBack: () => void }) {
       className="max-w-7xl mx-auto space-y-8 pb-20 px-4 md:px-0"
     >
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors">
+        <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors">
           <ChevronRight className="rotate-180" size={24} />
         </button>
         <div>
-          <h2 className="text-3xl font-black text-white tracking-tight">PTE EXAM PATTERN</h2>
-          <p className="text-[#C5C6C7]/50 font-bold uppercase tracking-widest text-xs">Official Pearson Standards</p>
+          <h2 className="text-3xl font-black text-app-text tracking-tight">PTE EXAM PATTERN</h2>
+          <p className="text-app-text-muted/50 font-bold uppercase tracking-widest text-xs">Official Pearson Standards</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-8">
         {sections.map((section, idx) => (
-          <div key={idx} className="bg-[#1F2833] rounded-3xl border border-[#45A29E]/10 overflow-hidden">
-            <div className="p-6 border-b border-[#45A29E]/10 bg-[#0B0C10]/30 flex items-center justify-between">
+          <div key={idx} className="bg-app-surface rounded-3xl border border-app-primary/10 overflow-hidden">
+            <div className="p-6 border-b border-app-primary/10 bg-app-bg/30 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={cn("w-2 h-8 rounded-full bg-current", section.color)} />
-                <h3 className="text-xl font-bold text-white">{section.title}</h3>
+                <h3 className="text-xl font-bold text-app-text">{section.title}</h3>
               </div>
-              <div className="px-3 py-1 bg-[#45A29E]/10 rounded-full border border-[#45A29E]/20">
-                <span className="text-xs font-bold text-[#45A29E]">{section.duration}</span>
+              <div className="px-3 py-1 bg-app-primary/10 rounded-full border border-app-primary/20">
+                <span className="text-xs font-bold text-app-primary">{section.duration}</span>
               </div>
             </div>
             <div className="p-6">
               <div className="space-y-4">
                 {section.tasks.map((task, tIdx) => (
-                  <div key={tIdx} className="flex items-start gap-4 p-4 bg-[#0B0C10]/50 rounded-2xl border border-[#45A29E]/5 hover:border-[#45A29E]/20 transition-all group">
-                    <div className="min-w-[48px] h-12 px-2 rounded-xl bg-[#1F2833] flex items-center justify-center font-black text-[#45A29E] shrink-0 group-hover:bg-[#45A29E] group-hover:text-[#0B0C10] transition-all text-[10px] whitespace-nowrap">
+                  <div key={tIdx} className="flex items-start gap-4 p-4 bg-app-bg/50 rounded-2xl border border-app-primary/5 hover:border-app-primary/20 transition-all group">
+                    <div className="min-w-[48px] h-12 px-2 rounded-xl bg-app-surface flex items-center justify-center font-black text-app-primary shrink-0 group-hover:bg-app-primary group-hover:text-app-bg transition-all text-[10px] whitespace-nowrap">
                       {task.count}
                     </div>
                     <div className="space-y-1">
-                      <h4 className="font-bold text-white group-hover:text-[#45A29E] transition-colors">{task.name}</h4>
-                      <p className="text-xs text-[#C5C6C7]/60 leading-relaxed">{task.description}</p>
+                      <h4 className="font-bold text-app-text group-hover:text-app-primary transition-colors">{task.name}</h4>
+                      <p className="text-xs text-app-text-muted/60 leading-relaxed">{task.description}</p>
                     </div>
                   </div>
                 ))}
@@ -3107,13 +3155,13 @@ function PatternView({ onBack }: { onBack: () => void }) {
         ))}
       </div>
 
-      <div className="p-8 bg-gradient-to-br from-[#45A29E]/20 to-transparent rounded-3xl border border-[#45A29E]/20 text-center space-y-4">
-        <ShieldCheck className="mx-auto text-[#45A29E]" size={48} />
-        <h3 className="text-2xl font-bold text-white">Ready to start your training?</h3>
-        <p className="text-[#C5C6C7] max-w-md mx-auto">Our AI-powered platform follows these exact patterns to ensure you are fully prepared for the actual exam.</p>
+      <div className="p-8 bg-gradient-to-br from-app-primary/20 to-transparent rounded-3xl border border-app-primary/20 text-center space-y-4">
+        <ShieldCheck className="mx-auto text-app-primary" size={48} />
+        <h3 className="text-2xl font-bold text-app-text">Ready to start your training?</h3>
+        <p className="text-app-text-muted max-w-md mx-auto">Our AI-powered platform follows these exact patterns to ensure you are fully prepared for the actual exam.</p>
         <button 
           onClick={onBack}
-          className="px-8 py-4 bg-[#45A29E] text-[#0B0C10] font-bold rounded-2xl hover:bg-[#66FCF1] transition-all shadow-[0_0_30px_rgba(69,162,158,0.3)]"
+          className="px-8 py-4 bg-app-primary text-app-bg font-bold rounded-2xl hover:bg-app-accent transition-all shadow-[0_0_30px_rgba(69,162,158,0.3)]"
         >
           Go to Dojo
         </button>
@@ -3130,7 +3178,7 @@ function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { sec
   const categories = Array.from(new Set(tasks.map(t => t.category)));
   
   const sectionInfo = {
-    speaking: { icon: Mic, color: 'text-[#45A29E]', bg: 'bg-[#45A29E]/10' },
+    speaking: { icon: Mic, color: 'text-app-primary', bg: 'bg-app-primary/10' },
     writing: { icon: PenTool, color: 'text-purple-400', bg: 'bg-purple-400/10' },
     reading: { icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-400/10' },
     listening: { icon: Headphones, color: 'text-orange-400', bg: 'bg-orange-400/10' },
@@ -3159,21 +3207,21 @@ function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { sec
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <button onClick={handleBack} className="p-2 hover:bg-[#1F2833] rounded-full transition-colors shrink-0">
+          <button onClick={handleBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
             <ChevronRight className="rotate-180" size={24} />
           </button>
           <div className={cn("p-3 rounded-2xl shrink-0", sectionInfo[section].bg)}>
             <Icon className={sectionInfo[section].color} size={28} />
           </div>
-          <h2 className="text-2xl font-bold text-white capitalize sm:hidden">
+          <h2 className="text-2xl font-bold text-app-text capitalize sm:hidden">
             {selectedCategory || `${section}`}
           </h2>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-white capitalize hidden sm:block">
+          <h2 className="text-2xl font-bold text-app-text capitalize hidden sm:block">
             {selectedCategory || `${section} Dojo`}
           </h2>
-          <p className="text-sm text-[#C5C6C7]">
+          <p className="text-sm text-app-text-muted">
             {selectedCategory 
               ? `${filteredTasks.length} practice questions available`
               : `${categories.length} specialized task types`}
@@ -3198,24 +3246,24 @@ function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { sec
                 <button 
                   key={category}
                   onClick={() => setSelectedCategory(category)}
-                  className="flex items-center gap-4 p-6 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden"
+                  className="flex items-center gap-4 p-6 bg-app-surface border border-app-primary/5 rounded-2xl hover:border-app-primary/40 transition-all group text-left relative overflow-hidden"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-[#0B0C10] flex items-center justify-center group-hover:bg-[#45A29E] transition-colors shrink-0">
-                    <Icon size={24} className={cn("transition-colors", sectionInfo[section].color, "group-hover:text-[#0B0C10]")} />
+                  <div className="w-12 h-12 rounded-xl bg-app-bg flex items-center justify-center group-hover:bg-app-primary transition-colors shrink-0">
+                    <Icon size={24} className={cn("transition-colors", sectionInfo[section].color, "group-hover:text-app-bg")} />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors text-lg">{category}</h4>
+                    <h4 className="font-bold text-app-text group-hover:text-app-accent transition-colors text-lg">{category}</h4>
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 h-1 bg-[#0B0C10] rounded-full overflow-hidden">
+                      <div className="flex-1 h-1 bg-app-bg rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-[#45A29E]" 
+                          className="h-full bg-app-primary" 
                           style={{ width: `${(completedInCategory / categoryTasks.length) * 100}%` }}
                         />
                       </div>
-                      <span className="text-[10px] text-[#C5C6C7] font-bold">{completedInCategory}/{categoryTasks.length}</span>
+                      <span className="text-[10px] text-app-text-muted font-bold">{completedInCategory}/{categoryTasks.length}</span>
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-[#45A29E] shrink-0" />
+                  <ChevronRight size={20} className="text-app-primary shrink-0" />
                 </button>
               );
             })}
@@ -3301,7 +3349,7 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
       }}
       onMouseEnter={onHover}
       className={cn(
-        "flex items-center gap-3 md:gap-4 p-3 md:p-5 bg-[#1F2833] border border-[#45A29E]/5 rounded-2xl hover:border-[#45A29E]/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
+        "flex items-center gap-3 md:gap-4 p-3 md:p-5 bg-app-surface border border-app-primary/5 rounded-2xl hover:border-app-primary/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
         task.section === 'speaking' ? 'border-l-rose-500' :
         task.section === 'writing' ? 'border-l-sky-500' :
         task.section === 'reading' ? 'border-l-emerald-500' :
@@ -3310,14 +3358,14 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
     >
       <div className={cn(
         "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
-        isCompleted ? "bg-green-500/20 text-green-500" : "bg-[#0B0C10] text-[#45A29E] group-hover:bg-[#45A29E] group-hover:text-[#0B0C10]"
+        isCompleted ? "bg-green-500/20 text-green-500" : "bg-app-bg text-app-primary group-hover:bg-app-primary group-hover:text-app-bg"
       )}>
         {isCompleted ? <Check size={20} className="md:w-6 md:h-6" /> : <Play size={18} className="md:w-5 md:h-5" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-1">
           <div className="flex items-center gap-2 min-w-0">
-            <h4 className="font-bold text-white group-hover:text-[#66FCF1] transition-colors truncate text-sm md:text-base">{task.title}</h4>
+            <h4 className="font-bold text-app-text group-hover:text-app-accent transition-colors truncate text-sm md:text-base">{task.title}</h4>
             {isCompleted && <span className="text-[9px] md:text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter shrink-0">Done</span>}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -3335,9 +3383,9 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
             </span>
           </div>
         </div>
-        <p className="text-[10px] md:text-xs text-[#C5C6C7] line-clamp-1">{task.description}</p>
+        <p className="text-[10px] md:text-xs text-app-text-muted line-clamp-1">{task.description}</p>
       </div>
-      <ChevronRight size={14} className="text-[#45A29E] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hidden sm:block" />
+      <ChevronRight size={14} className="text-app-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hidden sm:block" />
     </button>
   );
 }
@@ -3346,9 +3394,9 @@ function StatBox({ label, value, color, onClick }: { label: string, value: strin
   return (
     <button 
       onClick={onClick}
-      className="bg-[#1F2833] p-4 rounded-2xl border border-[#45A29E]/5 flex flex-col items-center hover:border-[#45A29E]/40 hover:bg-[#1F2833]/80 transition-all group"
+      className="bg-app-surface p-4 rounded-2xl border border-app-primary/5 flex flex-col items-center hover:border-app-primary/40 hover:bg-app-surface/80 transition-all group"
     >
-      <span className="text-xs font-bold text-[#C5C6C7] uppercase tracking-widest mb-1 group-hover:text-[#45A29E] transition-colors">{label}</span>
+      <span className="text-xs font-bold text-app-text-muted uppercase tracking-widest mb-1 group-hover:text-app-primary transition-colors">{label}</span>
       <span className={cn("text-2xl font-black", color)}>{value}</span>
     </button>
   );
@@ -3681,6 +3729,7 @@ function TaskModal({
           }
         } catch (err) {
           console.error("Pre-fetch TTS failed:", err);
+          if (!isCancelled) audioFetchPromiseRef.current = null;
         }
       };
       prefetch();
@@ -3826,11 +3875,11 @@ function TaskModal({
                   setIsPreparingAudio(false);
                   setHasAudioError(true);
                 }
-              }, 25000);
+              }, 50000);
 
               try {
                 const timeoutPromise = new Promise<null>((_, reject) => 
-                  setTimeout(() => reject(new Error("Audio preparation timed out")), 20000)
+                  setTimeout(() => reject(new Error("Audio preparation timed out after 60s")), 60000)
                 );
 
                 if (audioFetchPromiseRef.current) {
@@ -3843,9 +3892,13 @@ function TaskModal({
                 }
               } catch (prepErr: any) {
                 console.error("[Audio] Audio preparation failed or timed out:", prepErr);
-                if (prepErr.message === "GEMINI_QUOTA_EXCEEDED") {
+                if (prepErr.message === "GEMINI_QUOTA_EXCEEDED" || prepErr.message?.includes("429")) {
                   toast.error("AI Quota Exceeded", {
                     description: "Switching to browser-native voice for this task."
+                  });
+                } else if (prepErr.message?.includes("timed out")) {
+                  toast.error("Audio Generation Slow", {
+                    description: "Switching to browser-native voice to avoid delay."
                   });
                 }
                 base64 = null;
@@ -4102,11 +4155,47 @@ function TaskModal({
           maxScore = Math.max(correct.length, 1);
           let correctCount = 0;
           correct.forEach((ans, i) => {
-            if (answers[i] === ans) correctCount++;
+            if (answers[i]?.toLowerCase().trim() === ans.toLowerCase().trim()) correctCount++;
           });
           score = correctCount === 0 ? 0 : Math.round((correctCount / maxScore) * 80) + 10;
           feedbackTips = correctCount === maxScore ? ["Perfect! All blanks filled correctly."] : [`You got ${correctCount} out of ${maxScore} blanks correct.`];
-        } else if (task.category.includes('Multiple Choice')) {
+        } else if (task.category.includes('Multiple Choice') || task.category === 'Highlight Correct Summary' || task.category === 'Select Missing Word') {
+          const correct = task.correctAnswers || [];
+          const isMultiple = task.category.includes('Multiple Answer');
+          maxScore = isMultiple ? Math.max(correct.length, 1) : 1;
+          let correctSelected = 0;
+          let incorrectSelected = 0;
+          
+          selectedOptions.forEach(opt => {
+            if (correct.includes(opt)) correctSelected++;
+            else incorrectSelected++;
+          });
+          
+          // PTE Multiple Answer has negative marking, but total score for task cannot be < 0
+          const netCorrect = Math.max(0, correctSelected - (isMultiple ? incorrectSelected : 0));
+          score = netCorrect === 0 ? 0 : Math.max(10, Math.min(90, Math.round((netCorrect / maxScore) * 80) + 10));
+          
+          feedbackTips = [
+            `You selected ${selectedOptions.length} option(s).`,
+            `Correct selections: ${correctSelected}/${maxScore}`,
+            incorrectSelected > 0 && isMultiple ? `Penalty: -${incorrectSelected} for incorrect selections.` : "",
+            `Final Score: ${netCorrect}/${maxScore} points.`
+          ].filter(t => t);
+
+          result = {
+            overall: score,
+            content: score,
+            rawContent: netCorrect,
+            maxRawContent: maxScore,
+            grammar: 90,
+            vocabulary: 90,
+            spelling: 90,
+            fluency: 90,
+            pronunciation: 90,
+            tips: feedbackTips,
+            feedback: feedbackTips
+          };
+        } else if (task.category === 'Highlight Incorrect Words') {
           const correct = task.correctAnswers || [];
           maxScore = Math.max(correct.length, 1);
           let correctSelected = 0;
@@ -4117,16 +4206,14 @@ function TaskModal({
             else incorrectSelected++;
           });
           
-          // PTE Multiple Answer has negative marking, but total score for task cannot be < 0
-          const netCorrect = Math.max(0, correctSelected - (task.category.includes('Multiple Answer') ? incorrectSelected : 0));
+          const netCorrect = Math.max(0, correctSelected - incorrectSelected);
           score = netCorrect === 0 ? 0 : Math.max(10, Math.min(90, Math.round((netCorrect / maxScore) * 80) + 10));
           
           feedbackTips = [
-            `You selected ${selectedOptions.length} options.`,
-            `Correct selections: ${correctSelected}/${maxScore}`,
-            incorrectSelected > 0 && task.category.includes('Multiple Answer') ? `Penalty: -${incorrectSelected} for incorrect selections.` : "",
+            `Correct words identified: ${correctSelected}/${maxScore}`,
+            incorrectSelected > 0 ? `Penalty: -${incorrectSelected} for incorrect words selected.` : "",
             `Final Score: ${netCorrect}/${maxScore} points.`
-          ].filter(t => t);
+          ];
 
           result = {
             overall: score,
@@ -4207,9 +4294,19 @@ function TaskModal({
         let finalInput = userInput;
         
         if (!finalInput.trim() && task.category !== 'Re-order Paragraphs') {
-           throw new Error("Please provide a response before submitting.");
+           // Instead of throwing, provide a default very low score result for empty submissions
+           result = {
+             overall: 10,
+             grammar: 10,
+             vocabulary: 10,
+             spelling: 10,
+             content: 10,
+             tips: ["Please provide a response next time to receive a proper analysis."],
+             mistakes: ["Empty response submitted."]
+           };
+        } else {
+          result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
         }
-        result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
       }
       
       const tips = result.tips || result.feedback || ["Keep practicing!"];
@@ -4312,26 +4409,26 @@ function TaskModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0C10]/95 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-sm overflow-y-auto"
     >
       <motion.div 
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-[#1F2833] w-full max-w-2xl lg:max-w-5xl rounded-3xl border border-[#45A29E]/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
+        className="bg-app-surface w-full max-w-2xl lg:max-w-5xl rounded-3xl border border-app-primary/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
       >
         {/* Header */}
-        <div className="p-6 border-b border-[#45A29E]/20 flex items-center justify-between bg-[#1F2833]">
+        <div className="p-6 border-b border-app-primary/20 flex items-center justify-between bg-app-surface">
           <div className="flex items-center gap-3 flex-1">
-            <div className="p-2 bg-[#45A29E]/10 rounded-lg">
-              {task.section === 'speaking' ? <Mic className="text-[#45A29E]" size={20} /> : 
-               task.section === 'writing' ? <PenTool className="text-[#45A29E]" size={20} /> :
-               task.section === 'reading' ? <BookOpen className="text-[#45A29E]" size={20} /> :
-               <Headphones className="text-[#45A29E]" size={20} />}
+            <div className="p-2 bg-app-primary/10 rounded-lg">
+              {task.section === 'speaking' ? <Mic className="text-app-primary" size={20} /> : 
+               task.section === 'writing' ? <PenTool className="text-app-primary" size={20} /> :
+               task.section === 'reading' ? <BookOpen className="text-app-primary" size={20} /> :
+               <Headphones className="text-app-primary" size={20} />}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white leading-none">{task.category}</h3>
-              <p className="text-[10px] text-[#45A29E] uppercase tracking-widest mt-1 font-bold">{task.title} • PTE Academic</p>
+              <h3 className="text-lg font-bold text-app-text leading-none">{task.category}</h3>
+              <p className="text-[10px] text-app-primary uppercase tracking-widest mt-1 font-bold">{task.title} • PTE Academic</p>
             </div>
           </div>
           
@@ -4339,7 +4436,7 @@ function TaskModal({
             {onPrev && (
               <button 
                 onClick={onPrev}
-                className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7] disabled:opacity-30"
+                className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted disabled:opacity-30"
                 title="Previous Question"
               >
                 <ChevronLeft size={20} />
@@ -4348,14 +4445,14 @@ function TaskModal({
             {onNext && (
               <button 
                 onClick={onNext}
-                className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7] disabled:opacity-30"
+                className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted disabled:opacity-30"
                 title="Next Question"
               >
                 <ChevronRight size={20} />
               </button>
             )}
-            <div className="w-px h-6 bg-[#45A29E]/20 mx-2" />
-            <button onClick={onClose} className="p-2 hover:bg-[#0B0C10] rounded-full transition-colors text-[#C5C6C7]">
+            <div className="w-px h-6 bg-app-primary/20 mx-2" />
+            <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
               <X size={20} />
             </button>
           </div>
@@ -4370,18 +4467,18 @@ function TaskModal({
                   "w-2 h-2 rounded-full animate-pulse",
                   phase === 'prep' ? "bg-yellow-500" : (phase === 'audio' ? "bg-blue-500" : "bg-red-500")
                 )} />
-                <span className="text-xs font-bold uppercase tracking-widest text-white">
+                <span className="text-xs font-bold uppercase tracking-widest text-app-text">
                   {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : "Listening") : (phase === 'prep' ? (task.hasAudio ? "Beginning in" : "Preparation") : (task.section === 'speaking' ? "Recording" : task.section.charAt(0).toUpperCase() + task.section.slice(1)))}
                 </span>
               </div>
               <div className="flex items-center gap-4">
-                <div className="text-2xl font-mono font-bold text-white">
+                <div className="text-2xl font-mono font-bold text-app-text">
                   {phase === 'audio' ? (isPreparingAudio ? "..." : (isAudioPlaying ? "Playing" : "Loading...")) : formatTime(timeLeft)}
                 </div>
                 {phase === 'prep' && (
                   <button 
                     onClick={skipPrep}
-                    className="text-[10px] font-bold text-[#45A29E] border border-[#45A29E]/30 px-3 py-1 rounded-full hover:bg-[#45A29E]/10 transition-all"
+                    className="text-[10px] font-bold text-app-primary border border-app-primary/30 px-3 py-1 rounded-full hover:bg-app-primary/10 transition-all"
                   >
                     SKIP PREP
                   </button>
@@ -4391,9 +4488,9 @@ function TaskModal({
           )}
 
           {/* Instruction Area */}
-          <div className="bg-[#1F2833]/30 p-4 rounded-xl border border-[#45A29E]/20">
-            <p className="text-sm text-white leading-relaxed">
-              <span className="text-[#45A29E] font-bold mr-2">Instruction:</span>
+          <div className="bg-app-surface/30 p-4 rounded-xl border border-app-primary/20">
+            <p className="text-sm text-app-text leading-relaxed">
+              <span className="text-app-primary font-bold mr-2">Instruction:</span>
               {task.description}
             </p>
           </div>
@@ -4402,8 +4499,8 @@ function TaskModal({
           {task.passage ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               {/* Left Column: Passage */}
-              <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20 h-full overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-[#45A29E]/20 scrollbar-track-transparent">
-                <div className="text-white/90 leading-relaxed text-base font-normal">
+              <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20 h-full overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-app-primary/20 scrollbar-track-transparent">
+                <div className="text-app-text/90 leading-relaxed text-base font-normal">
                   {task.passage}
                 </div>
               </div>
@@ -4411,8 +4508,8 @@ function TaskModal({
               {/* Right Column: Question and Options */}
               <div className="space-y-6">
                 {task.prompt && (
-                  <div className="bg-[#1F2833]/30 p-6 rounded-2xl border border-[#45A29E]/20">
-                    <p className="text-[#66FCF1] font-bold text-xl leading-relaxed">
+                  <div className="bg-app-surface/30 p-6 rounded-2xl border border-app-primary/20">
+                    <p className="text-app-accent font-bold text-xl leading-relaxed">
                       {task.prompt}
                     </p>
                   </div>
@@ -4420,10 +4517,10 @@ function TaskModal({
 
                 {phase === 'recording' && (
                   <div className="space-y-6">
-                    <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                    <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20">
                       <div className="space-y-4">
                         {task.options?.map(option => (
-                          <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all group">
+                          <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-app-primary/10 hover:bg-app-primary/5 cursor-pointer transition-all group">
                             <input
                               type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
                               name="reading-option"
@@ -4436,9 +4533,9 @@ function TaskModal({
                                   setSelectedOptions([option]);
                                 }
                               }}
-                              className="w-5 h-5 accent-[#45A29E]"
+                              className="w-5 h-5 accent-app-primary"
                             />
-                            <span className="text-white group-hover:text-[#66FCF1] transition-colors">{option}</span>
+                            <span className="text-app-text group-hover:text-app-accent transition-colors">{option}</span>
                           </label>
                         ))}
                       </div>
@@ -4453,7 +4550,7 @@ function TaskModal({
                             console.error("Finish failed:", e);
                           }
                         }}
-                        className="bg-[#45A29E] text-[#0B0C10] px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all shadow-lg shadow-[#45A29E]/10"
+                        className="bg-app-primary text-app-bg px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
                       >
                         {isMockTest ? 'Next Task' : 'Submit Response'}
                       </button>
@@ -4466,16 +4563,16 @@ function TaskModal({
             <>
               {/* Prompt Area */}
               {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && (
-                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20 relative group">
+                <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20 relative group">
                   <p className={cn(
-                    "text-white leading-relaxed font-medium",
+                    "text-app-text leading-relaxed font-medium",
                     task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
                   )}>
                     {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
                     {task.section === 'listening' 
                       ? (hasAudioError 
                           ? "Audio failed to load. Please check your connection and try again." 
-                          : (phase === 'audio' ? "Listen carefully to the recording..." : (task.category === 'Fill in the Blanks' ? "Type the missing words in each blank." : (task.prompt || "Complete the task based on the recording."))))
+                          : (task.prompt || "Complete the task based on the recording."))
                       : (task.prompt || "No prompt available for this task.")}
                   </p>
                   {hasAudioError && (
@@ -4484,14 +4581,14 @@ function TaskModal({
                         setHasAudioError(false);
                         setAudioRetryCount(prev => prev + 1);
                       }}
-                      className="mt-4 px-6 py-2 bg-[#45A29E] text-[#0B0C10] rounded-lg font-bold hover:bg-[#66FCF1] transition-all flex items-center gap-2"
+                      className="mt-4 px-6 py-2 bg-app-primary text-app-bg rounded-lg font-bold hover:bg-app-accent transition-all flex items-center gap-2"
                     >
                       <RefreshCw size={16} />
                       Retry Audio
                     </button>
                   )}
                   {task.image && (
-                    <div className="mt-6 rounded-xl overflow-hidden border border-[#45A29E]/20">
+                    <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
                       <img 
                         src={task.image} 
                         alt="Task Prompt" 
@@ -4504,12 +4601,12 @@ function TaskModal({
               )}
 
               {/* Input Area (Writing, Reading, Listening) */}
-              {task.section !== 'speaking' && phase === 'recording' && (
+              {task.section !== 'speaking' && (phase === 'recording' || (task.section === 'listening' && (phase === 'audio' || phase === 'prep'))) && (
                 <div className="space-y-6">
                   {task.section === 'reading' ? (
-                    <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                    <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20">
                       {task.category === 'Reading & Writing: Fill in the Blanks' ? (
-                        <div className="text-white leading-relaxed text-lg">
+                        <div className="text-app-text leading-relaxed text-lg">
                           {task.prompt?.split('________').map((part, i, arr) => (
                             <React.Fragment key={i}>
                               {part}
@@ -4517,7 +4614,7 @@ function TaskModal({
                                 <select
                                   value={blankAnswers[i] || ''}
                                   onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
-                                  className="mx-1 bg-[#1F2833] text-[#66FCF1] border border-[#45A29E]/40 rounded-md px-2 py-1 outline-none focus:border-[#66FCF1] transition-all cursor-pointer hover:bg-[#45A29E]/10 appearance-none pr-8 relative"
+                                  className="mx-1 bg-app-surface text-app-accent border border-app-primary/40 rounded-md px-2 py-1 outline-none focus:border-app-accent transition-all cursor-pointer hover:bg-app-primary/10 appearance-none pr-8 relative"
                                   style={{
                                     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2366FCF1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
                                     backgroundRepeat: 'no-repeat',
@@ -4525,9 +4622,9 @@ function TaskModal({
                                     backgroundSize: '1.5em 1.5em'
                                   }}
                                 >
-                                  <option value="" className="bg-[#1F2833] text-[#66FCF1]">[Select]</option>
+                                  <option value="" className="bg-app-surface text-app-accent">[Select]</option>
                                   {task.blanks?.[i]?.map(opt => (
-                                    <option key={opt} value={opt} className="bg-[#1F2833] text-white">{opt}</option>
+                                    <option key={opt} value={opt} className="bg-app-surface text-app-text">{opt}</option>
                                   ))}
                                 </select>
                               )}
@@ -4537,7 +4634,7 @@ function TaskModal({
                       ) : task.category === 'Multiple Choice, Multiple Answer' || task.category === 'Multiple Choice, Single Answer' ? (
                         <div className="space-y-4">
                           {task.options?.map(option => (
-                            <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
+                            <label key={option} className="flex items-center gap-4 p-4 rounded-xl border border-app-primary/10 hover:bg-app-primary/5 cursor-pointer transition-all">
                               <input
                                 type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
                                 name="reading-option"
@@ -4550,17 +4647,17 @@ function TaskModal({
                                     setSelectedOptions([option]);
                                   }
                                 }}
-                                className="w-5 h-5 accent-[#45A29E]"
+                                className="w-5 h-5 accent-app-primary"
                               />
-                              <span className="text-white">{option}</span>
+                              <span className="text-app-text">{option}</span>
                             </label>
                           ))}
                         </div>
                       ) : task.category === 'Re-order Paragraphs' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[400px]">
                       {/* Source Panel */}
-                      <div className="flex flex-col gap-3 p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/20 overflow-y-auto">
-                        <h4 className="text-[#C5C6C7] text-xs uppercase tracking-wider font-bold mb-2">Source</h4>
+                      <div className="flex flex-col gap-3 p-4 bg-app-surface/50 rounded-xl border border-app-primary/20 overflow-y-auto">
+                        <h4 className="text-app-text-muted text-xs uppercase tracking-wider font-bold mb-2">Source</h4>
                         {reorderedParagraphs.map((para, i) => (
                           <motion.div 
                             key={para}
@@ -4569,7 +4666,7 @@ function TaskModal({
                               setTargetParagraphs([...targetParagraphs, para]);
                               setReorderedParagraphs(reorderedParagraphs.filter(p => p !== para));
                             }}
-                            className="p-3 bg-[#0B0C10] rounded-lg border border-[#45A29E]/20 cursor-pointer hover:border-[#66FCF1] hover:text-[#66FCF1] transition-all text-sm text-white leading-relaxed"
+                            className="p-3 bg-app-bg rounded-lg border border-app-primary/20 cursor-pointer hover:border-app-accent hover:text-app-accent transition-all text-sm text-app-text leading-relaxed"
                           >
                             {para}
                           </motion.div>
@@ -4577,16 +4674,16 @@ function TaskModal({
                       </div>
                       
                       {/* Target Panel */}
-                      <div className="flex flex-col gap-3 p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/20 overflow-y-auto">
+                      <div className="flex flex-col gap-3 p-4 bg-app-surface/50 rounded-xl border border-app-primary/20 overflow-y-auto">
                         <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-[#C5C6C7] text-xs uppercase tracking-wider font-bold">Target</h4>
+                          <h4 className="text-app-text-muted text-xs uppercase tracking-wider font-bold">Target</h4>
                           {targetParagraphs.length > 0 && (
                             <button 
                               onClick={() => {
                                 setReorderedParagraphs([...reorderedParagraphs, ...targetParagraphs]);
                                 setTargetParagraphs([]);
                               }}
-                              className="text-[10px] text-[#45A29E] hover:text-[#66FCF1] uppercase tracking-tighter"
+                              className="text-[10px] text-app-primary hover:text-app-accent uppercase tracking-tighter"
                             >
                               Reset
                             </button>
@@ -4600,24 +4697,24 @@ function TaskModal({
                               setReorderedParagraphs([...reorderedParagraphs, para]);
                               setTargetParagraphs(targetParagraphs.filter(p => p !== para));
                             }}
-                            className="p-3 bg-[#0B0C10] rounded-lg border border-[#66FCF1]/30 cursor-pointer hover:border-[#66FCF1] transition-all text-sm text-[#66FCF1] leading-relaxed relative group"
+                            className="p-3 bg-app-bg rounded-lg border border-app-accent/30 cursor-pointer hover:border-app-accent transition-all text-sm text-app-accent leading-relaxed relative group"
                           >
-                            <span className="absolute -left-2 -top-2 w-5 h-5 bg-[#66FCF1] text-[#0B0C10] rounded-full flex items-center justify-center text-[10px] font-bold">
+                            <span className="absolute -left-2 -top-2 w-5 h-5 bg-app-accent text-app-bg rounded-full flex items-center justify-center text-[10px] font-bold">
                               {i + 1}
                             </span>
                             {para}
                           </motion.div>
                         ))}
                         {targetParagraphs.length === 0 && (
-                          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-[#45A29E]/10 rounded-lg">
-                            <p className="text-[#C5C6C7]/30 text-xs italic">Select from source to order</p>
+                          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-app-primary/10 rounded-lg">
+                            <p className="text-app-text-muted/30 text-xs italic">Select from source to order</p>
                           </div>
                         )}
                       </div>
                     </div>
                   ) : task.category === 'Reading: Fill in the Blanks' ? (
                     <div className="space-y-6">
-                      <div className="text-white leading-relaxed p-4 bg-[#1F2833]/50 rounded-xl border border-[#45A29E]/10">
+                      <div className="text-app-text leading-relaxed p-4 bg-app-surface/50 rounded-xl border border-app-primary/10">
                         {task.prompt?.split('________').map((part, i, arr) => (
                           <React.Fragment key={i}>
                             {part}
@@ -4630,7 +4727,7 @@ function TaskModal({
                                     setBlankAnswers(newAnswers);
                                   }
                                 }}
-                                className="inline-block min-w-[100px] h-8 border-b-2 border-dashed border-[#45A29E] mx-2 text-center text-[#66FCF1] font-bold cursor-pointer hover:bg-[#45A29E]/10 transition-all"
+                                className="inline-block min-w-[100px] h-8 border-b-2 border-dashed border-app-primary mx-2 text-center text-app-accent font-bold cursor-pointer hover:bg-app-primary/10 transition-all"
                               >
                                 {blankAnswers[i] || ''}
                               </span>
@@ -4638,7 +4735,7 @@ function TaskModal({
                           </React.Fragment>
                         ))}
                       </div>
-                      <div className="flex flex-wrap gap-3 p-4 bg-[#1F2833] rounded-xl border border-[#45A29E]/20">
+                      <div className="flex flex-wrap gap-3 p-4 bg-app-surface rounded-xl border border-app-primary/20">
                         {task.options?.filter(opt => !Object.values(blankAnswers).includes(opt)).map(option => (
                           <button
                             key={option}
@@ -4649,7 +4746,7 @@ function TaskModal({
                                 setBlankAnswers({ ...blankAnswers, [firstEmpty]: option });
                               }
                             }}
-                            className="px-4 py-2 bg-[#0B0C10] border border-[#45A29E]/30 rounded-lg text-sm text-white hover:border-[#45A29E] hover:text-[#66FCF1] transition-all"
+                            className="px-4 py-2 bg-app-bg border border-app-primary/30 rounded-lg text-sm text-app-text hover:border-app-primary hover:text-app-accent transition-all"
                           >
                             {option}
                           </button>
@@ -4664,7 +4761,7 @@ function TaskModal({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                      <div className="flex items-center justify-between bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
                         <div className="flex gap-2">
                           <button 
                             onClick={async (e) => {
@@ -4674,7 +4771,7 @@ function TaskModal({
                                 console.error("Failed to cut:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Cut
                           </button>
@@ -4686,7 +4783,7 @@ function TaskModal({
                                 console.error("Failed to copy:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Copy
                           </button>
@@ -4698,7 +4795,7 @@ function TaskModal({
                                 console.error("Failed to paste:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Paste
                           </button>
@@ -4711,7 +4808,7 @@ function TaskModal({
                             </button>
                           )}
                         </div>
-                        <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                        <div className="text-app-text-muted text-xs font-mono px-2">
                           {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
                         </div>
                       </div>
@@ -4726,15 +4823,15 @@ function TaskModal({
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         placeholder="Type your response here..."
-                        className="w-full h-64 lg:h-96 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                        className="w-full h-64 lg:h-96 bg-app-bg text-app-text p-6 rounded-b-2xl border border-app-primary/20 focus:border-app-primary outline-none transition-all resize-none"
                       />
                     </div>
                   )}
                 </div>
               ) : task.section === 'listening' ? (
-                <div className="bg-[#0B0C10] p-8 rounded-2xl border border-[#45A29E]/20">
+                <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20">
                   {task.category === 'Fill in the Blanks' ? (
-                    <div className="text-white leading-relaxed text-lg">
+                    <div className="text-app-text leading-relaxed text-lg">
                       {task.prompt?.split('________').map((part, i, arr) => (
                         <React.Fragment key={i}>
                           {part}
@@ -4744,16 +4841,39 @@ function TaskModal({
                               value={blankAnswers[i] || ''}
                               onChange={(e) => setBlankAnswers({ ...blankAnswers, [i]: e.target.value })}
                               placeholder={`[${i + 1}]`}
-                              className="mx-1 w-32 bg-[#1F2833] text-[#66FCF1] border-b-2 border-[#45A29E]/40 focus:border-[#66FCF1] outline-none px-2 py-0.5 transition-all text-center"
+                              className="mx-1 w-32 bg-app-surface text-app-accent border-b-2 border-app-primary/40 focus:border-app-accent outline-none px-2 py-0.5 transition-all text-center"
                             />
                           )}
                         </React.Fragment>
                       ))}
                     </div>
-                  ) : task.category === 'Highlight Correct Summary' || task.category.includes('Multiple Choice') ? (
+                  ) : task.category === 'Highlight Incorrect Words' ? (
+                    <div className="text-app-text leading-relaxed text-lg flex flex-wrap gap-x-1 gap-y-2">
+                      {task.prompt?.split(/\s+/).map((word, i) => (
+                        <span
+                          key={i}
+                          onClick={() => {
+                            if (selectedOptions.includes(word)) {
+                              setSelectedOptions(selectedOptions.filter(o => o !== word));
+                            } else {
+                              setSelectedOptions([...selectedOptions, word]);
+                            }
+                          }}
+                          className={cn(
+                            "cursor-pointer px-1 rounded transition-all",
+                            selectedOptions.includes(word) 
+                              ? "bg-app-accent text-app-bg font-bold" 
+                              : "hover:bg-app-primary/10"
+                          )}
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  ) : task.category === 'Highlight Correct Summary' || task.category.includes('Multiple Choice') || task.category === 'Select Missing Word' ? (
                     <div className="space-y-4">
                       {task.options?.map(option => (
-                        <label key={option} className="flex items-start gap-4 p-4 rounded-xl border border-[#45A29E]/10 hover:bg-[#45A29E]/5 cursor-pointer transition-all">
+                        <label key={option} className="flex items-start gap-4 p-4 rounded-xl border border-app-primary/10 hover:bg-app-primary/5 cursor-pointer transition-all">
                           <input
                             type={task.category.includes('Multiple Answer') ? "checkbox" : "radio"}
                             name="listening-option"
@@ -4766,15 +4886,15 @@ function TaskModal({
                                 setSelectedOptions([option]);
                               }
                             }}
-                            className="mt-1 w-5 h-5 accent-[#45A29E] shrink-0"
+                            className="mt-1 w-5 h-5 accent-app-primary shrink-0"
                           />
-                          <span className="text-white text-sm leading-relaxed">{option}</span>
+                          <span className="text-app-text text-sm leading-relaxed">{option}</span>
                         </label>
                       ))}
                     </div>
                   ) : (
                     <div className="relative space-y-2">
-                      <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                      <div className="flex items-center justify-between bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
                         <div className="flex gap-2">
                           <button 
                             onClick={async (e) => {
@@ -4784,7 +4904,7 @@ function TaskModal({
                                 console.error("Failed to cut:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Cut
                           </button>
@@ -4796,7 +4916,7 @@ function TaskModal({
                                 console.error("Failed to copy:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Copy
                           </button>
@@ -4808,12 +4928,12 @@ function TaskModal({
                                 console.error("Failed to paste:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Paste
                           </button>
                         </div>
-                        <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                        <div className="text-app-text-muted text-xs font-mono px-2">
                           {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
                         </div>
                       </div>
@@ -4822,14 +4942,14 @@ function TaskModal({
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         placeholder={task.category === 'Write from Dictation' ? "Type the sentence you heard..." : "Type your response here..."}
-                        className="w-full h-64 lg:h-96 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                        className="w-full h-64 lg:h-96 bg-app-bg text-app-text p-6 rounded-b-2xl border border-app-primary/20 focus:border-app-primary outline-none transition-all resize-none"
                       />
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="relative space-y-2">
-                  <div className="flex items-center justify-between bg-[#1F2833] p-2 rounded-t-xl border-x border-t border-[#45A29E]/20">
+                  <div className="flex items-center justify-between bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
                     <div className="flex gap-2">
                       <button 
                         onClick={async (e) => {
@@ -4839,7 +4959,7 @@ function TaskModal({
                             console.error("Failed to cut:", err);
                           }
                         }}
-                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                        className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                       >
                         Cut
                       </button>
@@ -4851,18 +4971,18 @@ function TaskModal({
                             console.error("Failed to copy:", err);
                           }
                         }}
-                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                        className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                       >
                         Copy
                       </button>
                       <button 
                         onClick={handlePaste}
-                        className="px-3 py-1 text-xs font-bold text-[#66FCF1] hover:bg-[#45A29E]/20 rounded transition-all border border-[#45A29E]/30"
+                        className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                       >
                         Paste
                       </button>
                     </div>
-                    <div className="text-[#C5C6C7] text-xs font-mono px-2">
+                    <div className="text-app-text-muted text-xs font-mono px-2">
                       {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
                     </div>
                   </div>
@@ -4871,17 +4991,17 @@ function TaskModal({
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     placeholder="Type your response here..."
-                    className="w-full h-48 bg-[#0B0C10] text-white p-6 rounded-b-2xl border border-[#45A29E]/20 focus:border-[#45A29E] outline-none transition-all resize-none"
+                    className="w-full h-48 bg-app-bg text-app-text p-6 rounded-b-2xl border border-app-primary/20 focus:border-app-primary outline-none transition-all resize-none"
                   />
                 </div>
               )}
               <div className="flex justify-between items-center">
                 <div className="flex gap-4">
                   {task.category !== 'Re-order Paragraphs' && !task.category.includes('Multiple Choice') && !task.category.includes('Fill in the Blanks') && (
-                    <span className="text-xs text-[#C5C6C7]">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
+                    <span className="text-xs text-app-text-muted">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
                   )}
                   {task.section === 'listening' && isAudioPlaying && (
-                    <span className="text-xs text-[#45A29E] font-bold animate-pulse">Audio Playing...</span>
+                    <span className="text-xs text-app-primary font-bold animate-pulse">Audio Playing...</span>
                   )}
                 </div>
                 <button 
@@ -4892,7 +5012,7 @@ function TaskModal({
                       console.error("Finish failed:", e);
                     }
                   }}
-                  className="bg-[#45A29E] text-[#0B0C10] px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                  className="bg-app-primary text-app-bg px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all"
                 >
                   {isMockTest ? 'Next Task' : 'Submit Response'}
                 </button>
@@ -4911,12 +5031,12 @@ function TaskModal({
                 className="flex flex-col items-center justify-center py-12 space-y-6"
               >
                 <div className="relative">
-                  <div className="w-20 h-20 border-4 border-[#45A29E]/20 border-t-[#45A29E] rounded-full animate-spin" />
-                  <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#45A29E]" size={32} />
+                  <div className="w-20 h-20 border-4 border-app-primary/20 border-t-app-primary rounded-full animate-spin" />
+                  <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-app-primary" size={32} />
                 </div>
                 <div className="text-center">
-                  <h4 className="text-xl font-bold text-white mb-2">Sensei AI is Scoring...</h4>
-                  <p className="text-sm text-[#C5C6C7]">
+                  <h4 className="text-xl font-bold text-app-text mb-2">Sensei AI is Scoring...</h4>
+                  <p className="text-sm text-app-text-muted">
                     {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') 
                       ? "Analyzing grammar, spelling, and content accuracy." 
                       : task.section === 'speaking'
@@ -4933,13 +5053,13 @@ function TaskModal({
                 className="space-y-6"
               >
                 {/* Scoreboard */}
-                <div className="bg-[#0B0C10] rounded-3xl p-6 border border-[#45A29E]/20">
+                <div className="bg-app-bg rounded-3xl p-6 border border-app-primary/20">
                   <div className="flex items-center justify-between mb-8">
                     <div>
-                      <h4 className="text-sm font-bold text-[#45A29E] uppercase tracking-widest">Ninja Scoreboard</h4>
-                      <p className="text-xs text-[#C5C6C7]">Based on PTE Global Scale of English</p>
+                      <h4 className="text-sm font-bold text-app-primary uppercase tracking-widest">Ninja Scoreboard</h4>
+                      <p className="text-xs text-app-text-muted">Based on PTE Global Scale of English</p>
                     </div>
-                    <div className="text-5xl font-black text-[#66FCF1] drop-shadow-[0_0_10px_rgba(102,252,241,0.3)]">
+                    <div className="text-5xl font-black text-app-accent drop-shadow-[0_0_10px_rgba(102,252,241,0.3)]">
                       {feedback.overall}
                     </div>
                   </div>
@@ -4977,14 +5097,14 @@ function TaskModal({
 
                 {/* Reading Answer Key */}
                 {task.section === 'reading' && task.correctAnswers && (
-                  <div className="bg-[#0B0C10] rounded-2xl p-6 border border-[#45A29E]/20 space-y-4">
-                    <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Check size={16} className="text-[#45A29E]" />
+                  <div className="bg-app-bg rounded-2xl p-6 border border-app-primary/20 space-y-4">
+                    <h5 className="text-sm font-bold text-app-text flex items-center gap-2">
+                      <Check size={16} className="text-app-primary" />
                       Answer Key & Feedback
                     </h5>
                     
                     {task.category.includes('Fill in the Blanks') ? (
-                      <div className="text-sm leading-relaxed text-[#C5C6C7] bg-[#1F2833]/50 p-4 rounded-xl border border-white/5">
+                      <div className="text-sm leading-relaxed text-app-text-muted bg-app-surface/50 p-4 rounded-xl border border-white/5">
                         {task.prompt?.split('________').map((part, i, arr) => {
                           const userAnswer = blankAnswers[i];
                           const correctAnswer = task.correctAnswers?.[i];
@@ -5025,7 +5145,7 @@ function TaskModal({
                                   ? "bg-green-500/10 border-green-500/30 text-green-400" 
                                   : isSelected 
                                     ? "bg-red-500/10 border-red-500/30 text-red-400"
-                                    : "bg-[#1F2833] border-white/5 text-[#C5C6C7]"
+                                    : "bg-app-surface border-white/5 text-app-text-muted"
                               )}
                             >
                               <span>{option}</span>
@@ -5041,7 +5161,7 @@ function TaskModal({
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <h6 className="text-[10px] font-bold text-[#C5C6C7] uppercase">Your Order</h6>
+                            <h6 className="text-[10px] font-bold text-app-text-muted uppercase">Your Order</h6>
                             {targetParagraphs.map((para, i) => {
                               const isCorrectPos = task.correctAnswers?.[i] === para;
                               return (
@@ -5055,9 +5175,9 @@ function TaskModal({
                             })}
                           </div>
                           <div className="space-y-2">
-                            <h6 className="text-[10px] font-bold text-[#C5C6C7] uppercase">Correct Order</h6>
+                            <h6 className="text-[10px] font-bold text-app-text-muted uppercase">Correct Order</h6>
                             {task.correctAnswers?.map((para, i) => (
-                              <div key={i} className="p-2 bg-[#1F2833] rounded-lg border border-white/5 text-[10px] leading-tight text-[#C5C6C7]">
+                              <div key={i} className="p-2 bg-app-surface rounded-lg border border-white/5 text-[10px] leading-tight text-app-text-muted">
                                 {i + 1}. {para.substring(0, 100)}...
                               </div>
                             ))}
@@ -5071,15 +5191,15 @@ function TaskModal({
                 {/* Detailed Analysis */}
                 {(task.section === 'speaking' || task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') && (
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                      <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                    <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
+                      <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">
                         {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? "Sensei's Wisdom" : 'Diagnostic Data'}
                       </h5>
                       {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
                         <ul className="space-y-2">
                           {Array.isArray(feedback.tips) && feedback.tips.slice(0, 3).map((tip: string, i: number) => (
-                            <li key={i} className="text-[10px] text-[#C5C6C7] flex gap-2 leading-tight">
-                              <span className="text-[#45A29E] font-bold">{i+1}</span>
+                            <li key={i} className="text-[10px] text-app-text-muted flex gap-2 leading-tight">
+                              <span className="text-app-primary font-bold">{i+1}</span>
                               {tip}
                             </li>
                           ))}
@@ -5092,13 +5212,13 @@ function TaskModal({
                           </div>
                           <div className="flex justify-between text-xs">
                             <span>Pace</span>
-                            <span className="text-[#66FCF1] font-bold">{feedback.details.pace}</span>
+                            <span className="text-app-accent font-bold">{feedback.details.pace}</span>
                           </div>
                         </div>
                       )}
                     </div>
-                    <div className="bg-[#1F2833] p-4 rounded-2xl border border-white/5">
-                      <h5 className="text-[10px] font-bold text-[#C5C6C7] uppercase mb-3">
+                    <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
+                      <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">
                         {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
                       </h5>
                       <div className="flex flex-wrap gap-1">
@@ -5113,20 +5233,20 @@ function TaskModal({
                 )}
 
                 {/* Tips / Expected Answer */}
-                <div className="bg-[#45A29E]/5 p-6 rounded-2xl border border-[#45A29E]/20">
-                  <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                    <Zap size={16} className="text-[#45A29E]" />
+                <div className="bg-app-primary/5 p-6 rounded-2xl border border-app-primary/20">
+                  <h5 className="text-sm font-bold text-app-text mb-4 flex items-center gap-2">
+                    <Zap size={16} className="text-app-primary" />
                     {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Expected Answer' : "Sensei's Wisdom"}
                   </h5>
                   {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
-                    <div className="text-xs text-[#C5C6C7] leading-relaxed italic bg-[#1F2833]/50 p-4 rounded-xl border border-white/5">
+                    <div className="text-xs text-app-text-muted leading-relaxed italic bg-app-surface/50 p-4 rounded-xl border border-white/5">
                       {task.summaryExample || (task.correctAnswers && task.correctAnswers[0]) || "No expected answer available."}
                     </div>
                   ) : (
                     <ul className="space-y-3">
                       {Array.isArray(feedback.tips) && feedback.tips.map((tip: string, i: number) => (
-                        <li key={i} className="text-xs text-[#C5C6C7] flex gap-3 leading-relaxed">
-                          <span className="text-[#45A29E] font-bold">0{i+1}</span>
+                        <li key={i} className="text-xs text-app-text-muted flex gap-3 leading-relaxed">
+                          <span className="text-app-primary font-bold">0{i+1}</span>
                           {tip}
                         </li>
                       ))}
@@ -5184,7 +5304,7 @@ function TaskModal({
                         setHasAudioError(false);
                         beepPlayedRef.current = false;
                       }}
-                      className="flex-1 py-4 bg-[#45A29E] text-[#0B0C10] rounded-2xl font-bold uppercase tracking-widest hover:bg-[#66FCF1] transition-all"
+                      className="flex-1 py-4 bg-app-primary text-app-bg rounded-2xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all"
                     >
                       Reset
                     </button>
@@ -5193,13 +5313,15 @@ function TaskModal({
                     onClick={() => {
                       if (isMockTest) {
                         onFinish(feedback.overall);
+                      } else if (onNext) {
+                        onNext();
                       } else {
                         onClose();
                       }
                     }}
-                    className="flex-1 py-4 border border-[#45A29E]/20 text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-white/5 transition-all"
+                    className="flex-1 py-4 border border-app-primary/20 text-app-text rounded-2xl font-bold uppercase tracking-widest hover:bg-app-surface/50 transition-all"
                   >
-                    {isMockTest ? 'Next Task' : 'Next Task'}
+                    {isMockTest ? 'Next Task' : onNext ? 'Next Task' : 'Close'}
                   </button>
                 </div>
               </motion.div>
@@ -5221,21 +5343,21 @@ function TaskModal({
                           transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.05 }}
                           className={cn(
                             "w-1.5 rounded-full",
-                            isAudioPlaying ? "bg-blue-400" : "bg-[#45A29E]"
+                            isAudioPlaying ? "bg-blue-400" : "bg-app-primary"
                           )}
                         />
                       ))}
                     </div>
-                    <p className="text-sm text-[#C5C6C7] animate-pulse mb-8">
+                    <p className="text-sm text-app-text-muted animate-pulse mb-8">
                       {phase === 'audio' ? "Listening to audio..." : "Recording your response..."}
                     </p>
                   </>
                 ) : (
-                  <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
-                    {[...Array(20)].map((_, i) => (
-                      <div key={i} className="w-1.5 h-[10px] rounded-full bg-[#45A29E]/20" />
-                    ))}
-                  </div>
+                <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
+                  {[...Array(20)].map((_, i) => (
+                    <div key={i} className="w-1.5 h-[10px] rounded-full bg-app-primary/20" />
+                  ))}
+                </div>
                 )}
                 
                     <div className="flex flex-col items-center gap-4">
@@ -5262,7 +5384,7 @@ function TaskModal({
                           "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
                           phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
                           (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
-                          (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-[#45A29E] shadow-[#45A29E]/20")),
+                          (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
                           isPreparingAudio && "bg-blue-500/50 cursor-wait",
                           hasAudioError && "bg-red-500/50"
                         )}
@@ -5270,7 +5392,7 @@ function TaskModal({
                         {isPreparingAudio ? <Loader2 size={40} className="text-white animate-spin" /> : 
                          (phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : 
                          (phase === 'audio' ? (isAudioPlaying ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-white ml-1" />) : 
-                         (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-[#0B0C10] ml-1" />)))}
+                         (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-app-bg ml-1" />)))}
                       </button>
                       
                       {isPreparingAudio && (
@@ -5282,7 +5404,7 @@ function TaskModal({
                           <p className="text-[10px] text-red-400 font-bold">Audio failed to load</p>
                           <button 
                             onClick={() => setAudioRetryCount(prev => prev + 1)}
-                            className="text-[10px] text-[#45A29E] font-bold underline hover:text-[#66FCF1] transition-colors"
+                            className="text-[10px] text-app-primary font-bold underline hover:text-app-accent transition-colors"
                           >
                             Retry Loading
                           </button>
@@ -5293,7 +5415,7 @@ function TaskModal({
                         <p className="text-[10px] text-blue-400 font-bold animate-bounce">Click to play audio if it doesn't start</p>
                       )}
                     </div>
-                <p className="mt-6 text-xs font-bold text-[#C5C6C7] uppercase tracking-[0.3em]">
+                <p className="mt-6 text-xs font-bold text-app-text-muted uppercase tracking-[0.3em]">
                   {phase === 'audio' ? "Listening..." : (phase === 'prep' ? "Preparing..." : (task.section === 'speaking' ? "Recording Now" : "Starting Task"))}
                 </p>
               </motion.div>
@@ -5309,16 +5431,16 @@ function ScoreMetric({ label, score, max, rawScore, maxRawScore }: { label: stri
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-end">
-        <span className="text-[10px] font-bold text-[#C5C6C7] uppercase tracking-wider">{label}</span>
-        <span className="text-sm font-bold text-white">
+        <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">{label}</span>
+        <span className="text-sm font-bold text-app-text">
           {rawScore !== undefined && maxRawScore !== undefined ? `${rawScore}/${maxRawScore}` : score}
         </span>
       </div>
-      <div className="h-1.5 bg-[#1F2833] rounded-full overflow-hidden">
+      <div className="h-1.5 bg-app-surface rounded-full overflow-hidden">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${(score / max) * 100}%` }}
-          className="h-full bg-[#45A29E]"
+          className="h-full bg-app-primary"
         />
       </div>
     </div>

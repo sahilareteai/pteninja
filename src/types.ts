@@ -315,12 +315,13 @@ export const PTE_TASKS: PTETask[] = [
     title: 'Question 1', 
     category: 'Summarize Group Discussion',
     description: 'Listen to a group discussion and summarize the main points in your own words.', 
-    section: 'speaking', 
-    type: 'speaking', 
+    section: 'listening', 
+    type: 'listening', 
     prepTime: 10, 
     recordingTime: 40,
     hasAudio: true,
-    prompt: "Three students are discussing their project on renewable energy. Student A suggests focusing on solar power due to its accessibility. Student B argues that wind energy is more efficient in their region. Student C proposes a hybrid model combining both. They eventually agree to research the costs and benefits of a hybrid system for their final presentation.",
+    transcript: "Three students are discussing their project on renewable energy. Student A suggests focusing on solar power due to its accessibility. Student B argues that wind energy is more efficient in their region. Student C proposes a hybrid model combining both. They eventually agree to research the costs and benefits of a hybrid system for their final presentation.",
+    prompt: "Summarize the group discussion you just heard.",
     image: "https://picsum.photos/seed/discussion/600/400"
   },
   { 
@@ -456,6 +457,26 @@ export const PTE_TASKS: PTETask[] = [
     ]
   },
   { 
+    id: 'rmcq-2', 
+    title: 'Question 2', 
+    category: 'Multiple Choice, Multiple Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting all the correct responses. More than one response may be correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "Sustainable development requires a balanced approach that considers economic growth, social inclusion, and environmental protection. Key goals include ending poverty, protecting the planet, and ensuring prosperity for all. Achieving these goals requires collaboration between governments, businesses, and civil society.",
+    prompt: "According to the passage, what are the essential components of sustainable development?",
+    options: [
+      'Prioritizing economic growth over environmental concerns.',
+      'Ensuring social inclusion for all members of society.',
+      'Protecting the planet through sustainable practices.',
+      'Unregulated expansion of industrial activities.'
+    ],
+    correctAnswers: [
+      'Ensuring social inclusion for all members of society.',
+      'Protecting the planet through sustainable practices.'
+    ]
+  },
+  { 
     id: 'rscq-1', 
     title: 'Question 1', 
     category: 'Multiple Choice, Single Answer',
@@ -471,6 +492,91 @@ export const PTE_TASKS: PTETask[] = [
       'The historical evolution of philosophical thought.'
     ],
     correctAnswers: ['The interaction between genetic factors and environmental influences.']
+  },
+  { 
+    id: 'rscq-2', 
+    title: 'Question 2', 
+    category: 'Multiple Choice, Single Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "The Industrial Revolution, which began in the 18th century, transformed societies from agrarian to industrial. This period was marked by significant technological advancements, such as the steam engine and the power loom. These innovations led to increased production efficiency and the growth of urban centers as people moved from rural areas to work in factories.",
+    prompt: "What was a primary driver of the growth of urban centers during the Industrial Revolution?",
+    options: [
+      'The decline of manufacturing in rural areas.',
+      'Technological advancements in agriculture.',
+      'The migration of people to work in factories.',
+      'A decrease in overall production efficiency.'
+    ],
+    correctAnswers: ['The migration of people to work in factories.']
+  },
+  { 
+    id: 'rscq-3', 
+    title: 'Question 3', 
+    category: 'Multiple Choice, Single Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy. This energy is stored in carbohydrate molecules, such as sugars, which are synthesized from carbon dioxide and water. In most cases, oxygen is also released as a waste product.",
+    prompt: "What is the primary function of photosynthesis according to the text?",
+    options: [
+      'To release carbon dioxide into the atmosphere.',
+      'To convert chemical energy into light energy.',
+      'To produce carbohydrate molecules from light energy.',
+      'To consume oxygen as a primary fuel source.'
+    ],
+    correctAnswers: ['To produce carbohydrate molecules from light energy.']
+  },
+  { 
+    id: 'rscq-4', 
+    title: 'Question 4', 
+    category: 'Multiple Choice, Single Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "The Great Barrier Reef is the world's largest coral reef system, composed of over 2,900 individual reefs and 900 islands. It supports a wide diversity of life and was selected as a World Heritage Site in 1981. However, the reef faces threats from climate change, pollution, and overfishing, which have led to significant coral bleaching events in recent years.",
+    prompt: "What is the primary threat to the Great Barrier Reef mentioned in the passage?",
+    options: [
+      'The increasing number of tourists visiting the islands.',
+      'The impact of climate change and environmental pollution.',
+      'The lack of international recognition as a heritage site.',
+      'The natural evolution of coral species over time.'
+    ],
+    correctAnswers: ['The impact of climate change and environmental pollution.']
+  },
+  { 
+    id: 'rscq-5', 
+    title: 'Question 5', 
+    category: 'Multiple Choice, Single Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "The Renaissance was a fervent period of European cultural, artistic, political and economic 'rebirth' following the Middle Ages. Generally described as taking place from the 14th century to the 17th century, the Renaissance promoted the rediscovery of classical philosophy, literature and art. Some of the greatest thinkers, authors, statesmen, scientists and artists in human history thrived during this era.",
+    prompt: "What was the primary focus of the Renaissance according to the text?",
+    options: [
+      'The expansion of industrial manufacturing across Europe.',
+      'The rediscovery of classical philosophy, literature, and art.',
+      'The development of modern digital communication technologies.',
+      'The strict adherence to medieval religious traditions.'
+    ],
+    correctAnswers: ['The rediscovery of classical philosophy, literature, and art.']
+  },
+  { 
+    id: 'rscq-6', 
+    title: 'Question 6', 
+    category: 'Multiple Choice, Single Answer',
+    description: "Read the passage below and answer the multiple-choice question by selecting the correct response. Only one response is correct.", 
+    section: 'reading', 
+    type: 'reading',
+    passage: "Quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all quantum physics including quantum chemistry, quantum field theory, quantum technology, and quantum information science.",
+    prompt: "What scale of nature does quantum mechanics primarily describe?",
+    options: [
+      'The movement of celestial bodies in the solar system.',
+      'The physical properties of atoms and subatomic particles.',
+      'The biological processes within multicellular organisms.',
+      'The geological changes occurring on the Earth\'s crust.'
+    ],
+    correctAnswers: ['The physical properties of atoms and subatomic particles.']
   },
   { 
     id: 'rop-1', 
@@ -566,6 +672,19 @@ export const PTE_TASKS: PTETask[] = [
     correctAnswers: ["Increased global connectivity", "Rapid spread of information"]
   },
   { 
+    id: 'lmcq-2', 
+    title: 'Question 2', 
+    category: 'Multiple Choice, Multiple Answer',
+    description: 'Listen to the recording and answer the question by selecting all the correct responses. More than one response may be correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The lecture explored the concept of emotional intelligence and its importance in the workplace. They argued that self-awareness, empathy, and effective communication are just as critical as technical skills for successful leadership and team collaboration in a modern corporate environment.",
+    prompt: "Which of the following are mentioned as key components of emotional intelligence?",
+    options: ["Self-awareness", "Technical expertise", "Empathy", "Effective communication", "Advanced coding skills"],
+    correctAnswers: ["Self-awareness", "Empathy", "Effective communication"]
+  },
+  { 
     id: 'lfib-1', 
     title: 'Question 1', 
     category: 'Fill in the Blanks',
@@ -576,6 +695,18 @@ export const PTE_TASKS: PTETask[] = [
     transcript: "The process of urbanization has led to the growth of megacities around the world. These cities offer many opportunities but also face significant challenges such as pollution.",
     prompt: "The process of ________ has led to the growth of megacities around the world. These cities offer many ________ but also face significant ________ such as pollution.",
     correctAnswers: ['urbanization', 'opportunities', 'challenges']
+  },
+  { 
+    id: 'lfib-2', 
+    title: 'Question 2', 
+    category: 'Fill in the Blanks',
+    description: 'You will hear a recording. Type the missing words in each blank.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "Scientific research requires careful observation and rigorous testing to understand the natural world. Researchers must validate their hypotheses based on empirical evidence.",
+    prompt: "Scientific ________ requires careful observation and ________ testing to understand the ________ world. Researchers must ________ their hypotheses based on empirical evidence.",
+    correctAnswers: ['research', 'rigorous', 'natural', 'validate']
   },
   { 
     id: 'hcs-1', 
@@ -612,6 +743,78 @@ export const PTE_TASKS: PTETask[] = [
       "A sudden decrease in available food sources"
     ],
     correctAnswers: ["Loss of natural habitat due to urban expansion"]
+  },
+  { 
+    id: 'smc-2', 
+    title: 'Question 2', 
+    category: 'Multiple Choice, Single Answer',
+    description: 'Listen to the recording and answer the multiple-choice question by selecting the correct response. Only one response is correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The speaker discussed the impact of the printing press on the spread of information in the 15th century. It allowed for the mass production of books, making knowledge more accessible to the general public and contributing to the rise of literacy rates.",
+    prompt: "What was a major consequence of the invention of the printing press according to the speaker?",
+    options: [
+      "A decrease in the overall production of books",
+      "Increased accessibility of knowledge to the public",
+      "A decline in literacy rates across Europe",
+      "The restriction of information to the elite classes"
+    ],
+    correctAnswers: ["Increased accessibility of knowledge to the public"]
+  },
+  { 
+    id: 'smc-3', 
+    title: 'Question 3', 
+    category: 'Multiple Choice, Single Answer',
+    description: 'Listen to the recording and answer the multiple-choice question by selecting the correct response. Only one response is correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The speaker discussed the importance of biodiversity in maintaining ecosystem stability. They explained that a diverse range of species ensures that ecosystems can recover from disturbances and continue to provide essential services like clean water and air.",
+    prompt: "According to the speaker, why is biodiversity important for ecosystems?",
+    options: [
+      "It ensures ecosystems can recover from disturbances",
+      "It leads to a decrease in overall species competition",
+      "It simplifies the management of natural resources",
+      "It prevents any changes from occurring in the environment"
+    ],
+    correctAnswers: ["It ensures ecosystems can recover from disturbances"]
+  },
+  { 
+    id: 'smc-4', 
+    title: 'Question 4', 
+    category: 'Multiple Choice, Single Answer',
+    description: 'Listen to the recording and answer the multiple-choice question by selecting the correct response. Only one response is correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The lecture focused on the role of renewable energy in reducing carbon emissions. The speaker highlighted that solar and wind power are now the most cost-effective options for many countries looking to transition away from fossil fuels.",
+    prompt: "What did the speaker highlight as a key advantage of solar and wind power?",
+    options: [
+      "They are the most cost-effective energy options",
+      "They require very little maintenance over time",
+      "They can be used in any weather condition",
+      "They are only suitable for small-scale applications"
+    ],
+    correctAnswers: ["They are the most cost-effective energy options"]
+  },
+  { 
+    id: 'smc-5', 
+    title: 'Question 5', 
+    category: 'Multiple Choice, Single Answer',
+    description: 'Listen to the recording and answer the multiple-choice question by selecting the correct response. Only one response is correct.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The speaker explained the concept of 'circular economy', where products are designed for reuse and recycling. This approach aims to minimize waste and reduce the consumption of raw materials, creating a more sustainable industrial model.",
+    prompt: "What is the primary goal of a circular economy according to the speaker?",
+    options: [
+      "To minimize waste and reduce raw material consumption",
+      "To increase the production of single-use plastic items",
+      "To encourage consumers to buy more new products",
+      "To phase out all forms of industrial manufacturing"
+    ],
+    correctAnswers: ["To minimize waste and reduce raw material consumption"]
   },
   { 
     id: 'mmc-1', 
@@ -656,6 +859,43 @@ export const PTE_TASKS: PTETask[] = [
     prompt: "Type the sentence you hear.",
     correctAnswers: ["The university will provide all the necessary equipment for the experiment."]
   },
+  { 
+    id: 'wfd-3', 
+    title: 'Question 3', 
+    category: 'Write from Dictation',
+    description: 'You will hear a sentence. Type the sentence in the box below exactly as you hear it.', 
+    section: 'listening', 
+    type: 'listening',
+    hasAudio: true,
+    transcript: "Please ensure that you have signed the attendance sheet.",
+    prompt: "Type the sentence you hear.",
+    correctAnswers: ["Please ensure that you have signed the attendance sheet."]
+  },
+  {
+    id: 'smw-1',
+    title: 'Question 1',
+    category: 'Select Missing Word',
+    description: 'You will hear a recording. At the end of the recording, the last word or group of words has been replaced by a beep. Select the correct option to complete the recording.',
+    section: 'listening',
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The research team has been working on this project for several months, and they are finally ready to present their [beep].",
+    prompt: "Select the correct option to complete the recording.",
+    options: ["findings", "equipment", "funding", "location"],
+    correctAnswers: ["findings"]
+  },
+  {
+    id: 'hiw-1',
+    title: 'Question 1',
+    category: 'Highlight Incorrect Words',
+    description: 'You will hear a recording. Below is a transcript of the recording. Some words in the transcript differ from what the speaker said. Please click on the words that are different.',
+    section: 'listening',
+    type: 'listening',
+    hasAudio: true,
+    transcript: "The study of economics involves the analysis of production, distribution, and consumption of goods and services.",
+    prompt: "The study of history involves the analysis of production, distribution, and consumption of goods and services.",
+    correctAnswers: ["history"]
+  }
 ];
 
 // Programmatically generate 100 questions for each category with more variety
@@ -738,7 +978,7 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
       example: "Large cities offer superior career opportunities and cultural diversity but often suffer from high costs and pollution, whereas small towns provide a sense of community and lower stress at the expense of limited amenities."
     }
   ],
-  'Reading: Fill in the Blanks 2': [
+  'Reading: Fill in the Blanks': [
     "The ________ of the new library was a major milestone for the university community.",
     "Scientists are ________ new ways to harness solar energy more efficiently.",
     "The ________ of the project was delayed due to unforeseen technical challenges.",
@@ -749,6 +989,44 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "Technological ________ is transforming the way we live and work.",
     "The ________ of the environment is a shared responsibility of all citizens.",
     "Scientific ________ requires careful observation and rigorous testing."
+  ],
+  'Multiple Choice, Single Answer': [
+    "What is the main idea of the passage?",
+    "According to the text, what is the primary cause of the phenomenon?",
+    "Which of the following best describes the author's tone?",
+    "What can be inferred from the second paragraph?",
+    "What is the purpose of the research mentioned in the text?",
+    "Which of the following is NOT mentioned as a benefit of the new technology?",
+    "What is the significance of the findings discussed in the passage?",
+    "How does the author suggest we address the problem?",
+    "What is the relationship between the two variables mentioned?",
+    "Which of the following would be the most appropriate title for the passage?"
+  ],
+  'Select Missing Word': [
+    "Select the correct option to complete the recording.",
+    "Which word or phrase best completes the speaker's last sentence?",
+    "Choose the most appropriate ending for the audio clip.",
+    "What was the missing word replaced by the beep?",
+    "Select the option that logically follows the speaker's argument."
+  ],
+  'Highlight Incorrect Words': [
+    "Click on the words in the transcript that differ from the audio.",
+    "Identify the discrepancies between the spoken words and the text below.",
+    "Highlight the errors in the provided transcript based on the recording.",
+    "Find the words that were misquoted in the text.",
+    "Select the words that do not match what the speaker said."
+  ],
+  'Answer Short Question': [
+    "What is the capital city of Australia?",
+    "Which planet is known as the Red Planet?",
+    "What do you call a person who studies the stars?",
+    "Which organ pumps blood through the human body?",
+    "What is the term for a word with the same meaning as another?",
+    "Which force pulls objects toward the center of the Earth?",
+    "What is the name of the process by which plants make food?",
+    "What do you call a large body of salt water?",
+    "Which instrument is used to measure temperature?",
+    "What is the capital of Japan?"
   ],
   'Summarize Spoken Text': [
     {
@@ -812,30 +1090,6 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "Arrange the sentences to explain the role of education in social mobility.",
     "Re-order the paragraphs to describe the impact of climate change on global ecosystems."
   ],
-  'Reading: Fill in the Blanks': [
-    "The ________ of the new library was a major milestone for the university community.",
-    "Scientists are ________ new ways to harness solar energy more efficiently.",
-    "The ________ of the project was delayed due to unforeseen technical challenges.",
-    "Effective ________ is essential for successful collaboration in any organization.",
-    "The ________ of the study were published in a leading scientific journal.",
-    "Many species are ________ extinction due to habitat loss and climate change.",
-    "The ________ of the city has increased significantly over the last decade.",
-    "Technological ________ is transforming the way we live and work.",
-    "The ________ of the environment is a shared responsibility of all citizens.",
-    "Scientific ________ requires careful observation and rigorous testing."
-  ],
-  'Answer Short Question': [
-    "What is the term for a person who studies the stars and planets?",
-    "Which organ in the human body is responsible for pumping blood?",
-    "What is the capital city of France?",
-    "What do you call a large body of salt water that covers most of the Earth's surface?",
-    "Which instrument is used to measure temperature?",
-    "What is the name of the process by which plants make their own food?",
-    "Which planet in our solar system is known as the Red Planet?",
-    "What do you call a person who writes books or stories?",
-    "Which force pulls objects toward the center of the Earth?",
-    "What is the term for a word that has the same meaning as another word?"
-  ],
   'Highlight Correct Summary': [
     "Listen to the recording and select the paragraph that best summarizes the main points.",
     "Which of the following options provides the most accurate summary of the lecture?",
@@ -886,8 +1140,12 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
   ]
 };
 
-categoriesToExpand.forEach(category => {
-  const existingTasks = PTE_TASKS.filter(t => t.category === category);
+// Programmatically generate 100 questions for each category and section with more variety
+const taskGroups = Array.from(new Set(PTE_TASKS.map(t => `${t.category}|${t.section}`)));
+
+taskGroups.forEach(groupKey => {
+  const [category, section] = groupKey.split('|') as [string, PTESection];
+  const existingTasks = PTE_TASKS.filter(t => t.category === category && t.section === section);
   const count = existingTasks.length;
   const template = existingTasks[0];
   const templates = promptTemplates[category] || [template.prompt || ""];
@@ -977,7 +1235,8 @@ categoriesToExpand.forEach(category => {
         }
       ];
       const selected = mc_data[i % mc_data.length];
-      newTask.passage = selected.passage;
+      newTask.passage = section === 'reading' ? selected.passage : undefined;
+      newTask.transcript = section === 'listening' ? selected.passage : undefined;
       newTask.prompt = selected.question;
       newTask.options = selected.options;
       newTask.correctAnswers = selected.correct;
@@ -1057,6 +1316,27 @@ categoriesToExpand.forEach(category => {
       newTask.transcript = newTask.prompt; // The original prompt was the sentence
       newTask.prompt = "Type the sentence you hear.";
       newTask.correctAnswers = [newTask.transcript];
+    } else if (category === 'Select Missing Word') {
+      const smw_data = [
+        { transcript: "The lecture discussed the importance of biodiversity in maintaining ecosystem [beep].", options: ["stability", "growth", "decline", "change"], correct: ["stability"] },
+        { transcript: "Researchers have found a strong correlation between exercise and mental [beep].", options: ["health", "illness", "fatigue", "stress"], correct: ["health"] },
+        { transcript: "The new policy aims to reduce carbon emissions by promoting renewable [beep].", options: ["energy", "waste", "pollution", "cost"], correct: ["energy"] }
+      ];
+      const selected = smw_data[i % smw_data.length];
+      newTask.transcript = selected.transcript;
+      newTask.options = selected.options;
+      newTask.correctAnswers = selected.correct;
+      newTask.prompt = "Select the correct option to complete the recording.";
+    } else if (category === 'Highlight Incorrect Words') {
+      const hiw_data = [
+        { transcript: "The process of urbanization has led to the growth of megacities.", prompt: "The process of migration has led to the growth of megacities.", correct: ["migration"] },
+        { transcript: "Sustainable agriculture aims to minimize environmental impact.", prompt: "Industrial agriculture aims to minimize environmental impact.", correct: ["Industrial"] },
+        { transcript: "The study of linguistics explores the structure of human language.", prompt: "The study of literature explores the structure of human language.", correct: ["literature"] }
+      ];
+      const selected = hiw_data[i % hiw_data.length];
+      newTask.transcript = selected.transcript;
+      newTask.prompt = selected.prompt;
+      newTask.correctAnswers = selected.correct;
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {
       newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript
     }

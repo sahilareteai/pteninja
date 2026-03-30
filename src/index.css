@@ -3,9 +3,40 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  /* Theme Colors */
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-primary: var(--app-primary);
+  --color-app-accent: var(--app-accent);
+  --color-app-text: var(--app-text);
+  --color-app-text-muted: var(--app-text-muted);
+  --color-app-border: var(--app-border);
 }
 
 @layer base {
+  :root {
+    --app-bg: #0B0C10;
+    --app-surface: #1F2833;
+    --app-primary: #45A29E;
+    --app-primary-rgb: 69, 162, 158;
+    --app-accent: #66FCF1;
+    --app-text: #FFFFFF;
+    --app-text-muted: #C5C6C7;
+    --app-border: #1F2833;
+  }
+
+  :root.light {
+    --app-bg: #F8FAFC;
+    --app-surface: #FFFFFF;
+    --app-primary: #0D9488;
+    --app-primary-rgb: 13, 148, 136;
+    --app-accent: #14B8A6;
+    --app-text: #0F172A;
+    --app-text-muted: #64748B;
+    --app-border: #F1F5F9;
+  }
+
   input[type="date"]::-webkit-calendar-picker-indicator {
     opacity: 0;
     cursor: pointer;
