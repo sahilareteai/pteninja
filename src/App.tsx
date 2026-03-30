@@ -629,7 +629,7 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq'>('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('isDarkMode');
@@ -1094,6 +1094,11 @@ function AppContent() {
                 key="pattern"
                 onBack={() => setActiveTab('dashboard')}
               />
+            ) : activeTab === 'faq' ? (
+              <FAQView 
+                key="faq"
+                onBack={() => setActiveTab('dashboard')}
+              />
             ) : (
               <SectionView 
                 key={activeTab} 
@@ -1117,6 +1122,7 @@ function AppContent() {
           <NavButton active={activeTab === 'writing'} onClick={() => setActiveTab('writing')} icon={PenTool} label="Writing" />
           <NavButton active={activeTab === 'reading'} onClick={() => setActiveTab('reading')} icon={BookOpen} label="Reading" />
           <NavButton active={activeTab === 'listening'} onClick={() => setActiveTab('listening')} icon={Headphones} label="Listening" />
+          <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" />
         </nav>
       </div>
 
@@ -1819,6 +1825,12 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
       action: () => onNavigate('vocabulary')
     },
     { 
+      title: 'Frequently Asked Questions', 
+      description: 'Find answers to common questions about the PTE exam and our platform.',
+      icon: AlertCircle,
+      action: () => onNavigate('faq')
+    },
+    { 
       title: 'Contact Support', 
       description: 'Need help? Our team is here to assist you 24/7.',
       icon: Bell,
@@ -1871,13 +1883,94 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
         <h3 className="text-xl font-bold text-app-text">Still have questions?</h3>
         <p className="text-app-text-muted max-w-md mx-auto">Check out our comprehensive FAQ or join our community of PTE Ninjas.</p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-          <button className="px-8 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all">
+          <button 
+            onClick={() => onNavigate('faq')}
+            className="px-8 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
+          >
             View FAQ
           </button>
           <button className="px-8 py-3 bg-transparent border border-app-primary/30 text-app-primary font-bold rounded-xl hover:bg-app-primary/10 transition-all">
             Join Discord
           </button>
         </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function FAQView({ onBack }: { onBack: () => void }) {
+  const faqs = [
+    {
+      q: "What is the PTE Academic exam?",
+      a: "PTE Academic is a computer-based English language test accepted by educational institutions and governments around the world. It measures your listening, reading, speaking, and writing skills."
+    },
+    {
+      q: "How is the PTE exam scored?",
+      a: "PTE Academic is scored on a scale of 10-90. The overall score is based on your performance in all sections of the test. You also receive scores for each of the four communicative skills."
+    },
+    {
+      q: "What is the latest PTE exam pattern?",
+      a: "The PTE Academic exam was shortened in late 2021. It now takes approximately 2 hours and consists of three main parts: Speaking & Writing, Reading, and Listening."
+    },
+    {
+      q: "How can PTE Ninja help me prepare?",
+      a: "PTE Ninja provides an AI-powered training platform with realistic practice tasks, personalized study plans, and instant feedback on your performance to help you reach your target score efficiently."
+    },
+    {
+      q: "Is there a difference between PTE Academic and PTE Core?",
+      a: "Yes, PTE Academic is primarily for study and migration to Australia, New Zealand, and the UK. PTE Core is a newer version designed for general migration to Canada."
+    },
+    {
+      q: "How often can I take the PTE exam?",
+      a: "You can take the PTE Academic exam as many times as you like, but you must wait until you receive your scores from one test before booking another."
+    }
+  ];
+
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="max-w-3xl mx-auto space-y-8 pb-20 px-4 md:px-0"
+    >
+      <div className="flex items-center gap-4">
+        <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors">
+          <ChevronRight className="rotate-180" size={24} />
+        </button>
+        <div>
+          <h2 className="text-3xl font-black text-app-text tracking-tight uppercase">FAQ</h2>
+          <p className="text-app-text-muted/50 font-bold uppercase tracking-widest text-xs">Frequently Asked Questions</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {faqs.map((faq, index) => (
+          <div key={index} className="bg-app-surface rounded-2xl border border-app-primary/10 overflow-hidden">
+            <button 
+              onClick={() => setOpenIndex(openIndex === index ? null : index)}
+              className="w-full p-6 flex items-center justify-between text-left hover:bg-app-primary/5 transition-colors"
+            >
+              <span className="font-bold text-app-text">{faq.q}</span>
+              {openIndex === index ? <ChevronUp className="text-app-primary" /> : <ChevronDown className="text-app-text-muted" />}
+            </button>
+            <AnimatePresence>
+              {openIndex === index && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="px-6 pb-6"
+                >
+                  <p className="text-sm text-app-text-muted leading-relaxed border-t border-app-primary/5 pt-4">
+                    {faq.a}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ))}
       </div>
     </motion.div>
   );
@@ -4600,6 +4693,85 @@ function TaskModal({
                 </div>
               )}
 
+              {/* Audio Controls (Moved here as per user request) */}
+              {(phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10"
+                >
+                  {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
+                    <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
+                      {[...Array(20)].map((_, i) => (
+                        <motion.div 
+                          key={i}
+                          animate={(isAudioPlaying || (phase === 'recording' && task.section === 'speaking')) 
+                            ? { height: [8, Math.random() * 24 + 8, 8] } 
+                            : { height: 8 }
+                          }
+                          transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.05 }}
+                          className={cn(
+                            "w-1 rounded-full",
+                            isAudioPlaying ? "bg-blue-400" : "bg-app-primary"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
+                      {[...Array(20)].map((_, i) => (
+                        <div key={i} className="w-1 h-2 rounded-full bg-app-primary/20" />
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-6">
+                    <button 
+                      disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
+                      onClick={() => {
+                        if (isPreparingAudio) return;
+                        
+                        if (phase === 'audio' && !isAudioPlaying) {
+                          if (audioRef.current) {
+                            audioRef.current.play().catch(e => console.error("Manual play failed", e));
+                            setIsAudioPlaying(true);
+                          } else {
+                            setAudioRetryCount(prev => prev + 1);
+                          }
+                        } else if (phase === 'recording') {
+                          handleFinish();
+                        } else if (phase === 'prep') {
+                          skipPrep();
+                        }
+                      }}
+                      className={cn(
+                        "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl",
+                        phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
+                        (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
+                        (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
+                        isPreparingAudio && "bg-blue-500/50 cursor-wait",
+                        hasAudioError && "bg-red-500/50"
+                      )}
+                    >
+                      {isPreparingAudio ? <Loader2 size={24} className="text-white animate-spin" /> : 
+                       (phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> : 
+                       (phase === 'audio' ? (isAudioPlaying ? <Headphones size={24} className="text-white" /> : <Play size={24} className="text-white ml-1" />) : 
+                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />)))}
+                    </button>
+                    
+                    <div className="flex flex-col">
+                      <p className="text-xs font-bold text-app-text uppercase tracking-wider">
+                        {phase === 'audio' ? (isAudioPlaying ? "Playing Audio" : "Ready to Play") : 
+                         (phase === 'prep' ? "Preparing..." : "Recording...")}
+                      </p>
+                      {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
+                        <p className="text-[10px] text-app-primary font-medium animate-pulse">Click to start audio</p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Input Area (Writing, Reading, Listening) */}
               {task.section !== 'speaking' && (phase === 'recording' || (task.section === 'listening' && (phase === 'audio' || phase === 'prep'))) && (
                 <div className="space-y-6">
@@ -5324,100 +5496,6 @@ function TaskModal({
                     {isMockTest ? 'Next Task' : onNext ? 'Next Task' : 'Close'}
                   </button>
                 </div>
-              </motion.div>
-            ) : (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) ? (
-              <motion.div 
-                key="active"
-                className="flex flex-col items-center py-8"
-              >
-                {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
-                  <>
-                    <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
-                      {[...Array(20)].map((_, i) => (
-                        <motion.div 
-                          key={i}
-                          animate={(isAudioPlaying || (phase === 'recording' && task.section === 'speaking')) 
-                            ? { height: [10, Math.random() * 40 + 10, 10] } 
-                            : { height: 10 }
-                          }
-                          transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.05 }}
-                          className={cn(
-                            "w-1.5 rounded-full",
-                            isAudioPlaying ? "bg-blue-400" : "bg-app-primary"
-                          )}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-sm text-app-text-muted animate-pulse mb-8">
-                      {phase === 'audio' ? "Listening to audio..." : "Recording your response..."}
-                    </p>
-                  </>
-                ) : (
-                <div className="w-full h-24 flex items-center justify-center gap-1 mb-4">
-                  {[...Array(20)].map((_, i) => (
-                    <div key={i} className="w-1.5 h-[10px] rounded-full bg-app-primary/20" />
-                  ))}
-                </div>
-                )}
-                
-                    <div className="flex flex-col items-center gap-4">
-                      <button 
-                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
-                        onClick={() => {
-                          if (isPreparingAudio) return;
-                          
-                          if (phase === 'audio' && !isAudioPlaying) {
-                            // Manual trigger if auto-play fails
-                            if (audioRef.current) {
-                              audioRef.current.play().catch(e => console.error("Manual play failed", e));
-                              setIsAudioPlaying(true);
-                            } else {
-                              setAudioRetryCount(prev => prev + 1);
-                            }
-                          } else if (phase === 'recording') {
-                            handleFinish();
-                          } else if (phase === 'prep') {
-                            skipPrep();
-                          }
-                        }}
-                        className={cn(
-                          "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl",
-                          phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
-                          (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
-                          (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
-                          isPreparingAudio && "bg-blue-500/50 cursor-wait",
-                          hasAudioError && "bg-red-500/50"
-                        )}
-                      >
-                        {isPreparingAudio ? <Loader2 size={40} className="text-white animate-spin" /> : 
-                         (phase === 'recording' ? <div className="w-8 h-8 bg-white rounded-sm" /> : 
-                         (phase === 'audio' ? (isAudioPlaying ? <Headphones size={40} className="text-white" /> : <Play size={40} className="text-white ml-1" />) : 
-                         (task.hasAudio ? <Play size={40} className="text-white ml-1" /> : <Play size={40} className="text-app-bg ml-1" />)))}
-                      </button>
-                      
-                      {isPreparingAudio && (
-                        <p className="text-[10px] text-blue-400 font-bold animate-pulse">Preparing Audio...</p>
-                      )}
-
-                      {hasAudioError && (
-                        <div className="flex flex-col items-center gap-2">
-                          <p className="text-[10px] text-red-400 font-bold">Audio failed to load</p>
-                          <button 
-                            onClick={() => setAudioRetryCount(prev => prev + 1)}
-                            className="text-[10px] text-app-primary font-bold underline hover:text-app-accent transition-colors"
-                          >
-                            Retry Loading
-                          </button>
-                        </div>
-                      )}
-                      
-                      {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
-                        <p className="text-[10px] text-blue-400 font-bold animate-bounce">Click to play audio if it doesn't start</p>
-                      )}
-                    </div>
-                <p className="mt-6 text-xs font-bold text-app-text-muted uppercase tracking-[0.3em]">
-                  {phase === 'audio' ? "Listening..." : (phase === 'prep' ? "Preparing..." : (task.section === 'speaking' ? "Recording Now" : "Starting Task"))}
-                </p>
               </motion.div>
             ) : null}
           </AnimatePresence>

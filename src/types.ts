@@ -311,20 +311,6 @@ export const PTE_TASKS: PTETask[] = [
     prompt: "You are at a library and you want to borrow a book that is currently checked out by another student. You need the book for an assignment that is due tomorrow. Speak to the librarian and explain your situation to see if they can help you."
   },
   { 
-    id: 'sgd-1', 
-    title: 'Question 1', 
-    category: 'Summarize Group Discussion',
-    description: 'Listen to a group discussion and summarize the main points in your own words.', 
-    section: 'listening', 
-    type: 'listening', 
-    prepTime: 10, 
-    recordingTime: 40,
-    hasAudio: true,
-    transcript: "Three students are discussing their project on renewable energy. Student A suggests focusing on solar power due to its accessibility. Student B argues that wind energy is more efficient in their region. Student C proposes a hybrid model combining both. They eventually agree to research the costs and benefits of a hybrid system for their final presentation.",
-    prompt: "Summarize the group discussion you just heard.",
-    image: "https://picsum.photos/seed/discussion/600/400"
-  },
-  { 
     id: 'asq-1', 
     title: 'Question 1', 
     category: 'Answer Short Question',
@@ -1113,18 +1099,6 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "You are at a bank and you want to open a new account. Speak to the bank teller.",
     "You are at a hotel and you are checking in. Speak to the receptionist.",
     "You are at a post office and you want to send a package. Speak to the postal worker."
-  ],
-  'Summarize Group Discussion': [
-    "Listen to the group discussion about urban planning and summarize the main points.",
-    "Summarize the different perspectives shared by the students in their discussion about climate change.",
-    "Listen to the discussion about the impact of technology on education and provide a summary.",
-    "Summarize the key arguments made by the participants in the discussion about renewable energy.",
-    "Listen to the group discussion about the future of work and summarize the conclusions reached.",
-    "Summarize the main challenges identified by the group in their discussion about public health.",
-    "Listen to the discussion about the role of art in society and provide a summary of the main points.",
-    "Summarize the different solutions proposed by the group to address the issue of traffic congestion.",
-    "Listen to the group discussion about the impact of social media on communication and summarize it.",
-    "Summarize the key takeaways from the discussion about the importance of biodiversity."
   ],
   'Fill in the Blanks': [
     "The ________ of the new library was a major milestone for the university community.",
