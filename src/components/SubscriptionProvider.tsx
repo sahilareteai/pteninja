@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
+import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut } from 'lucide-react';
 
@@ -16,6 +17,8 @@ interface SubscriptionContextType {
   setShowSubscriptionModal: (show: boolean) => void;
   authError: string | null;
   setAuthError: (error: string | null) => void;
+  currency: CurrencyInfo;
+  formatPrice: (amount: number) => string;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -28,6 +31,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
+
+  useEffect(() => {
+    const initCurrency = async () => {
+      await CurrencyService.initialize();
+      setCurrency(CurrencyService.getCurrentCurrency());
+    };
+    initCurrency();
+  }, []);
 
   useEffect(() => {
     let unsubDoc: (() => void) | null = null;
@@ -315,7 +327,9 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       showSubscriptionModal,
       setShowSubscriptionModal,
       authError,
-      setAuthError
+      setAuthError,
+      currency,
+      formatPrice: (amount: number) => CurrencyService.format(CurrencyService.convert(amount))
     }}>
       {children}
       

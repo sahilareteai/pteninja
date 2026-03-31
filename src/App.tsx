@@ -52,6 +52,7 @@ import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { DatePicker } from './components/DatePicker';
 import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, UserData } from './types';
+import { CurrencyService } from './services/currencyService';
 import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
@@ -665,7 +666,7 @@ function AppContent() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
   const sentNotifications = useRef<Set<string>>(new Set());
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency } = useSubscription();
 
   // Load tasks from Firestore
   useEffect(() => {
@@ -1615,6 +1616,7 @@ const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean }) {
+  const { formatPrice, currency } = useSubscription();
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1624,10 +1626,14 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     setIsProcessing(true);
     
     try {
+      const convertedAmount = CurrencyService.convert(plan.price);
       const response = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: plan.price * 100, currency: 'aud' }), // Australia focus
+        body: JSON.stringify({ 
+          amount: convertedAmount * 100, 
+          currency: currency.code.toLowerCase() 
+        }),
       });
       
       if (!response.ok) {
@@ -1733,8 +1739,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     
                     <div className="flex flex-col items-center">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-app-text-muted/40 line-through font-medium">${plan.originalPrice}</span>
-                        <span className="text-3xl font-bold text-app-accent">${plan.price}</span>
+                        <span className="text-sm text-app-text-muted/40 line-through font-medium">{formatPrice(plan.originalPrice)}</span>
+                        <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
                       </div>
                       <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
                     </div>
@@ -1760,10 +1766,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </div>
                 <div className="text-right">
                   <div className="flex items-center gap-2 justify-end">
-                    <span className="text-sm text-app-text-muted/40 line-through">${selectedPlan.originalPrice}</span>
-                    <div className="text-3xl font-bold text-app-accent">${selectedPlan.price}</div>
+                    <span className="text-sm text-app-text-muted/40 line-through">{formatPrice(selectedPlan.originalPrice)}</span>
+                    <div className="text-3xl font-bold text-app-accent">{formatPrice(selectedPlan.price)}</div>
                   </div>
-                  <div className="text-xs text-app-text-muted/50">AUD Total</div>
+                  <div className="text-xs text-app-text-muted/50">{currency.code} Total</div>
                 </div>
               </div>
 

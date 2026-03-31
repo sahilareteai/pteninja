@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubscription } from './SubscriptionProvider';
 import {
   PaymentElement,
   useStripe,
@@ -9,6 +10,7 @@ import { Loader2, ShieldCheck, AlertCircle, ExternalLink } from 'lucide-react';
 export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess }: { amount: number, clientSecret: string, onCancel: () => void, onSuccess: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
+  const { formatPrice } = useSubscription();
 
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,7 +122,7 @@ export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess }: { am
             ) : (
               <>
                 <ShieldCheck size={20} />
-                Pay ${amount} Now
+                Pay {formatPrice(amount)} Now
               </>
             )}
           </button>
