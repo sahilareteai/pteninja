@@ -147,11 +147,18 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
-      console.error("Login failed:", error);
       setIsAuthenticating(false);
+      
+      // Handle known Firebase Auth errors gracefully
       if (error.code === 'auth/popup-closed-by-user') {
+        // Silent error as it's user-initiated, but we can set a friendly message if needed
         setAuthError("The sign-in window was closed. Please try again to continue.");
-      } else if (error.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      
+      console.error("Login failed:", error);
+      
+      if (error.code === 'auth/cancelled-popup-request') {
         setAuthError("Sign-in was interrupted. Please try again.");
       } else if (error.code === 'auth/popup-blocked') {
         setAuthError("The sign-in popup was blocked by your browser. Please allow popups for this site.");

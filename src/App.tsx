@@ -44,7 +44,8 @@ import {
   Loader2,
   Sun,
   Moon,
-  Database
+  Database,
+  Menu
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -636,6 +637,7 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq'>('dashboard');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('isDarkMode');
@@ -976,7 +978,7 @@ function AppContent() {
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
           <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
@@ -984,6 +986,15 @@ function AppContent() {
             >
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
+            
+            <button 
+              onClick={() => setShowStreakModal(true)}
+              className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 bg-app-surface rounded-full border border-app-primary/20 hover:border-app-primary/50 transition-all"
+            >
+              <Flame className="text-orange-500" size={16} />
+              <span className="text-xs md:text-sm font-bold text-app-text">{currentStreak}<span className="hidden sm:inline"> DAY STREAK</span></span>
+            </button>
+
             {user && (
               <div className={cn(
                 "hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
@@ -996,19 +1007,7 @@ function AppContent() {
                  user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
               </div>
             )}
-            <button 
-              onClick={() => setShowStreakModal(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-app-surface rounded-full border border-app-primary/20 hover:border-app-primary/50 transition-all"
-            >
-              <Flame className="text-orange-500" size={16} />
-              <span className="text-sm font-bold text-app-text">{currentStreak} DAY STREAK</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('help')}
-              className="p-2 hover:bg-app-surface rounded-full transition-colors"
-            >
-              <Settings size={20} className="text-app-text-muted hover:text-app-primary" />
-            </button>
+            
             <button 
               onClick={() => setActiveTab('profile')}
               className="w-10 h-10 rounded-full bg-gradient-to-br from-app-primary to-app-accent p-[2px]"
@@ -1020,6 +1019,13 @@ function AppContent() {
                   <User size={20} className="text-app-primary" />
                 )}
               </div>
+            </button>
+
+            <button 
+              onClick={() => setIsMenuOpen(true)}
+              className="md:hidden p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
+            >
+              <Menu size={20} />
             </button>
           </div>
         </header>
@@ -1141,17 +1147,48 @@ function AppContent() {
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
           <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
           <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
-          <NavButton active={activeTab === 'roadmap'} onClick={() => setActiveTab('roadmap')} icon={Map} label="Roadmap" />
+          <NavButton active={activeTab === 'roadmap'} onClick={() => setActiveTab('roadmap')} icon={Map} label="Roadmap" className="hidden md:flex" />
           <NavButton active={activeTab === 'speaking'} onClick={() => setActiveTab('speaking')} icon={Mic} label="Speaking" />
           <NavButton active={activeTab === 'writing'} onClick={() => setActiveTab('writing')} icon={PenTool} label="Writing" />
           <NavButton active={activeTab === 'reading'} onClick={() => setActiveTab('reading')} icon={BookOpen} label="Reading" />
           <NavButton active={activeTab === 'listening'} onClick={() => setActiveTab('listening')} icon={Headphones} label="Listening" />
-          <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" />
+          <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" className="hidden md:flex" />
         </nav>
       </div>
 
       {/* Modals */}
       <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[100] bg-app-bg flex flex-col"
+          >
+            <div className="flex items-center justify-between p-6 border-b border-app-border">
+              <Logo showText={true} size={40} />
+              <button onClick={() => setIsMenuOpen(false)} className="p-2 hover:bg-app-surface rounded-full">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-2">
+              <MenuLink icon={BarChart3} label="Dojo" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMenuOpen(false); }} />
+              <MenuLink icon={Trophy} label="Mock Tests" active={activeTab === 'mock-tests'} onClick={() => { setActiveTab('mock-tests'); setIsMenuOpen(false); }} />
+              <MenuLink icon={Book} label="Vocabulary" active={activeTab === 'vocabulary'} onClick={() => { setActiveTab('vocabulary'); setIsMenuOpen(false); }} />
+              <MenuLink icon={Map} label="Roadmap" active={activeTab === 'roadmap'} onClick={() => { setActiveTab('roadmap'); setIsMenuOpen(false); }} />
+              <MenuLink icon={Mic} label="Speaking" active={activeTab === 'speaking'} onClick={() => { setActiveTab('speaking'); setIsMenuOpen(false); }} />
+              <MenuLink icon={PenTool} label="Writing" active={activeTab === 'writing'} onClick={() => { setActiveTab('writing'); setIsMenuOpen(false); }} />
+              <MenuLink icon={BookOpen} label="Reading" active={activeTab === 'reading'} onClick={() => { setActiveTab('reading'); setIsMenuOpen(false); }} />
+              <MenuLink icon={Headphones} label="Listening" active={activeTab === 'listening'} onClick={() => { setActiveTab('listening'); setIsMenuOpen(false); }} />
+              <MenuLink icon={AlertCircle} label="FAQ" active={activeTab === 'faq'} onClick={() => { setActiveTab('faq'); setIsMenuOpen(false); }} />
+              <div className="pt-4 border-t border-app-border">
+                <MenuLink icon={Settings} label="Settings" active={activeTab === 'help'} onClick={() => { setActiveTab('help'); setIsMenuOpen(false); }} />
+                <MenuLink icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsMenuOpen(false); }} />
+              </div>
+            </div>
+          </motion.div>
+        )}
         {activeMockTest && (
           <MockTestSession 
             key={activeMockTest.id}
@@ -1394,9 +1431,9 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
       </div>
 
       {/* Navbar */}
-      <nav className="relative z-20 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <Logo showText={true} size={48} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
-        <div className="flex items-center gap-4 sm:gap-6">
+      <nav className="relative z-20 flex items-center justify-between px-4 sm:px-8 py-6 max-w-7xl mx-auto">
+        <Logo showText={true} size={40} className="sm:size-12 shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
+        <div className="flex items-center gap-2 sm:gap-6">
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
@@ -1404,10 +1441,10 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          <button onClick={onLogin} className="text-sm font-bold text-app-text hover:text-app-primary transition-colors">Sign In</button>
+          <button onClick={onLogin} className="hidden sm:block text-sm font-bold text-app-text hover:text-app-primary transition-colors">Sign In</button>
           <button 
             onClick={onLogin}
-            className="px-6 py-2.5 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.2)]"
+            className="px-4 sm:px-6 py-2 sm:py-2.5 bg-app-primary text-app-bg font-bold text-sm sm:text-base rounded-xl hover:bg-app-accent transition-all shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.2)]"
           >
             Get Started
           </button>
@@ -2149,13 +2186,14 @@ function ProfileView({ user, onLogout, onUpgrade, isDarkMode }: { user: any, onL
   );
 }
 
-function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) {
+function NavButton({ active, onClick, icon: Icon, label, className }: { active: boolean, onClick: () => void, icon: any, label: string, className?: string }) {
   return (
     <button 
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1 transition-all duration-300 relative group flex-1 md:flex-none py-1",
-        active ? "text-app-primary" : "text-app-text-muted hover:text-app-text"
+        active ? "text-app-primary" : "text-app-text-muted hover:text-app-text",
+        className
       )}
     >
       <div className={cn(
@@ -2168,13 +2206,27 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
       {active && (
         <motion.div 
           layoutId="nav-indicator"
-          className="absolute -bottom-1 md:-bottom-3 w-1 h-1 bg-app-primary rounded-full shadow-lg shadow-app-primary"
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-app-primary rounded-full"
         />
       )}
     </button>
   );
 }
 
+function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-4 p-4 rounded-2xl transition-all",
+        active ? "bg-app-primary/10 text-app-primary" : "hover:bg-app-surface text-app-text-muted hover:text-app-text"
+      )}
+    >
+      <Icon size={20} />
+      <span className="font-bold uppercase tracking-widest text-sm">{label}</span>
+    </button>
+  );
+}
 function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void }) {
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
