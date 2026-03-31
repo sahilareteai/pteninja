@@ -1613,10 +1613,10 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             <div className="space-y-6">
               <h4 className="text-sm font-bold text-app-text uppercase tracking-widest">Legal</h4>
               <ul className="space-y-4 text-sm text-app-text-muted/60">
-                <li><button onClick={() => setActivePolicy('disclaimer')} className="hover:text-app-primary transition-colors">Disclaimer</button></li>
-                <li><button onClick={() => setActivePolicy('terms')} className="hover:text-app-primary transition-colors">Terms & Conditions</button></li>
-                <li><button onClick={() => setActivePolicy('privacy')} className="hover:text-app-primary transition-colors">Privacy Policy</button></li>
-                <li><button onClick={() => setActivePolicy('refund')} className="hover:text-app-primary transition-colors">Refund / Cancellation Policy</button></li>
+                <li><a href="/?policy=disclaimer" onClick={(e) => { e.preventDefault(); setActivePolicy('disclaimer'); }} className="hover:text-app-primary transition-colors cursor-pointer">Disclaimer</a></li>
+                <li><a href="/?policy=terms" onClick={(e) => { e.preventDefault(); setActivePolicy('terms'); }} className="hover:text-app-primary transition-colors cursor-pointer">Terms & Conditions</a></li>
+                <li><a href="/?policy=privacy" onClick={(e) => { e.preventDefault(); setActivePolicy('privacy'); }} className="hover:text-app-primary transition-colors cursor-pointer">Privacy Policy</a></li>
+                <li><a href="/?policy=refund" onClick={(e) => { e.preventDefault(); setActivePolicy('refund'); }} className="hover:text-app-primary transition-colors cursor-pointer">Refund / Cancellation Policy</a></li>
               </ul>
             </div>
           </div>
@@ -2323,18 +2323,20 @@ function ProfileView({ user, onLogout, onUpgrade, isDarkMode, onOpenAdminDashboa
               <ShieldCheck className="text-app-primary" size={20} /> Legal
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={() => onNavigate('privacy')}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all"
+              <a
+                href="/?policy=privacy"
+                onClick={(e) => { e.preventDefault(); onNavigate('privacy'); }}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all cursor-pointer"
               >
                 Privacy Policy
-              </button>
-              <button
-                onClick={() => onNavigate('terms')}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all"
+              </a>
+              <a
+                href="/?policy=terms"
+                onClick={(e) => { e.preventDefault(); onNavigate('terms'); }}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all cursor-pointer"
               >
                 Terms of Service
-              </button>
+              </a>
             </div>
           </div>
         </div>
