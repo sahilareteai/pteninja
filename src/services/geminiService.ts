@@ -2,6 +2,16 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+let quotaExceededUntil = 0;
+
+function isQuotaExceeded() {
+  return Date.now() < quotaExceededUntil;
+}
+
+function setQuotaExceeded() {
+  quotaExceededUntil = Date.now() + 5 * 60 * 1000; // 5 minutes
+}
+
 function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
   const binaryPcm = atob(base64Pcm);
   const pcmData = new Uint8Array(binaryPcm.length);
@@ -55,6 +65,12 @@ function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
 }
 
 async function callGemini(params: any, retries: number = 3): Promise<any> {
+  if (isQuotaExceeded()) {
+    const quotaError = new Error("GEMINI_QUOTA_EXCEEDED");
+    (quotaError as any).status = 429;
+    throw quotaError;
+  }
+
   for (let i = 0; i <= retries; i++) {
     try {
       return await ai.models.generateContent(params);
@@ -62,6 +78,7 @@ async function callGemini(params: any, retries: number = 3): Promise<any> {
       const isQuotaError = e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED') || (e.error?.code === 429);
       
       if (isQuotaError) {
+        setQuotaExceeded();
         console.warn(`Gemini Quota Exceeded (Attempt ${i + 1}/${retries + 1})`);
         if (i < retries) {
           // Longer delay for quota errors

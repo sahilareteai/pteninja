@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Zap, 
+  Swords,
   Mic, 
   PenTool, 
   BookOpen, 
@@ -1425,7 +1426,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
               onClick={onGuest}
               className="px-10 py-5 bg-transparent border border-app-primary/30 text-app-primary font-bold text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
             >
-              Try Guest Access
+              Try Guest Access for free
             </button>
           </div>
         </motion.div>
@@ -3017,7 +3018,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
         </div>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           {filteredWords.map(word => {
             const isFavorite = user?.favoriteWords?.includes(word.id);
@@ -3595,8 +3596,6 @@ function TaskModal({
                    task.category === 'Write from Dictation';
   const [hasAudioError, setHasAudioError] = useState(false);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
-  const [prefetchedAudioBase64, setPrefetchedAudioBase64] = useState<string | null>(null);
-  const audioFetchPromiseRef = useRef<Promise<string | null> | null>(null);
   const [userInput, setUserInput] = useState('');
   const [showExample, setShowExample] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -3665,8 +3664,6 @@ function TaskModal({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
-  const prefetchedAudioBufferRef = useRef<AudioBuffer | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(getAudioContext());
 
@@ -3761,79 +3758,7 @@ function TaskModal({
     setSelectedOptions([]);
     setBlankAnswers({});
     setUserInput('');
-    prefetchedAudioRef.current = null;
   }, [task.id, task.category, task.paragraphs, task.section, task.hasAudio, task.prepTime, task.recordingTime]);
-
-  // Pre-fetch audio logic
-  useEffect(() => {
-    let isCancelled = false;
-    audioFetchPromiseRef.current = null;
-    setPrefetchedAudioBase64(null);
-    prefetchedAudioRef.current = null;
-    prefetchedAudioBufferRef.current = null;
-
-    if (task.hasAudio) {
-      // Check global cache first
-      if (globalAudioCache[task.id]) {
-        console.log(`[Audio] Using global cache for task ${task.id}`);
-        const cached = globalAudioCache[task.id];
-        setPrefetchedAudioBase64(cached.base64);
-        prefetchedAudioBufferRef.current = cached.buffer;
-        
-        // Fallback Audio element
-        const audio = new Audio(`data:audio/wav;base64,${cached.base64}`);
-        audio.load();
-        prefetchedAudioRef.current = audio;
-        return;
-      }
-
-      const prefetch = async () => {
-        const audioContent = task.transcript || task.prompt || "";
-        const promise = generateTTS(audioContent);
-        audioFetchPromiseRef.current = promise;
-        
-        try {
-          const base64 = await promise;
-          if (isCancelled) return;
-          if (base64) {
-            setPrefetchedAudioBase64(base64);
-            
-            // Standard Audio element pre-load (fallback)
-            const audio = new Audio(`data:audio/wav;base64,${base64}`);
-            audio.load();
-            prefetchedAudioRef.current = audio;
-
-            // High-performance AudioBuffer pre-decode
-            try {
-              const ctx = getAudioContext();
-              if (ctx) {
-                const arrayBuffer = base64ToArrayBuffer(base64);
-                const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-                if (!isCancelled) {
-                  prefetchedAudioBufferRef.current = audioBuffer;
-                  // Cache it globally for future use
-                  globalAudioCache[task.id] = { base64, buffer: audioBuffer };
-                  console.log("[Audio] Pre-fetch: AudioBuffer decoded and ready");
-                }
-              }
-            } catch (decodeErr) {
-              console.error("[Audio] Pre-fetch: Decoding failed", decodeErr);
-            }
-          }
-        } catch (err) {
-          console.error("Pre-fetch TTS failed:", err);
-          if (!isCancelled) audioFetchPromiseRef.current = null;
-        }
-      };
-      prefetch();
-    }
-    return () => {
-      isCancelled = true;
-      audioFetchPromiseRef.current = null;
-      prefetchedAudioRef.current = null;
-      prefetchedAudioBufferRef.current = null;
-    };
-  }, [task.id]);
 
   // Audio logic
   useEffect(() => {
@@ -3913,8 +3838,10 @@ function TaskModal({
           setIsAudioPlaying(false);
 
           // --- HIGH-PERFORMANCE AUDIOBUFFER LOGIC ---
-          if (prefetchedAudioBufferRef.current) {
-            console.log("[Audio] Using high-performance AudioBuffer");
+          if (globalAudioCache[task.id]) {
+            console.log("[Audio] Using global cache for task ${task.id}");
+            const cached = globalAudioCache[task.id];
+            
             const ctx = getAudioContext();
             if (!ctx) throw new Error("AudioContext not available");
             if (ctx.state === 'suspended') await ctx.resume();
@@ -3940,7 +3867,7 @@ function TaskModal({
             }
 
             const source = ctx.createBufferSource();
-            source.buffer = prefetchedAudioBufferRef.current;
+            source.buffer = cached.buffer;
             source.connect(ctx.destination);
             audioSourceRef.current = source;
             
@@ -3953,75 +3880,81 @@ function TaskModal({
           }
           // --- END HIGH-PERFORMANCE LOGIC ---
 
-          let audio = prefetchedAudioRef.current;
+          let audio = null;
           
-          if (!audio) {
-            let base64 = prefetchedAudioBase64;
-            if (!base64) {
-              console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
-              setIsPreparingAudio(true);
-              
-              // Safety timeout to prevent stuck loading
-              safetyTimeout = setTimeout(() => {
-                if (!isCancelled) {
-                  console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
-                  setIsPreparingAudio(false);
-                  setHasAudioError(true);
-                }
-              }, 50000);
-
-              try {
-                const timeoutPromise = new Promise<null>((_, reject) => 
-                  setTimeout(() => reject(new Error("Audio preparation timed out after 60s")), 60000)
-                );
-
-                if (audioFetchPromiseRef.current) {
-                  console.log("[Audio] Waiting for pre-fetch to complete...");
-                  base64 = await Promise.race([audioFetchPromiseRef.current, timeoutPromise]);
-                } else {
-                  console.log("[Audio] Starting on-demand audio generation...");
-                  const audioContent = task.transcript || task.prompt || "";
-                  base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
-                }
-              } catch (prepErr: any) {
-                console.error("[Audio] Audio preparation failed or timed out:", prepErr);
-                if (prepErr.message === "GEMINI_QUOTA_EXCEEDED" || prepErr.message?.includes("429")) {
-                  toast.error("AI Quota Exceeded", {
-                    description: "Switching to browser-native voice for this task."
-                  });
-                } else if (prepErr.message?.includes("timed out")) {
-                  toast.error("Audio Generation Slow", {
-                    description: "Switching to browser-native voice to avoid delay."
-                  });
-                }
-                base64 = null;
-              } finally {
-                if (safetyTimeout) clearTimeout(safetyTimeout);
-                if (!isCancelled) setIsPreparingAudio(false);
-              }
+          console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
+          setIsPreparingAudio(true);
+          
+          // Safety timeout to prevent stuck loading
+          safetyTimeout = setTimeout(() => {
+            if (!isCancelled) {
+              console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
+              setIsPreparingAudio(false);
+              setHasAudioError(true);
             }
+          }, 50000);
+
+          let base64 = null;
+          try {
+            const timeoutPromise = new Promise<null>((_, reject) => 
+              setTimeout(() => reject(new Error("Audio preparation timed out after 60s")), 60000)
+            );
+
+            console.log("[Audio] Starting on-demand audio generation...");
+            const audioContent = task.transcript || task.prompt || "";
+            base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
             
-            if (isCancelled) return;
-
             if (base64) {
-              console.log("[Audio] Creating new Audio object from base64");
-              audio = new Audio(`data:audio/wav;base64,${base64}`);
-              audio.load();
-            } else {
-              console.log("[Audio] No base64 audio, using browser TTS fallback");
-              const fallbackText = task.transcript || task.prompt || "";
-              if (fallbackText) {
-                if (needsBeep && !beepPlayedRef.current) {
-                  await playBeep();
-                  beepPlayedRef.current = true;
+              // High-performance AudioBuffer pre-decode
+              try {
+                const ctx = getAudioContext();
+                if (ctx) {
+                  const arrayBuffer = base64ToArrayBuffer(base64);
+                  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                  if (!isCancelled) {
+                    // Cache it globally for future use
+                    globalAudioCache[task.id] = { base64, buffer: audioBuffer };
+                    console.log("[Audio] AudioBuffer decoded and cached");
+                  }
                 }
-                speakFallback(fallbackText);
-                return;
+              } catch (decodeErr) {
+                console.error("[Audio] Decoding failed", decodeErr);
               }
             }
+          } catch (prepErr: any) {
+            console.error("[Audio] Audio preparation failed or timed out:", prepErr);
+            if (prepErr.message === "GEMINI_QUOTA_EXCEEDED" || prepErr.message?.includes("429")) {
+              toast.error("AI Quota Exceeded", {
+                description: "Switching to browser-native voice for this task."
+              });
+            } else if (prepErr.message?.includes("timed out")) {
+              toast.error("Audio Generation Slow", {
+                description: "Switching to browser-native voice to avoid delay."
+              });
+            }
+            base64 = null;
+          } finally {
+            if (safetyTimeout) clearTimeout(safetyTimeout);
+            if (!isCancelled) setIsPreparingAudio(false);
+          }
+          
+          if (isCancelled) return;
+
+          if (base64) {
+            console.log("[Audio] Creating new Audio object from base64");
+            audio = new Audio(`data:audio/wav;base64,${base64}`);
+            audio.load();
           } else {
-            console.log("[Audio] Using pre-fetched Audio object");
-            setIsPreparingAudio(false);
+            console.log("[Audio] No base64 audio, using browser TTS fallback");
+            const fallbackText = task.transcript || task.prompt || "";
+            if (fallbackText) {
+              if (needsBeep && !beepPlayedRef.current) {
+                await playBeep();
+                beepPlayedRef.current = true;
+              }
+              speakFallback(fallbackText);
+              return;
+            }
           }
           
           if (isCancelled) return;
@@ -4124,7 +4057,7 @@ function TaskModal({
       setIsPreparingAudio(false);
       beepPlayedRef.current = false;
     }
-  }, [phase, task.id, task.hasAudio, prefetchedAudioBase64, audioRetryCount, needsBeep]);
+  }, [phase, task.id, task.hasAudio, audioRetryCount, needsBeep]);
 
   // Recording logic
   useEffect(() => {
@@ -5204,7 +5137,7 @@ function TaskModal({
               >
                 <div className="relative">
                   <div className="w-20 h-20 border-4 border-app-primary/20 border-t-app-primary rounded-full animate-spin" />
-                  <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-app-primary" size={32} />
+                  <Swords className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-app-primary" size={32} />
                 </div>
                 <div className="text-center">
                   <h4 className="text-xl font-bold text-app-text mb-2">Sensei AI is Scoring...</h4>
