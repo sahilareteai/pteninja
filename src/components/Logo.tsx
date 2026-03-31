@@ -10,13 +10,13 @@ export const Logo: React.FC<LogoProps> = ({ className, size = 40, showText = fal
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <div 
-        className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-[#0B0C10] shadow-xl border border-[#1F2833]"
+        className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-[#0B0C10] shadow-xl border border-[#1F2833] p-1 shrink-0"
         style={{ width: size, height: size }}
       >
         {/* Unique Ninja Logo SVG */}
         <svg 
           viewBox="0 0 100 100" 
-          className="w-[85%] h-[85%]"
+          className="w-full h-full"
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
         >
@@ -38,7 +38,7 @@ export const Logo: React.FC<LogoProps> = ({ className, size = 40, showText = fal
           />
           
           {/* Glowing Ninja Eyes */}
-          <g className="animate-pulse">
+          <g>
             <path 
               d="M35 48C35 48 38 46 42 46C46 46 49 48 49 48" 
               stroke="#66FCF1" 
@@ -75,7 +75,7 @@ export const Logo: React.FC<LogoProps> = ({ className, size = 40, showText = fal
       </div>
 
       {showText && (
-        <div className="flex flex-col leading-none">
+        <div className="flex flex-col leading-none whitespace-nowrap">
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-black tracking-tighter text-white uppercase">PTE</span>
             <span className="text-2xl font-black tracking-tighter text-[#45A29E] uppercase">NINJA</span>

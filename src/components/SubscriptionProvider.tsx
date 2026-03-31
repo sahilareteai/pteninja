@@ -156,6 +156,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
       
+      if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("This domain is not authorized for login. Please add it to the 'Authorized domains' list in the Firebase Console (Authentication > Settings).");
+        return;
+      }
+      
       console.error("Login failed:", error);
       
       if (error.code === 'auth/cancelled-popup-request') {

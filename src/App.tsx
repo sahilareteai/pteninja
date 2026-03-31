@@ -1260,12 +1260,12 @@ function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], 
   const todayStr = new Date().toISOString().split('T')[0];
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 bg-app-bg/90 backdrop-blur-md overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-6 shadow-2xl"
+        className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-6 shadow-2xl my-auto"
       >
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-app-text flex items-center gap-2">
@@ -1339,12 +1339,12 @@ import { POLICIES } from './data/policies';
 function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
   const policy = POLICIES[type];
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-3xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-8 relative"
+        className="w-full max-w-3xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto relative"
       >
         <button 
           onClick={onClose}
@@ -1432,7 +1432,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
 
       {/* Navbar */}
       <nav className="relative z-20 flex items-center justify-between px-4 sm:px-8 py-6 max-w-7xl mx-auto">
-        <Logo showText={true} size={40} className="sm:size-12 shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
+        <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
         <div className="flex items-center gap-2 sm:gap-6">
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -1676,12 +1676,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-8"
+        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
       >
         <div className="flex flex-col items-center text-center space-y-6">
           {!selectedPlan ? (
@@ -2514,7 +2514,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   const [isSaving, setIsSaving] = useState(false);
   const averageScore = calculateAverageScore();
   const studyPlan = calculateStudyPlan();
-  const [tempTarget, setTempTarget] = useState(79);
+  const [tempTarget, setTempTarget] = useState<string | number>(79);
   const [tempDate, setTempDate] = useState(user?.testDate || '');
   
   const currentStreak = calculateStreak(user?.activityLog || []);
@@ -2589,10 +2589,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                         type="number" 
                         value={tempTarget}
                         onChange={(e) => {
-                          const val = Number(e.target.value);
-                          if (val > 90) setTempTarget(90);
-                          else if (val < 10) setTempTarget(10);
-                          else setTempTarget(val);
+                          setTempTarget(e.target.value);
                         }}
                         className="w-full bg-app-bg border border-app-primary/30 rounded-xl px-4 py-3 pr-12 text-app-text font-bold text-xl focus:outline-none focus:border-app-primary transition-colors"
                         min="10"
@@ -2619,12 +2616,17 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                   </div>
                   <button 
                     onClick={async () => {
+                      const score = Number(tempTarget);
+                      if (!tempTarget || isNaN(score) || score < 10 || score > 90) {
+                        toast.error("Please enter a target score between 10 and 90");
+                        return;
+                      }
                       if (!tempDate) {
                         toast.error("Please select a test date");
                         return;
                       }
                       try {
-                        await onSetTargetScore(tempTarget);
+                        await onSetTargetScore(score);
                         await onSetTestDate(tempDate);
                       } catch (error) {
                         // Error is already handled by handleFirestoreError in the parent
@@ -3018,10 +3020,115 @@ function DailyShurikenView({ user, allTasks, onBack, onStartTask, onHoverTask }:
   );
 }
 
+function WordDetailContent({ word, user, onToggleFavorite, onPlayPronunciation }: {
+  word: VocabularyWord,
+  user: any,
+  onToggleFavorite: (id: string) => void,
+  onPlayPronunciation: (word: string) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-3xl font-black text-app-text tracking-tight">{word.word}</h3>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => onToggleFavorite(word.id)}
+            className={cn(
+              "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all border",
+              user?.favoriteWords?.includes(word.id)
+                ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
+                : "bg-white/5 border-white/10 text-app-text-muted hover:border-app-primary/50"
+            )}
+          >
+            <Star size={20} className="md:w-6 md:h-6" fill={user?.favoriteWords?.includes(word.id) ? "currentColor" : "none"} />
+          </button>
+          <button 
+            onClick={() => onPlayPronunciation(word.word)}
+            className="w-10 h-10 md:w-12 md:h-12 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary hover:bg-app-primary hover:text-app-bg transition-all"
+          >
+            <Volume2 size={20} className="md:w-6 md:h-6" />
+          </button>
+        </div>
+      </div>
+      
+      <div className="inline-block px-3 py-1 bg-app-primary/10 border border-app-primary/20 rounded-lg text-app-primary text-xs font-bold uppercase tracking-widest">
+        {word.partOfSpeech}
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Meaning</h4>
+          <p className="text-app-text leading-relaxed">{word.meaning}</p>
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Context</h4>
+          <p className="text-app-text-muted italic leading-relaxed">"{word.context}"</p>
+        </div>
+      </div>
+
+      <div className="pt-6 border-t border-app-primary/10">
+        <button 
+          onClick={() => onToggleFavorite(word.id)}
+          className={cn(
+            "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
+            user?.favoriteWords?.includes(word.id)
+              ? "bg-app-surface text-app-primary border border-app-primary/20"
+              : "bg-app-primary text-app-bg hover:bg-app-accent"
+          )}
+        >
+          {user?.favoriteWords?.includes(word.id) ? 'Remove from Flashcards' : 'Add to Flashcards'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WordDetailModal({ word, user, onClose, onToggleFavorite, onPlayPronunciation }: {
+  word: VocabularyWord,
+  user: any,
+  onClose: () => void,
+  onToggleFavorite: (id: string) => void,
+  onPlayPronunciation: (word: string) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 bg-app-bg/90 backdrop-blur-md md:hidden overflow-y-auto">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="w-full max-w-lg bg-app-surface border border-app-primary/20 rounded-3xl p-6 shadow-2xl relative my-auto"
+      >
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 p-2 hover:bg-white/5 rounded-full transition-colors text-app-text-muted hover:text-app-primary z-10"
+        >
+          <X size={24} />
+        </button>
+        <div className="pt-4">
+          <WordDetailContent 
+            word={word}
+            user={user}
+            onToggleFavorite={onToggleFavorite}
+            onPlayPronunciation={onPlayPronunciation}
+          />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWord, setSelectedWord] = useState<VocabularyWord | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const filteredWords = PTE_VOCABULARY.filter(w => {
     const matchesSearch = w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -3164,73 +3271,14 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
           })}
         </div>
 
-        <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 sticky top-6 h-fit">
+        <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 sticky top-6 h-fit hidden md:block">
           {selectedWord ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-3xl font-black text-app-text tracking-tight">{selectedWord.word}</h3>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={async () => {
-                      try {
-                        await handleToggleFavorite(selectedWord.id);
-                      } catch (e) {
-                        console.error("Failed to toggle favorite:", e);
-                      }
-                    }}
-                    className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all border",
-                      user?.favoriteWords?.includes(selectedWord.id)
-                        ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
-                        : "bg-white/5 border-white/10 text-app-text-muted hover:border-app-primary/50"
-                    )}
-                  >
-                    <Star size={24} fill={user?.favoriteWords?.includes(selectedWord.id) ? "currentColor" : "none"} />
-                  </button>
-                  <button 
-                    onClick={() => playPronunciation(selectedWord.word)}
-                    className="w-12 h-12 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary hover:bg-app-primary hover:text-app-bg transition-all"
-                  >
-                    <Volume2 size={24} />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="inline-block px-3 py-1 bg-app-primary/10 border border-app-primary/20 rounded-lg text-app-primary text-xs font-bold uppercase tracking-widest">
-                {selectedWord.partOfSpeech}
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Meaning</h4>
-                  <p className="text-app-text leading-relaxed">{selectedWord.meaning}</p>
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-app-text-muted/50 uppercase tracking-widest mb-2">Context</h4>
-                  <p className="text-app-text-muted italic leading-relaxed">"{selectedWord.context}"</p>
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-app-primary/10">
-                <button 
-                  onClick={async () => {
-                    try {
-                      await handleToggleFavorite(selectedWord.id);
-                    } catch (err) {
-                      console.error("Failed to toggle favorite:", err);
-                    }
-                  }}
-                  className={cn(
-                    "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
-                    user?.favoriteWords?.includes(selectedWord.id)
-                      ? "bg-app-surface text-app-primary border border-app-primary/20"
-                      : "bg-app-primary text-app-bg hover:bg-app-accent"
-                  )}
-                >
-                  {user?.favoriteWords?.includes(selectedWord.id) ? 'Remove from Flashcards' : 'Add to Flashcards'}
-                </button>
-              </div>
-            </div>
+            <WordDetailContent 
+              word={selectedWord}
+              user={user}
+              onToggleFavorite={handleToggleFavorite}
+              onPlayPronunciation={playPronunciation}
+            />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20">
               <div className="w-20 h-20 bg-app-bg rounded-3xl flex items-center justify-center text-app-primary/20">
@@ -3241,6 +3289,18 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {isMobile && selectedWord && (
+          <WordDetailModal 
+            word={selectedWord}
+            user={user}
+            onClose={() => setSelectedWord(null)}
+            onToggleFavorite={handleToggleFavorite}
+            onPlayPronunciation={playPronunciation}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -4546,7 +4606,7 @@ function TaskModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-app-bg/95 backdrop-blur-sm overflow-y-auto"
     >
       <motion.div 
         initial={{ scale: 0.9, y: 20 }}
