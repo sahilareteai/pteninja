@@ -55,6 +55,18 @@
         "summaryExample": { "type": "string", "description": "Example summary" }
       },
       "required": ["id", "title", "category", "section", "type"]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Subscription promo codes",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "The promo code string" },
+        "discountPercent": { "type": "number", "description": "Discount percentage" },
+        "description": { "type": "string", "description": "Code description" },
+        "isActive": { "type": "boolean", "description": "Whether the code is active" }
+      },
+      "required": ["code", "discountPercent", "isActive"]
     }
   },
   "firestore": {
@@ -69,6 +81,10 @@
     "/tasks/{taskId}": {
       "schema": "Task",
       "description": "PTE practice tasks"
+    },
+    "/promoCodes/{codeId}": {
+      "schema": "PromoCode",
+      "description": "Subscription promo codes"
     }
   }
 }

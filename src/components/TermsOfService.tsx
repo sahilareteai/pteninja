@@ -1,0 +1,93 @@
+import React from 'react';
+import { motion } from 'motion/react';
+import { BookOpen, ChevronLeft } from 'lucide-react';
+
+export function TermsOfService({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="max-w-4xl mx-auto px-4 py-12 pb-24"
+    >
+      <button 
+        onClick={onBack}
+        className="flex items-center gap-2 text-app-text-muted hover:text-app-primary transition-colors mb-8 group"
+      >
+        <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+        <span className="text-sm font-bold uppercase tracking-widest">Back</span>
+      </button>
+
+      <div className="bg-app-surface rounded-[2.5rem] border border-app-border p-8 md:p-12 shadow-2xl">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="p-3 rounded-2xl bg-app-primary/10">
+            <BookOpen className="text-app-primary" size={32} />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black text-app-text uppercase tracking-tight">Terms of Service</h1>
+        </div>
+
+        <div className="prose prose-invert max-w-none space-y-6 text-app-text-muted leading-relaxed">
+          <p className="text-lg text-app-text font-medium">Last Updated: March 31, 2026</p>
+          
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Acceptance of Terms</h2>
+            <p>
+              By accessing or using Ninja PTE Prep ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">2. Use of Service</h2>
+            <p>
+              Ninja PTE Prep provides educational tools for PTE Academic preparation. You agree to use the Service only for lawful purposes and in a way that does not infringe the rights of others or restrict their use of the Service.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">3. User Accounts</h2>
+            <p>
+              You are responsible for maintaining the confidentiality of your account information. You agree to notify us immediately of any unauthorized use of your account.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">4. Subscriptions and Payments</h2>
+            <p>
+              Certain features of our Service require a paid subscription. All payments are non-refundable unless required by law. We reserve the right to change our subscription fees at any time.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">5. Intellectual Property</h2>
+            <p>
+              All content, features, and functionality of the Service are the exclusive property of Ninja PTE Prep and its licensors. You may not reproduce, distribute, or create derivative works from our content without express written permission.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">6. Limitation of Liability</h2>
+            <p>
+              Ninja PTE Prep is provided "as is" without any warranties. We do not guarantee that your use of the Service will result in a specific PTE score. We are not liable for any damages arising from your use of the Service.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">7. Changes to Terms</h2>
+            <p>
+              We reserve the right to modify these Terms of Service at any time. We will notify users of any significant changes by posting the new terms on this page.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">8. Contact Us</h2>
+            <p>
+              If you have any questions about these Terms of Service, please contact us at:
+              <br />
+              <span className="text-app-primary font-bold">ninja-pte-services@googlegroups.com</span>
+            </p>
+          </section>
+        </div>
+      </div>
+    </motion.div>
+  );
+}

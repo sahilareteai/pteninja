@@ -57,6 +57,10 @@ import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
+import { PromoService, PromoCode } from './services/promoService';
+import { AdminDashboard } from './components/AdminDashboard';
+import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { TermsOfService } from './components/TermsOfService';
 import { db, doc, updateDoc, handleFirestoreError, OperationType } from './firebase';
 import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
 
@@ -637,8 +641,9 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>('dashboard');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('isDarkMode');
@@ -1009,6 +1014,16 @@ function AppContent() {
               </div>
             )}
             
+            {user?.role === 'admin' && (
+              <button 
+                onClick={() => setIsAdminDashboardOpen(true)}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-purple-500 hover:bg-purple-500/20 transition-all"
+              >
+                <Shield size={12} className="fill-current" />
+                Admin
+              </button>
+            )}
+            
             <button 
               onClick={() => setActiveTab('profile')}
               className="w-10 h-10 rounded-full bg-gradient-to-br from-app-primary to-app-accent p-[2px]"
@@ -1112,6 +1127,8 @@ function AppContent() {
                 onLogout={logout} 
                 onUpgrade={() => setShowSubscriptionModal(true)}
                 isDarkMode={isDarkMode}
+                onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+                onNavigate={setActiveTab}
               />
             ) : activeTab === 'help' ? (
               <HelpView 
@@ -1127,6 +1144,16 @@ function AppContent() {
             ) : activeTab === 'faq' ? (
               <FAQView 
                 key="faq"
+                onBack={() => setActiveTab('dashboard')}
+              />
+            ) : activeTab === 'privacy' ? (
+              <PrivacyPolicy 
+                key="privacy"
+                onBack={() => setActiveTab('dashboard')}
+              />
+            ) : activeTab === 'terms' ? (
+              <TermsOfService 
+                key="terms"
                 onBack={() => setActiveTab('dashboard')}
               />
             ) : (
@@ -1186,6 +1213,9 @@ function AppContent() {
               <div className="pt-4 border-t border-app-border">
                 <MenuLink icon={Settings} label="Settings" active={activeTab === 'help'} onClick={() => { setActiveTab('help'); setIsMenuOpen(false); }} />
                 <MenuLink icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsMenuOpen(false); }} />
+                {user?.role === 'admin' && (
+                  <MenuLink icon={Shield} label="Admin Dashboard" active={false} onClick={() => { setIsAdminDashboardOpen(true); setIsMenuOpen(false); }} />
+                )}
               </div>
             </div>
           </motion.div>
@@ -1231,6 +1261,9 @@ function AppContent() {
             activityLog={user?.activityLog || []}
             onClose={() => setShowStreakModal(false)}
           />
+        )}
+        {isAdminDashboardOpen && user?.role === 'admin' && (
+          <AdminDashboard onClose={() => setIsAdminDashboardOpen(false)} />
         )}
       </AnimatePresence>
     </div>
@@ -1391,10 +1424,26 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
 }) {
   const [activePolicy, setActivePolicy] = useState<keyof typeof POLICIES | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const policy = params.get('policy');
+    if (policy === 'privacy' || policy === 'terms' || policy === 'disclaimer' || policy === 'refund') {
+      setActivePolicy(policy as keyof typeof POLICIES);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-app-bg text-app-text-muted font-sans selection:bg-app-primary/30 overflow-x-hidden transition-colors duration-300">
       <AnimatePresence>
-        {activePolicy && (
+        {activePolicy === 'privacy' ? (
+          <div className="fixed inset-0 z-[150] bg-app-bg overflow-y-auto">
+            <PrivacyPolicy onBack={() => setActivePolicy(null)} />
+          </div>
+        ) : activePolicy === 'terms' ? (
+          <div className="fixed inset-0 z-[150] bg-app-bg overflow-y-auto">
+            <TermsOfService onBack={() => setActivePolicy(null)} />
+          </div>
+        ) : activePolicy && (
           <PolicyModal type={activePolicy} onClose={() => setActivePolicy(null)} />
         )}
       </AnimatePresence>
@@ -1620,13 +1669,31 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+
+  const handleApplyPromo = async () => {
+    const promo = await PromoService.validate(promoInput);
+    if (promo) {
+      setAppliedPromo(promo);
+      toast.success(`Promo code ${promo.code} applied! ${promo.discountPercent}% off.`);
+    } else {
+      toast.error('Invalid promo code');
+      setAppliedPromo(null);
+    }
+  };
 
   const handleSelectPlan = async (plan: any) => {
     setSelectedPlan(plan);
     setIsProcessing(true);
     
     try {
-      const convertedAmount = CurrencyService.convert(plan.price);
+      let basePrice = plan.price;
+      if (appliedPromo) {
+        basePrice = PromoService.calculateDiscount(basePrice, appliedPromo.discountPercent);
+      }
+
+      const convertedAmount = CurrencyService.convert(basePrice);
       const response = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1740,7 +1807,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     <div className="flex flex-col items-center">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-app-text-muted/40 line-through font-medium">{formatPrice(plan.originalPrice)}</span>
-                        <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
+                        <div className="flex flex-col items-center">
+                          {appliedPromo ? (
+                            <>
+                              <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>
+                              <span className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(plan.price, appliedPromo.discountPercent))}</span>
+                            </>
+                          ) : (
+                            <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
+                          )}
+                        </div>
                       </div>
                       <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
                     </div>
@@ -1756,6 +1832,29 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                   </div>
                 ))}
               </div>
+
+              <div className="w-full max-w-md mx-auto bg-app-bg border border-app-primary/10 rounded-2xl p-4 flex items-center gap-3">
+                <div className="flex-1 relative">
+                  <input 
+                    type="text" 
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value)}
+                    placeholder="Referral or Gift Code"
+                    className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium"
+                  />
+                  {appliedPromo && (
+                    <div className="absolute -top-6 left-0 text-[10px] text-app-accent font-bold uppercase tracking-wider">
+                      Code Applied: {appliedPromo.code} ({appliedPromo.discountPercent}% OFF)
+                    </div>
+                  )}
+                </div>
+                <button 
+                  onClick={handleApplyPromo}
+                  className="bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+                >
+                  Apply
+                </button>
+              </div>
             </>
           ) : (
             <div className="w-full space-y-8">
@@ -1767,7 +1866,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 <div className="text-right">
                   <div className="flex items-center gap-2 justify-end">
                     <span className="text-sm text-app-text-muted/40 line-through">{formatPrice(selectedPlan.originalPrice)}</span>
-                    <div className="text-3xl font-bold text-app-accent">{formatPrice(selectedPlan.price)}</div>
+                    <div className="flex flex-col items-end">
+                      {appliedPromo ? (
+                        <>
+                          <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(selectedPlan.price)}</span>
+                          <div className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent))}</div>
+                        </>
+                      ) : (
+                        <div className="text-3xl font-bold text-app-accent">{formatPrice(selectedPlan.price)}</div>
+                      )}
+                    </div>
                   </div>
                   <div className="text-xs text-app-text-muted/50">{currency.code} Total</div>
                 </div>
@@ -1794,7 +1902,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     }}
                   >
                     <CheckoutForm 
-                      amount={selectedPlan.price} 
+                      amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
                       clientSecret={clientSecret}
                       onCancel={() => {
                         setSelectedPlan(null);
@@ -2063,7 +2171,14 @@ function FAQView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ProfileView({ user, onLogout, onUpgrade, isDarkMode }: { user: any, onLogout: () => void, onUpgrade: () => void, isDarkMode: boolean }) {
+function ProfileView({ user, onLogout, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate }: { 
+  user: any, 
+  onLogout: () => void, 
+  onUpgrade: () => void, 
+  isDarkMode: boolean, 
+  onOpenAdminDashboard?: () => void,
+  onNavigate: (tab: any) => void
+}) {
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
   const isActive = user?.subscriptionStatus === 'active';
@@ -2192,8 +2307,36 @@ function ProfileView({ user, onLogout, onUpgrade, isDarkMode }: { user: any, onL
                 <Database size={18} />
                 Seed Tasks to Firestore
               </button>
+              <button
+                onClick={onOpenAdminDashboard}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all mt-3"
+              >
+                <Shield size={18} />
+                Open Admin Dashboard
+              </button>
             </div>
           )}
+
+          {/* Legal Section */}
+          <div className="pt-6 border-t border-app-primary/10">
+            <h3 className="text-lg font-bold text-app-text flex items-center gap-2 mb-4">
+              <ShieldCheck className="text-app-primary" size={20} /> Legal
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => onNavigate('privacy')}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all"
+              >
+                Privacy Policy
+              </button>
+              <button
+                onClick={() => onNavigate('terms')}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:border-app-primary hover:text-app-primary transition-all"
+              >
+                Terms of Service
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>

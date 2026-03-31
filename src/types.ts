@@ -101,6 +101,7 @@ export interface UserData {
   favoriteWords?: string[];
   mockTestResults?: MockTestResult[];
   currentSessionId?: string;
+  role?: 'admin' | 'user';
 }
 
 export const SUBSCRIPTION_PLANS = [

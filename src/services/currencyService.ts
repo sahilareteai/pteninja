@@ -28,12 +28,19 @@ export class CurrencyService {
 
     try {
       // Try to detect user's country and currency via IP
-      const response = await fetch('https://ipapi.co/json/');
-      const data = await response.json();
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.currency && SUPPORTED_CURRENCIES[data.currency]) {
+            this.currentCurrency = SUPPORTED_CURRENCIES[data.currency];
+          }
+        }
+      } catch (e) {
+        // Silent fail for IP detection, will use fallback
+      }
       
-      if (data.currency && SUPPORTED_CURRENCIES[data.currency]) {
-        this.currentCurrency = SUPPORTED_CURRENCIES[data.currency];
-      } else {
+      if (!this.currentCurrency || this.currentCurrency === SUPPORTED_CURRENCIES.AUD) {
         // Fallback to browser locale
         const locale = navigator.language;
         const currencyMap: Record<string, string> = {
@@ -60,24 +67,26 @@ export class CurrencyService {
       // Optionally fetch real-time rates
       try {
         const rateResponse = await fetch('https://open.er-api.com/v6/latest/AUD');
-        const rateData = await rateResponse.json();
-        if (rateData.result === 'success' && rateData.rates) {
-          Object.keys(SUPPORTED_CURRENCIES).forEach(code => {
-            if (rateData.rates[code]) {
-              SUPPORTED_CURRENCIES[code].rate = rateData.rates[code];
+        if (rateResponse.ok) {
+          const rateData = await rateResponse.json();
+          if (rateData.result === 'success' && rateData.rates) {
+            Object.keys(SUPPORTED_CURRENCIES).forEach(code => {
+              if (rateData.rates[code]) {
+                SUPPORTED_CURRENCIES[code].rate = rateData.rates[code];
+              }
+            });
+            // Update current currency rate if it was changed
+            if (SUPPORTED_CURRENCIES[this.currentCurrency.code]) {
+              this.currentCurrency = SUPPORTED_CURRENCIES[this.currentCurrency.code];
             }
-          });
-          // Update current currency rate if it was changed
-          if (SUPPORTED_CURRENCIES[this.currentCurrency.code]) {
-            this.currentCurrency = SUPPORTED_CURRENCIES[this.currentCurrency.code];
           }
         }
       } catch (e) {
-        console.warn('Failed to fetch real-time exchange rates, using fallbacks', e);
+        // Silent fail for real-time rates, using fallbacks
       }
 
     } catch (error) {
-      console.error('Failed to detect currency:', error);
+      // Final catch-all, should not happen with the inner try-catches
     } finally {
       this.isInitialized = true;
     }
