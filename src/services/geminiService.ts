@@ -104,7 +104,7 @@ async function callGemini(params: any, retries: number = 3): Promise<any> {
   }
 }
 
-export async function generateTTS(text: string, retries: number = 3) {
+export async function generateTTS(text: string, retries: number = 1) {
   if (!text || text.trim().length === 0) {
     console.warn("generateTTS: Empty text provided");
     return null;

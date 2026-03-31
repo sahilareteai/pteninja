@@ -34,6 +34,7 @@ import {
   Calendar,
   Map,
   Plus,
+  Layout,
   Trash2,
   TrendingUp,
   AlertCircle,
@@ -47,6 +48,7 @@ import {
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
+import { DatePicker } from './components/DatePicker';
 import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, UserData } from './types';
 import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
@@ -323,7 +325,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.1 }}
               className={cn(
-                "relative pl-20 group",
+                "relative pl-14 md:pl-20 group",
                 !milestone.isUnlocked && "opacity-50"
               )}
             >
@@ -372,13 +374,13 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
 
       {activeView === 'schedule' && (
         <div className="space-y-6">
-          <div className="bg-app-surface p-8 rounded-[2.5rem] border border-app-primary/10">
-            <div className="flex items-center justify-between mb-8">
+          <div className="bg-app-surface p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-app-primary/10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div>
                 <h3 className="text-xl font-bold text-app-text">Study Schedule</h3>
                 <p className="text-sm text-app-text-muted">Align your study time with specific tasks.</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-end md:self-auto">
                 {user.schedule && user.schedule.length > 0 && (
                   <button 
                     onClick={handleClearSchedule}
@@ -458,8 +460,8 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                   const dateStr = scheduledDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
                   return (
-                    <div key={item.id} className="flex items-center gap-6 p-4 bg-app-bg rounded-2xl border border-app-border group hover:border-app-primary/30 transition-all">
-                      <div className="text-center min-w-[80px]">
+                    <div key={item.id} className="flex items-center gap-3 md:gap-6 p-4 bg-app-bg rounded-2xl border border-app-border group hover:border-app-primary/30 transition-all">
+                      <div className="text-center min-w-[70px] md:min-w-[80px]">
                         <p className="text-sm font-bold text-app-text">{timeStr}</p>
                         {!isToday && <p className="text-[10px] text-app-text-muted/50 font-bold uppercase">{dateStr}</p>}
                         <p className="text-[10px] text-app-primary font-bold uppercase">{item.duration}m</p>
@@ -530,7 +532,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
       {activeView === 'goals' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-app-surface p-8 rounded-[2.5rem] border border-app-primary/10">
+            <div className="bg-app-surface p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-app-primary/10">
               <div className="flex items-center gap-3 mb-6">
                 <TrendingUp className="text-app-primary" size={24} />
                 <h3 className="text-xl font-bold text-app-text">Daily Goals</h3>
@@ -567,7 +569,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
               </div>
             </div>
 
-            <div className="bg-app-bg p-8 rounded-[2.5rem] border border-app-primary/10 flex flex-col justify-between">
+            <div className="bg-app-bg p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] border border-app-primary/10 flex flex-col justify-between">
               <div>
                 <h3 className="text-xl font-bold text-app-text mb-2">Set New Goal</h3>
                 <p className="text-sm text-app-text-muted mb-6">Challenge yourself to improve faster.</p>
@@ -2128,17 +2130,18 @@ function NavButton({ active, onClick, icon: Icon, label }: { active: boolean, on
 
 function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void }) {
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex items-center justify-between">
+    <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-app-text font-display tracking-tight">Mock Tests</h2>
-          <p className="text-app-text-muted">100 Full-length PTE Academic practice tests</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-app-text font-display tracking-tight">Mock Tests</h2>
+          <p className="text-sm text-app-text-muted">100 Full-length PTE Academic practice tests</p>
         </div>
         <button 
           onClick={onBack}
-          className="p-2 hover:bg-app-surface rounded-full transition-colors"
+          className="w-full sm:w-auto p-3 bg-app-surface border border-app-primary/10 rounded-xl flex items-center justify-center gap-2 hover:bg-app-primary/10 transition-colors"
         >
-          <ChevronLeft size={24} />
+          <ChevronLeft size={20} />
+          <span className="sm:hidden font-bold uppercase tracking-widest text-xs">Back to Dojo</span>
         </button>
       </div>
 
@@ -2465,10 +2468,12 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       className="max-w-7xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
     >
       {/* Progress Overview */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative overflow-hidden group">
-          <div className="absolute -top-4 -right-4 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-            <Trophy size={180} className="text-app-primary" />
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative">
+        <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative group z-20">
+          <div className="absolute top-0 right-0 w-full h-full overflow-hidden pointer-events-none rounded-3xl">
+            <div className="absolute -top-4 -right-4 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+              <Trophy size={180} className="text-app-primary" />
+            </div>
           </div>
           <div className="relative z-10 max-w-[280px]">
             {progress.targetScore === 0 ? (
@@ -2503,30 +2508,12 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
                   </div>
                   <div>
                     <p className="text-app-text-muted mb-2 text-xs md:text-sm font-bold uppercase tracking-wider">Test Date</p>
-                    <div className="relative flex items-center group bg-app-bg border border-app-primary/30 rounded-xl hover:border-app-primary transition-all focus-within:border-app-primary focus-within:ring-1 focus-within:ring-app-primary/20 shadow-lg overflow-hidden">
-                      <input 
-                        type="date" 
-                        value={tempDate}
-                        onChange={(e) => setTempDate(e.target.value)}
-                        className="w-full bg-transparent px-4 py-3 pr-12 text-app-text font-bold text-lg outline-none [color-scheme:dark] cursor-pointer relative z-10"
-                        min={new Date().toISOString().split('T')[0]}
-                        onFocus={(e) => {
-                          try {
-                            (e.target as any).showPicker?.();
-                          } catch (err) {
-                            console.warn("showPicker not supported or failed", err);
-                          }
-                        }}
-                        onClick={(e) => {
-                          try {
-                            (e.target as any).showPicker?.();
-                          } catch (err) {
-                            console.warn("showPicker not supported or failed", err);
-                          }
-                        }}
-                      />
-                      <Calendar className="absolute right-4 text-app-primary/50 group-hover:text-app-primary transition-colors pointer-events-none z-0" size={20} />
-                    </div>
+                    <DatePicker 
+                      value={tempDate}
+                      onChange={(date) => setTempDate(date)}
+                      minDate={new Date().toISOString().split('T')[0]}
+                      placeholder="Select your test date"
+                    />
                   </div>
                   <button 
                     onClick={async () => {
@@ -2674,13 +2661,13 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-app-primary via-app-surface to-app-bg rounded-[2.5rem] p-8 md:p-10 flex flex-col justify-between border border-app-primary/20 shadow-xl shadow-app-primary/10 relative overflow-hidden group">
+        <div className="bg-gradient-to-br from-app-primary via-app-surface to-app-bg rounded-3xl md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-between border border-app-primary/20 shadow-xl shadow-app-primary/10 relative overflow-hidden group z-10">
           <div className="absolute top-0 right-0 w-32 h-32 bg-app-primary/10 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-app-primary/20 transition-all duration-700" />
           <div className="relative z-10">
             <div className="w-14 h-14 bg-app-bg/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-app-primary/20">
               <Target size={32} className="text-app-primary" />
             </div>
-            <h3 className="text-2xl md:text-3xl font-black text-app-text leading-tight tracking-tight">
+            <h3 className="text-xl md:text-3xl font-black text-app-text leading-tight tracking-tight">
               Next Milestone: <br/>
               <span className="text-app-primary">{belt.next}</span>
             </h3>
@@ -2689,16 +2676,16 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
               Current: {belt.title}
             </p>
           </div>
-          <div className="relative z-10 space-y-3 mt-8">
+          <div className="relative z-10 space-y-3 mt-6 md:mt-8">
             <button 
               onClick={onViewRoadmap}
-              className="w-full py-4 bg-app-text text-app-bg rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-app-accent hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl"
+              className="w-full py-3 md:py-4 bg-app-text text-app-bg rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-app-accent hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl"
             >
               View Roadmap
             </button>
             <button 
               onClick={onViewPattern}
-              className="w-full py-4 bg-app-bg/60 backdrop-blur-md text-app-text-muted border border-app-primary/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-app-bg hover:text-app-text transition-all duration-300"
+              className="w-full py-3 md:py-4 bg-app-bg/60 backdrop-blur-md text-app-text-muted border border-app-primary/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-app-bg hover:text-app-text transition-all duration-300"
             >
               Exam Pattern
             </button>
@@ -3207,15 +3194,21 @@ function PatternView({ onBack }: { onBack: () => void }) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-7xl mx-auto space-y-8 pb-20 px-4 md:px-0"
+      className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0"
     >
-      <div className="flex items-center gap-4">
-        <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors">
-          <ChevronRight className="rotate-180" size={24} />
-        </button>
-        <div>
-          <h2 className="text-3xl font-black text-app-text tracking-tight">PTE EXAM PATTERN</h2>
-          <p className="text-app-text-muted/50 font-bold uppercase tracking-widest text-xs">Official Pearson Standards</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
+            <ChevronRight className="rotate-180" size={24} />
+          </button>
+          <div className="p-3 rounded-2xl bg-app-primary/10 shrink-0">
+            <Layout className="text-app-primary" size={28} />
+          </div>
+          <h2 className="text-2xl font-bold text-app-text sm:hidden">PTE Pattern</h2>
+        </div>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-app-text hidden sm:block">PTE Exam Pattern</h2>
+          <p className="text-sm text-app-text-muted">Complete breakdown of the PTE Academic test structure</p>
         </div>
       </div>
 
@@ -3720,7 +3713,7 @@ function TaskModal({
     
     let initialTime = 0;
     if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
-      initialTime = 1; // Reduced from 3 to 1 for near-instant start
+      initialTime = 3; // Reset to 3s for better user experience
     } else if (task.category === 'Summarize Spoken Text') {
       initialTime = 12;
     } else if (task.section === 'listening' && task.hasAudio) {
@@ -3877,6 +3870,9 @@ function TaskModal({
             source.start(startTime);
             setIsAudioPlaying(true);
             setIsPreparingAudio(false);
+            if (source.buffer) {
+              setTimeLeft(Math.ceil(source.buffer.duration));
+            }
             return; // Exit early as we've handled playback
           }
           // --- END HIGH-PERFORMANCE LOGIC ---
@@ -3886,19 +3882,22 @@ function TaskModal({
           console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
           setIsPreparingAudio(true);
           
-          // Safety timeout to prevent stuck loading
+          // Safety timeout to prevent stuck loading - increased to 35s to allow for 30s TTS timeout
           safetyTimeout = setTimeout(() => {
-            if (!isCancelled) {
+            if (!isCancelled && isPreparingAudio) {
               console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
               setIsPreparingAudio(false);
-              setHasAudioError(true);
+              // Only set error if we don't have a fallback or if it's really stuck
+              if (!task.transcript && !task.prompt) {
+                setHasAudioError(true);
+              }
             }
-          }, 50000);
+          }, 35000);
 
           let base64 = null;
           try {
             const timeoutPromise = new Promise<null>((_, reject) => 
-              setTimeout(() => reject(new Error("Audio preparation timed out after 60s")), 60000)
+              setTimeout(() => reject(new Error("Audio preparation timed out after 30s")), 30000)
             );
 
             console.log("[Audio] Starting on-demand audio generation...");
@@ -3977,6 +3976,9 @@ function TaskModal({
                 console.log("[Audio] Audio playback started");
                 setIsAudioPlaying(true);
                 setIsPreparingAudio(false);
+                if (audio.duration) {
+                  setTimeLeft(Math.ceil(audio.duration));
+                }
               }
             }).catch(err => {
               console.error("[Audio] Playback failed:", err);
@@ -4113,7 +4115,7 @@ function TaskModal({
   // Timer logic
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (phase === 'prep' || phase === 'recording') {
+    if (phase === 'prep' || phase === 'recording' || (phase === 'audio' && isAudioPlaying)) {
       timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
@@ -4140,6 +4142,9 @@ function TaskModal({
               }
               if (task.section === 'listening') return 90;
               return task.recordingTime ?? 40;
+            } else if (phase === 'audio') {
+              // Audio finished, handleAudioEnd will take care of phase transition
+              return 0;
             } else {
               handleFinish();
               return 0;
@@ -4150,7 +4155,7 @@ function TaskModal({
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [phase, task.recordingTime, task.hasAudio, task.category]);
+  }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
 
   const handleFinish = async () => {
     setPhase('analyzing');
@@ -4518,10 +4523,30 @@ function TaskModal({
           )}
 
           {/* Instruction Area */}
-          <div className="bg-app-surface/30 p-4 rounded-xl border border-app-primary/20">
-            <p className="text-sm text-app-text leading-relaxed">
-              <span className="text-app-primary font-bold mr-2">Instruction:</span>
-              {task.description}
+          <div className={cn(
+            "p-6 rounded-xl border transition-all",
+            (task.category === 'Read Aloud' || task.category === 'Repeat Sentence')
+              ? "bg-white/95 border-gray-200 shadow-sm mb-6" 
+              : "bg-app-surface/30 border-app-primary/20"
+          )}>
+            <p className={cn(
+              "text-sm leading-relaxed",
+              (task.category === 'Read Aloud' || task.category === 'Repeat Sentence') ? "text-gray-800 italic font-medium" : "text-app-text"
+            )}>
+              {task.category === 'Read Aloud' ? (
+                <>
+                  Look at the text below. In <span className="font-bold not-italic">{task.prepTime || 35} seconds</span>, you must read this text aloud as naturally and clearly as possible. You have <span className="font-bold not-italic">{task.prepTime || 35} seconds</span> to read aloud.
+                </>
+              ) : task.category === 'Repeat Sentence' ? (
+                <>
+                  You will hear a sentence. Please repeat the sentence exactly as you hear it. You will hear the sentence only once.
+                </>
+              ) : (
+                <>
+                  <span className="text-app-primary font-bold mr-2">Instruction:</span>
+                  {task.description}
+                </>
+              )}
             </p>
           </div>
 
@@ -4591,9 +4616,110 @@ function TaskModal({
             </div>
           ) : (
             <>
+              {/* Audio Controls for Read Aloud / Repeat Sentence (Above prompt to match image) */}
+              {(task.category === 'Read Aloud' || task.category === 'Repeat Sentence') && (phase === 'prep' || phase === 'recording' || phase === 'audio') && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-8 px-10"
+                >
+                  <div className="w-full space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                      <span className="text-gray-500 font-medium text-base">
+                        {task.category === 'Read Aloud' || phase === 'recording' ? 'Audio Recorder' : 'Audio Player'}
+                      </span>
+                      <span className={cn(
+                        "font-bold text-base",
+                        (phase === 'prep' || (phase === 'audio' && !isAudioPlaying)) ? "text-red-500" : "text-app-primary"
+                      )}>
+                        {phase === 'prep' ? (
+                          task.category === 'Repeat Sentence' ? `Beginning in ${timeLeft} sec` : `Recording starts in ${timeLeft} sec`
+                        ) : phase === 'audio' ? (
+                          isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`
+                        ) : phase === 'recording' ? (
+                          'Recording...'
+                        ) : 'Ready'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-6 pt-2">
+                      {/* Control Button */}
+                      <button 
+                        onClick={() => {
+                          if (phase === 'prep') skipPrep();
+                          else if (phase === 'recording') handleFinish();
+                          else if (phase === 'audio' && !isAudioPlaying) {
+                            if (audioRef.current) {
+                              audioRef.current.play().catch(e => console.error("Manual play failed", e));
+                              setIsAudioPlaying(true);
+                            }
+                          }
+                        }}
+                        disabled={phase === 'audio' && isAudioPlaying}
+                        className={cn(
+                          "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl shrink-0",
+                          phase === 'prep' ? "bg-app-primary text-app-bg hover:scale-105" : 
+                          phase === 'recording' ? "bg-red-500 text-white hover:scale-105" :
+                          "bg-blue-500 text-white hover:scale-105 disabled:opacity-50"
+                        )}
+                        title={phase === 'prep' ? 'Start' : phase === 'recording' ? 'Stop' : 'Play'}
+                      >
+                        {phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
+                         phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                         (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />)}
+                      </button>
+
+                      <div className="flex-1">
+                        {/* Wave Animation when active */}
+                        {(isAudioPlaying || phase === 'recording') ? (
+                          <div className="w-full h-12 flex items-center justify-start gap-1.5">
+                            {[...Array(40)].map((_, i) => (
+                              <motion.div 
+                                key={i}
+                                animate={{ 
+                                  height: [6, Math.random() * 32 + 6, 6],
+                                  opacity: [0.4, 1, 0.4]
+                                }}
+                                transition={{ 
+                                  repeat: Infinity, 
+                                  duration: 0.4 + Math.random() * 0.2, 
+                                  delay: i * 0.02 
+                                }}
+                                className={cn(
+                                  "w-1.5 rounded-full",
+                                  isAudioPlaying ? "bg-blue-400" : "bg-red-400"
+                                )}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ 
+                                  width: `${(timeLeft / (
+                                    phase === 'prep' ? (task.prepTime || 3) : 
+                                    phase === 'audio' ? (audioRef.current?.duration || 10) :
+                                    (task.recordingTime || 40)
+                                  )) * 100}%` 
+                                }}
+                                className="h-full transition-all bg-app-primary"
+                              />
+                            </div>
+                            <span className="text-xs font-mono text-gray-400 whitespace-nowrap">
+                              {formatTime(timeLeft)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Prompt Area */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && (
-                <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20 relative group">
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
+                <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group">
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
                     task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
@@ -4632,8 +4758,8 @@ function TaskModal({
                 </div>
               )}
 
-              {/* Audio Controls (Moved here as per user request) */}
-              {(phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
+              {/* Audio Controls (For non-Read Aloud/Repeat Sentence tasks) */}
+              {task.category !== 'Read Aloud' && task.category !== 'Repeat Sentence' && (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -5165,7 +5291,7 @@ function TaskModal({
               >
                 {/* Scoreboard */}
                 <div className="bg-app-bg rounded-3xl p-6 border border-app-primary/20">
-                  <div className="flex items-center justify-between mb-8">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                     <div>
                       <h4 className="text-sm font-bold text-app-primary uppercase tracking-widest">Ninja Scoreboard</h4>
                       <p className="text-xs text-app-text-muted">Based on PTE Global Scale of English</p>
@@ -5176,7 +5302,7 @@ function TaskModal({
                   </div>
 
         {task.category.includes('Multiple Choice') ? (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ScoreMetric 
               label="Content" 
               score={feedback.content} 
@@ -5184,24 +5310,24 @@ function TaskModal({
               rawScore={feedback.rawContent} 
               maxRawScore={feedback.maxRawContent} 
             />
-            <div className="col-span-2" />
+            <div className="sm:col-span-2" />
           </div>
         ) : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ScoreMetric label="Grammar" score={feedback.grammar} max={90} />
             <ScoreMetric label="Vocabulary" score={feedback.vocabulary} max={90} />
             <ScoreMetric label="Spelling" score={feedback.spelling} max={90} />
           </div>
         ) : task.section === 'speaking' ? (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ScoreMetric label="Content" score={feedback.content} max={90} />
             <ScoreMetric label="Oral Fluency" score={feedback.oralFluency} max={90} />
             <ScoreMetric label="Pronunciation" score={feedback.pronunciation} max={90} />
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ScoreMetric label="Content" score={feedback.content} max={90} />
-            <div className="col-span-2" />
+            <div className="sm:col-span-2" />
           </div>
         )}
                 </div>
