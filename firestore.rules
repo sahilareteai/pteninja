@@ -30,7 +30,20 @@ service cloud.firestore {
              (!('favoriteWords' in data) || data.favoriteWords is list) &&
              (!('subscriptionEndsAt' in data) || data.subscriptionEndsAt is string) &&
              (!('trialEndsAt' in data) || data.trialEndsAt is string) &&
+             (!('role' in data) || data.role in ['user', 'admin']) &&
              (!('planId' in data) || data.planId in ['monthly', 'quarterly', 'annual']);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "sg.analyst93@gmail.com" && request.auth.token.email_verified == true));
+    }
+    function isValidTask(data) {
+      return data.id is string &&
+             data.title is string &&
+             data.category is string &&
+             data.section in ['speaking', 'writing', 'reading', 'listening'];
     }
 
     // ===============================================================
@@ -52,6 +65,11 @@ service cloud.firestore {
       allow read: if isOwner(guestId);
       allow create: if isOwner(guestId);
       allow update: if isOwner(guestId);
+    }
+
+    match /tasks/{taskId} {
+      allow read: if true; // Tasks are publicly readable
+      allow write: if isAdmin(); // Only admins can modify tasks
     }
   }
 }

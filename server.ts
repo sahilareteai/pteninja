@@ -26,11 +26,20 @@ app.get("/api/health", (req, res) => {
 
 // Stripe Payment Intent
 app.post("/api/create-payment-intent", async (req, res) => {
+  console.log("Received payment intent request:", req.body);
+  
   if (!stripe) {
-    return res.status(500).json({ error: "Stripe is not configured" });
+    console.error("Stripe is not configured. STRIPE_SECRET_KEY is missing.");
+    return res.status(500).json({ 
+      error: "Stripe is not configured on the server. Please add STRIPE_SECRET_KEY to environment variables." 
+    });
   }
 
   const { amount, currency = "aud" } = req.body;
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ error: "Invalid amount" });
+  }
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
@@ -41,8 +50,10 @@ app.post("/api/create-payment-intent", async (req, res) => {
       },
     });
 
+    console.log("Payment intent created successfully:", paymentIntent.id);
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error: any) {
+    console.error("Stripe error:", error);
     res.status(400).json({ error: error.message });
   }
 });

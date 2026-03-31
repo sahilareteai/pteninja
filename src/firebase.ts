@@ -9,7 +9,7 @@ import {
   onAuthStateChanged, 
   User as FirebaseUser 
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
@@ -86,5 +86,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, updateDoc };
+export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, updateDoc, collection, getDocs, query, where, setDoc };
 export type { FirebaseUser };

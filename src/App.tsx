@@ -43,7 +43,8 @@ import {
   Volume2,
   Loader2,
   Sun,
-  Moon
+  Moon,
+  Database
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -55,6 +56,7 @@ import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
 import { db, doc, updateDoc, handleFirestoreError, OperationType } from './firebase';
+import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
 
 // Mock Data for Initial State
 const INITIAL_PROGRESS: UserProgress = {
@@ -147,8 +149,9 @@ const NotificationService = {
 };
 
 
-function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
+function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
   user: any, 
+  allTasks: PTETask[],
   onBack: () => void, 
   onStartTask: (task: PTETask) => void,
   notificationPermission: string,
@@ -171,7 +174,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
 
   const handleAddSchedule = async () => {
     if (!user?.uid || !newSchedule.taskId) return;
-    const task = PTE_TASKS.find(t => t.id === newSchedule.taskId);
+    const task = allTasks.find(t => t.id === newSchedule.taskId);
     if (!task) return;
 
     const scheduleItem: ScheduledTask = {
@@ -356,7 +359,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 {milestone.isUnlocked && (
                   <div className="mt-6 grid grid-cols-2 gap-3">
                     <button 
-                      onClick={() => onStartTask(PTE_TASKS[0])}
+                      onClick={() => onStartTask(allTasks[0])}
                       className="py-2 bg-app-bg text-app-text rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-primary hover:text-app-bg transition-all"
                     >
                       Practice Now
@@ -412,7 +415,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                     className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   >
                     <option value="">Select Task</option>
-                    {PTE_TASKS.map(t => (
+                    {allTasks.map(t => (
                       <option key={t.id} value={t.id}>{t.category}: {t.title}</option>
                     ))}
                   </select>
@@ -453,7 +456,7 @@ function RoadmapView({ user, onBack, onStartTask, notificationPermission, onRequ
                 </div>
               ) : (
                 user.schedule.sort((a: ScheduledTask, b: ScheduledTask) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((item: ScheduledTask) => {
-                  const task = PTE_TASKS.find(t => t.id === item.taskId);
+                  const task = allTasks.find(t => t.id === item.taskId);
                   const scheduledDate = new Date(item.scheduledAt);
                   const isToday = scheduledDate.toDateString() === new Date().toDateString();
                   const timeStr = scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -650,6 +653,8 @@ function AppContent() {
     }
   }, [isDarkMode]);
   const [progress, setProgress] = useState<UserProgress>(INITIAL_PROGRESS);
+  const [tasks, setTasks] = useState<PTETask[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
@@ -659,6 +664,22 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError } = useSubscription();
+
+  // Load tasks from Firestore
+  useEffect(() => {
+    const loadTasks = async () => {
+      setIsLoadingTasks(true);
+      const firestoreTasks = await fetchTasksFromFirestore();
+      if (firestoreTasks.length > 0) {
+        setTasks(firestoreTasks);
+      } else {
+        // Fallback to static tasks if Firestore is empty
+        setTasks(PTE_TASKS);
+      }
+      setIsLoadingTasks(false);
+    };
+    loadTasks();
+  }, []);
 
   const handleRequestNotificationPermission = async () => {
     try {
@@ -756,7 +777,7 @@ function AppContent() {
 
         // Pick tasks for this day
         // We'll pick tasks randomly from different sections for variety
-        const availableTasks = [...PTE_TASKS];
+        const availableTasks = [...tasks];
         for (let j = 0; j < plan.tasksPerDay; j++) {
           if (availableTasks.length === 0) break;
           
@@ -859,7 +880,7 @@ function AppContent() {
   const calculateSectionAverage = (section: PTESection) => {
     if (!user?.taskScores) return 0;
     
-    const sectionTasks = PTE_TASKS.filter(t => t.section === section).map(t => t.id);
+    const sectionTasks = tasks.filter(t => t.section === section).map(t => t.id);
     let totalScore = 0;
     let totalAttempts = 0;
     
@@ -1016,9 +1037,10 @@ function AppContent() {
                 key="dashboard" 
                 progress={progress} 
                 user={user}
+                allTasks={tasks}
                 onStartTask={(task) => {
                   setSelectedTask(task);
-                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
+                  setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }} 
                 onHoverTask={handleHoverTask}
@@ -1047,10 +1069,11 @@ function AppContent() {
               <RoadmapView 
                 key="roadmap"
                 user={user}
+                allTasks={tasks}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
                   setSelectedTask(task);
-                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
+                  setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }}
                 notificationPermission={notificationPermission}
@@ -1072,10 +1095,11 @@ function AppContent() {
               <DailyShurikenView 
                 key="shuriken"
                 user={user}
+                allTasks={tasks}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
                   setSelectedTask(task);
-                  setCurrentCategoryTasks(PTE_TASKS.filter(t => t.section === task.section));
+                  setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
                 }}
               />
@@ -1106,8 +1130,9 @@ function AppContent() {
             ) : (
               <SectionView 
                 key={activeTab} 
-                section={activeTab} 
+                section={activeTab as PTESection} 
                 user={user}
+                allTasks={tasks}
                 onBack={() => setActiveTab('dashboard')} 
                 onSelectTask={handleSelectTask}
                 onHoverTask={handleHoverTask}
@@ -1136,6 +1161,7 @@ function AppContent() {
           <MockTestSession 
             key={activeMockTest.id}
             test={activeMockTest}
+            allTasks={tasks}
             onFinish={handleMockTestFinish}
             onClose={() => setActiveMockTest(null)}
           />
@@ -1573,6 +1599,18 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: plan.price * 100, currency: 'aud' }), // Australia focus
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Payment server error:", errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          toast.error(errorData.error || "Failed to initialize payment");
+        } catch {
+          toast.error("Payment server returned an error. Please check your configuration.");
+        }
+        return;
+      }
       
       const data = await response.json();
       if (data.clientSecret) {
@@ -2086,16 +2124,31 @@ function ProfileView({ user, onLogout, onUpgrade, isDarkMode }: { user: any, onL
             <ShieldCheck className="text-app-primary" /> Account Security
           </h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-app-bg rounded-2xl border border-app-primary/10">
-              <div>
-                <p className="text-sm font-bold text-app-text">Email Verified</p>
-                <p className="text-xs text-app-text-muted/50">{user?.email ? 'Your email is verified' : 'Sign in to verify'}</p>
-              </div>
-              <div className={cn("w-6 h-6 rounded-full flex items-center justify-center", user?.email ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500")}>
-                {user?.email ? <Check size={14} /> : <X size={14} />}
-              </div>
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
+              <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Email Verified</p>
+              <p className="text-base md:text-lg font-bold text-app-text mt-1">{user?.emailVerified ? 'Yes' : 'No'}</p>
             </div>
           </div>
+          
+          {/* Admin Section */}
+          {user?.role === 'admin' && (
+            <div className="pt-6 border-t border-app-primary/10">
+              <h3 className="text-lg font-bold text-app-text flex items-center gap-2 mb-4">
+                <Database className="text-app-primary" size={20} /> Admin Tools
+              </h3>
+              <button
+                onClick={async () => {
+                  const success = await seedTasksToFirestore();
+                  if (success) toast.success("Tasks seeded to Firestore!");
+                  else toast.error("Failed to seed tasks.");
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all"
+              >
+                <Database size={18} />
+                Seed Tasks to Firestore
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -2221,10 +2274,12 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
 
 function MockTestSession({ 
   test, 
+  allTasks,
   onFinish, 
   onClose 
 }: { 
   test: MockTest, 
+  allTasks: PTETask[],
   onFinish: (result: MockTestResult) => void, 
   onClose: () => void 
 }) {
@@ -2235,7 +2290,7 @@ function MockTestSession({
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
-  const currentTask = PTE_TASKS.find(t => t.id === currentTaskId)!;
+  const currentTask = allTasks.find(t => t.id === currentTaskId)!;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -2390,9 +2445,10 @@ function MockTestSession({
   );
 }
 
-function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
+function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
   progress: UserProgress, 
   user: any,
+  allTasks: PTETask[],
   onStartTask: (task: PTETask) => void,
   onHoverTask?: (task: PTETask) => void,
   onSelectSection: (section: PTESection) => void,
@@ -2418,11 +2474,11 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
   const currentStreak = calculateStreak(user?.activityLog || []);
   
   // Analysis logic
-  const totalTasks = PTE_TASKS.length;
+  const totalTasks = allTasks.length;
   const attemptedTasks = user?.completedTasks?.length || 0;
   
   const sectionAverages = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => {
-    const sectionTaskIds = PTE_TASKS.filter(t => t.section === s).map(t => t.id);
+    const sectionTaskIds = allTasks.filter(t => t.section === s).map(t => t.id);
     const attempts = (user?.completedTasks || []).filter((id: string) => sectionTaskIds.includes(id)).length;
     return {
       section: s,
@@ -2446,8 +2502,8 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
       ? "Multiple Sections"
       : weakestSections.map(s => s.section.charAt(0).toUpperCase() + s.section.slice(1)).join(" & ") + " Section" + (weakestSections.length > 1 ? "s" : "");
   
-  const highPriorityTasks = PTE_TASKS.filter(t => weakestSectionIds.includes(t.section) && !user?.completedTasks?.includes(t.id)).slice(0, 2);
-  const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : PTE_TASKS.slice(0, 4);
+  const highPriorityTasks = allTasks.filter(t => weakestSectionIds.includes(t.section) && !user?.completedTasks?.includes(t.id)).slice(0, 2);
+  const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : allTasks.slice(0, 4);
 
   // Calculate current belt based on score
   const getBelt = (score: number) => {
@@ -2854,8 +2910,8 @@ function Dashboard({ progress, user, onStartTask, onHoverTask, onSelectSection, 
   );
 }
 
-function DailyShurikenView({ user, onBack, onStartTask, onHoverTask }: { user: any, onBack: () => void, onStartTask: (task: PTETask) => void, onHoverTask?: (task: PTETask) => void }) {
-  const highPriorityTasks = PTE_TASKS
+function DailyShurikenView({ user, allTasks, onBack, onStartTask, onHoverTask }: { user: any, allTasks: PTETask[], onBack: () => void, onStartTask: (task: PTETask) => void, onHoverTask?: (task: PTETask) => void }) {
+  const highPriorityTasks = allTasks
     .filter(t => !user?.completedTasks?.includes(t.id))
     .slice(0, 100);
 
@@ -3258,9 +3314,9 @@ function PatternView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function SectionView({ section, user, onBack, onSelectTask, onHoverTask }: { section: PTESection, user: any, onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void, onHoverTask?: (task: PTETask) => void }) {
+function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTask }: { section: PTESection, user: any, allTasks: PTETask[], onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void, onHoverTask?: (task: PTETask) => void }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const tasks = PTE_TASKS.filter(t => t.section === section);
+  const tasks = allTasks.filter(t => t.section === section);
   
   // Group tasks by category
   const categories = Array.from(new Set(tasks.map(t => t.category)));

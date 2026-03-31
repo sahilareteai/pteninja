@@ -14,6 +14,7 @@
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "trial", "guest", "expired"], "description": "Current subscription status" },
         "subscriptionEndsAt": { "type": "string", "format": "date-time", "description": "End of current subscription period" },
         "planId": { "type": "string", "enum": ["monthly", "quarterly", "annual"], "description": "Current subscription plan" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" },
         "activityLog": { "type": "array", "items": { "type": "string" }, "description": "List of dates (YYYY-MM-DD) when the app was opened" }
       },
       "required": ["uid", "createdAt", "accessType", "subscriptionStatus"]
@@ -28,6 +29,32 @@
         "expiresAt": { "type": "string", "format": "date-time", "description": "Access expiration date (3 days after creation)" }
       },
       "required": ["id", "createdAt", "expiresAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "PTE practice task content",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique task ID" },
+        "title": { "type": "string", "description": "Task title" },
+        "category": { "type": "string", "description": "Task category (e.g., Read Aloud)" },
+        "description": { "type": "string", "description": "Task instructions" },
+        "section": { "type": "string", "enum": ["speaking", "writing", "reading", "listening"], "description": "PTE section" },
+        "type": { "type": "string", "description": "Task type" },
+        "prepTime": { "type": "number", "description": "Preparation time in seconds" },
+        "recordingTime": { "type": "number", "description": "Recording/Task time in seconds" },
+        "prompt": { "type": "string", "description": "Main text or prompt" },
+        "transcript": { "type": "string", "description": "Audio transcript" },
+        "passage": { "type": "string", "description": "Reading passage" },
+        "image": { "type": "string", "description": "Image URL" },
+        "hasAudio": { "type": "boolean", "description": "Whether the task has audio" },
+        "options": { "type": "array", "items": { "type": "string" }, "description": "Multiple choice options" },
+        "correctAnswers": { "type": "array", "items": { "type": "string" }, "description": "Correct answers" },
+        "paragraphs": { "type": "array", "items": { "type": "string" }, "description": "Re-order paragraphs" },
+        "blanks": { "type": "object", "description": "Fill in the blanks data" },
+        "summaryExample": { "type": "string", "description": "Example summary" }
+      },
+      "required": ["id", "title", "category", "section", "type"]
     }
   },
   "firestore": {
@@ -38,6 +65,10 @@
     "/guests/{guestId}": {
       "schema": "Guest",
       "description": "Guest access records"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "PTE practice tasks"
     }
   }
 }
