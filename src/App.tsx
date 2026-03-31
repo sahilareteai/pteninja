@@ -974,12 +974,7 @@ function AppContent() {
       <div className="relative z-10 flex flex-col h-screen">
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <Logo size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tighter text-app-text font-display">
-              PTE <span className="text-app-primary">NINJA</span>
-            </h1>
-          </div>
+          <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
           
           <div className="flex items-center gap-4">
             <button 
@@ -1400,12 +1395,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
 
       {/* Navbar */}
       <nav className="relative z-20 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
-          <Logo size={48} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
-          <h1 className="text-2xl font-bold tracking-tighter text-app-text font-display">
-            PTE <span className="text-app-primary">NINJA</span>
-          </h1>
-        </div>
+        <Logo showText={true} size={48} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
         <div className="flex items-center gap-4 sm:gap-6">
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -1499,12 +1489,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
             <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                <Logo size={32} />
-                <h1 className="text-xl font-bold tracking-tighter text-app-text">
-                  PTE <span className="text-app-primary">NINJA</span>
-                </h1>
-              </div>
+              <Logo showText={true} size={32} />
               <p className="text-sm text-app-text-muted/60 leading-relaxed">
                 The ultimate AI-powered PTE training platform. Master your future with precision scoring and real-time feedback.
               </p>
@@ -1602,13 +1587,22 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Payment server error:", errorText);
+        console.error("Payment server error text:", errorText);
+        
+        let errorMessage = "Failed to initialize payment";
         try {
           const errorData = JSON.parse(errorText);
-          toast.error(errorData.error || "Failed to initialize payment");
-        } catch {
-          toast.error("Payment server returned an error. Please check your configuration.");
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // If not JSON, it might be a Vercel error page
+          if (errorText.includes("FUNCTION_INVOCATION_FAILED")) {
+            errorMessage = "Payment server is currently unavailable (Function Invocation Failed). Please check Vercel logs.";
+          } else if (errorText.includes("Internal Server Error")) {
+            errorMessage = "Server error occurred. Please check your STRIPE_SECRET_KEY configuration.";
+          }
         }
+        
+        toast.error(errorMessage);
         return;
       }
       

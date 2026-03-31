@@ -10,25 +10,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const app = express();
-
-// Stripe initialization
-let stripe: Stripe | null = null;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-}
-
 app.use(express.json());
+
+// Lazy Stripe initialization
+let stripe: Stripe | null = null;
+const getStripe = () => {
+  if (!stripe && process.env.STRIPE_SECRET_KEY) {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripe;
+};
 
 // API Routes
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", env: process.env.NODE_ENV, vercel: !!process.env.VERCEL });
 });
 
 // Stripe Payment Intent
 app.post("/api/create-payment-intent", async (req, res) => {
   console.log("Received payment intent request:", req.body);
   
-  if (!stripe) {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
     console.error("Stripe is not configured. STRIPE_SECRET_KEY is missing.");
     return res.status(500).json({ 
       error: "Stripe is not configured on the server. Please add STRIPE_SECRET_KEY to environment variables." 
@@ -42,7 +45,7 @@ app.post("/api/create-payment-intent", async (req, res) => {
   }
 
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await stripeInstance.paymentIntents.create({
       amount,
       currency,
       automatic_payment_methods: {
@@ -58,26 +61,20 @@ app.post("/api/create-payment-intent", async (req, res) => {
   }
 });
 
+// Vite setup for local development ONLY
 async function setupVite() {
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-    // Dynamic import to avoid loading vite in production serverless functions
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 }
 
-// Only start the server if this file is run directly
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+// Only start the server if this file is run directly (local dev)
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
   setupVite().then(() => {
     const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {
@@ -85,3 +82,5 @@ if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
     });
   });
 }
+
+export default app;
