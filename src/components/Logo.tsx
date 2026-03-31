@@ -80,7 +80,6 @@ export const Logo: React.FC<LogoProps> = ({ className, size = 40, showText = fal
             <span className="text-2xl font-black tracking-tighter text-white uppercase">PTE</span>
             <span className="text-2xl font-black tracking-tighter text-[#45A29E] uppercase">NINJA</span>
           </div>
-          <span className="text-[10px] font-bold tracking-[0.2em] text-[#66FCF1]/60 uppercase ml-0.5">Mastery Awaits</span>
         </div>
       )}
     </div>
