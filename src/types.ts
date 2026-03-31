@@ -878,9 +878,9 @@ export const PTE_TASKS: PTETask[] = [
     section: 'listening',
     type: 'listening',
     hasAudio: true,
-    transcript: "The study of economics involves the analysis of production, distribution, and consumption of goods and services.",
-    prompt: "The study of history involves the analysis of production, distribution, and consumption of goods and services.",
-    correctAnswers: ["history"]
+    transcript: "The development of the internal combustion engine in the late 19th century revolutionized transportation, allowing for the mass production of automobiles and the expansion of road networks. This shift had profound social and economic consequences, facilitating the growth of suburbs and changing the way people lived and worked.",
+    prompt: "The development of the external combustion engine in the late 19th century revolutionized transportation, allowing for the mass production of automobiles and the expansion of rail networks. This shift had profound social and economic consequences, facilitating the growth of suburbs and changing the way people lived and worked.",
+    correctAnswers: ["external", "rail"]
   }
 ];
 
@@ -1303,9 +1303,31 @@ taskGroups.forEach(groupKey => {
       newTask.prompt = "Select the correct option to complete the recording.";
     } else if (category === 'Highlight Incorrect Words') {
       const hiw_data = [
-        { transcript: "The process of urbanization has led to the growth of megacities.", prompt: "The process of migration has led to the growth of megacities.", correct: ["migration"] },
-        { transcript: "Sustainable agriculture aims to minimize environmental impact.", prompt: "Industrial agriculture aims to minimize environmental impact.", correct: ["Industrial"] },
-        { transcript: "The study of linguistics explores the structure of human language.", prompt: "The study of literature explores the structure of human language.", correct: ["literature"] }
+        {
+          transcript: "The development of the internal combustion engine in the late 19th century revolutionized transportation, allowing for the mass production of automobiles and the expansion of road networks. This shift had profound social and economic consequences, facilitating the growth of suburbs and changing the way people lived and worked.",
+          prompt: "The development of the external combustion engine in the late 19th century revolutionized transportation, allowing for the mass production of automobiles and the expansion of rail networks. This shift had profound social and economic consequences, facilitating the growth of suburbs and changing the way people lived and worked.",
+          correct: ["external", "rail"]
+        },
+        {
+          transcript: "Marine biology is the scientific study of marine life, organisms in the sea. Given that in biology many phyla, families and genera have some species that live in the sea and others that live on land, marine biology classifies species based on the environment rather than on taxonomy.",
+          prompt: "Marine biology is the scientific study of marine life, organisms in the sea. Given that in biology many phyla, families and genera have some species that live in the ocean and others that live on land, marine biology classifies species based on the atmosphere rather than on taxonomy.",
+          correct: ["ocean", "atmosphere"]
+        },
+        {
+          transcript: "The process of photosynthesis is essential for the survival of most life on Earth. It involves the conversion of sunlight into chemical energy, which is then stored in the form of glucose. This process also releases oxygen into the atmosphere as a byproduct, which is vital for aerobic respiration.",
+          prompt: "The process of photosynthesis is essential for the survival of most life on Earth. It involves the conversion of sunlight into electrical energy, which is then stored in the form of glucose. This process also releases nitrogen into the atmosphere as a byproduct, which is vital for aerobic respiration.",
+          correct: ["electrical", "nitrogen"]
+        },
+        {
+          transcript: "Quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all quantum physics including quantum chemistry, quantum field theory, quantum technology, and quantum information science.",
+          prompt: "Quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all classical physics including quantum chemistry, quantum field theory, quantum technology, and quantum information science.",
+          correct: ["classical"]
+        },
+        {
+          transcript: "The Industrial Revolution was a period of global economic transition towards more efficient and stable manufacturing processes that succeeded the Agricultural Revolution. This transition included going from hand production methods to machines, new chemical manufacturing and iron production processes, the increasing use of steam power and water power.",
+          prompt: "The Industrial Revolution was a period of global economic transition towards more efficient and stable manufacturing processes that succeeded the French Revolution. This transition included going from hand production methods to machines, new chemical manufacturing and iron production processes, the increasing use of solar power and water power.",
+          correct: ["French", "solar"]
+        }
       ];
       const selected = hiw_data[i % hiw_data.length];
       newTask.transcript = selected.transcript;

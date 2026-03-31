@@ -805,9 +805,10 @@ function AppContent() {
   };
 
   const handleHoverTask = (task: PTETask) => {
-    if (task.hasAudio) {
-      preFetchAudio(task);
-    }
+    // Disabled pre-fetch on hover to avoid GEMINI_QUOTA_EXCEEDED
+    // if (task.hasAudio) {
+    //   preFetchAudio(task);
+    // }
   };
 
   const currentStreak = calculateStreak(user?.activityLog);
@@ -4227,8 +4228,11 @@ function TaskModal({
           let correctSelected = 0;
           let incorrectSelected = 0;
           
+          const normalize = (s: string) => s.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").toLowerCase().trim();
+          const normalizedCorrect = correct.map(normalize);
+
           selectedOptions.forEach(opt => {
-            if (correct.includes(opt)) correctSelected++;
+            if (normalizedCorrect.includes(normalize(opt))) correctSelected++;
             else incorrectSelected++;
           });
           
@@ -4598,7 +4602,9 @@ function TaskModal({
                     {task.section === 'listening' 
                       ? (hasAudioError 
                           ? "Audio failed to load. Please check your connection and try again." 
-                          : (task.prompt || "Complete the task based on the recording."))
+                          : (task.category === 'Highlight Incorrect Words' 
+                              ? "Listen to the recording and identify the discrepancies in the transcript below." 
+                              : (task.prompt || "Complete the task based on the recording.")))
                       : (task.prompt || "No prompt available for this task.")}
                   </p>
                   {hasAudioError && (
@@ -5285,6 +5291,25 @@ function TaskModal({
                               <div key={i} className="p-2 bg-app-surface rounded-lg border border-white/5 text-[10px] leading-tight text-app-text-muted">
                                 {i + 1}. {para.substring(0, 100)}...
                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : task.category === 'Highlight Incorrect Words' ? (
+                      <div className="space-y-4">
+                        <div className="text-sm font-bold text-app-text flex items-center gap-2">
+                          <Check size={16} className="text-app-primary" />
+                          Correct Transcript vs Provided Transcript
+                        </div>
+                        <div className="text-sm leading-relaxed text-app-text-muted bg-app-surface/50 p-4 rounded-xl border border-white/5">
+                          <p className="mb-2 font-bold text-app-primary">Correct Transcript (Audio):</p>
+                          <p className="mb-4 italic">"{task.transcript}"</p>
+                          <p className="mb-2 font-bold text-red-400">Incorrect Words in Transcript:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {task.correctAnswers?.map((word, i) => (
+                              <span key={i} className="px-2 py-1 bg-red-500/10 text-red-400 rounded border border-red-500/20">
+                                {word}
+                              </span>
                             ))}
                           </div>
                         </div>
