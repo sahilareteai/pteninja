@@ -1412,7 +1412,15 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
               </div>
               <div className="flex-1 space-y-1">
                 <h4 className="text-sm font-bold text-white">Access Error</h4>
-                <p className="text-xs text-red-200/70 leading-relaxed">{authError}</p>
+                <p className="text-xs text-red-200/70 leading-relaxed whitespace-pre-wrap">
+                  {authError.split(/(https?:\/\/[^\s]+)/g).map((part, i) => 
+                    part.match(/^https?:\/\//) ? (
+                      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-white underline hover:text-app-primary transition-colors">
+                        {part}
+                      </a>
+                    ) : part
+                  )}
+                </p>
               </div>
               <button 
                 onClick={onClearError}

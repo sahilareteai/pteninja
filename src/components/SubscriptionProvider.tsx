@@ -27,6 +27,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     let unsubDoc: (() => void) | null = null;
@@ -42,10 +43,34 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setLoading(true);
         const userRef = doc(db, 'users', firebaseUser.uid);
         
+        // Handle session ID
+        let localSessionId = localStorage.getItem('pte_session_id');
+        if (!localSessionId) {
+          localSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('pte_session_id', localSessionId);
+          
+          // Update firestore with new session ID
+          updateDoc(userRef, { currentSessionId: localSessionId }).catch(() => {
+            // If doc doesn't exist yet, it will be created in the snapshot listener's else block
+          });
+        }
+
         // Listen for real-time updates to user data
         unsubDoc = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
-            setUser(docSnap.data() as UserData);
+            const userData = docSnap.data() as UserData;
+            
+            // Session check
+            const currentLocalSessionId = localStorage.getItem('pte_session_id');
+            if (userData.currentSessionId && currentLocalSessionId && userData.currentSessionId !== currentLocalSessionId) {
+              // Another device logged in
+              auth.signOut();
+              localStorage.removeItem('pte_session_id');
+              setSessionError("You have been signed out because your account is being used on another device.");
+              return;
+            }
+
+            setUser(userData);
           } else {
             // New user or guest
             const isGuest = firebaseUser.isAnonymous;
@@ -66,7 +91,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               taskScores: {},
               favoriteWords: [],
               schedule: [],
-              goals: []
+              goals: [],
+              currentSessionId: localStorage.getItem('pte_session_id') || undefined
             };
 
             // Remove undefined fields before sending to Firestore
@@ -143,7 +169,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError(null);
+    setSessionError(null);
     try {
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('pte_session_id', newSessionId);
+      
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
@@ -157,7 +187,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       
       if (error.code === 'auth/unauthorized-domain') {
-        setAuthError("This domain is not authorized for login. Please add it to the 'Authorized domains' list in the Firebase Console (Authentication > Settings).");
+        const currentDomain = window.location.hostname;
+        setAuthError(`This domain (${currentDomain}) is not authorized for login. Please add it to the 'Authorized domains' list in the Firebase Console (Authentication > Settings > Authorized domains). 
+
+Required domains:
+1. ${currentDomain}
+2. ais-dev-hto7hpsjflk4jaqmoohjpi-723280175369.asia-southeast1.run.app
+3. ais-pre-hto7hpsjflk4jaqmoohjpi-723280175369.asia-southeast1.run.app
+
+Console link: https://console.firebase.google.com/project/gen-lang-client-0336907942/authentication/settings`);
         return;
       }
       
@@ -175,6 +213,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const logout = async () => {
     try {
+      localStorage.removeItem('pte_session_id');
       await auth.signOut();
       setShowAuthModal(true);
     } catch (error) {
@@ -187,7 +226,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError(null);
+    setSessionError(null);
     try {
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('pte_session_id', newSessionId);
+      
       await signInAnonymously(auth);
       setShowAuthModal(false);
     } catch (error: any) {
@@ -275,6 +318,34 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setAuthError
     }}>
       {children}
+      
+      {/* Session Error Modal */}
+      <AnimatePresence>
+        {sessionError && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md w-full shadow-2xl border border-red-100 dark:border-red-900/30 text-center"
+            >
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <LogOut className="w-8 h-8 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Session Expired</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-8">
+                {sessionError}
+              </p>
+              <button
+                onClick={() => setSessionError(null)}
+                className="w-full py-3 px-6 bg-primary text-white rounded-xl font-semibold hover:opacity-90 transition-opacity"
+              >
+                Got it
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </SubscriptionContext.Provider>
   );
 };

@@ -100,6 +100,7 @@ export interface UserData {
   goals?: DailyGoal[];
   favoriteWords?: string[];
   mockTestResults?: MockTestResult[];
+  currentSessionId?: string;
 }
 
 export const SUBSCRIPTION_PLANS = [
