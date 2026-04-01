@@ -678,11 +678,18 @@ function AppContent() {
     const loadTasks = async () => {
       setIsLoadingTasks(true);
       const firestoreTasks = await fetchTasksFromFirestore();
-      if (firestoreTasks.length > 0) {
+      
+      // If Firestore has fewer tasks than our static list, it means the static list is more up-to-date
+      // (e.g., we just added 100 questions per category).
+      // We prefer the larger set to ensure the user gets all the new content.
+      if (firestoreTasks.length > PTE_TASKS.length) {
         setTasks(firestoreTasks);
       } else {
-        // Fallback to static tasks if Firestore is empty
         setTasks(PTE_TASKS);
+        
+        // If Firestore was empty or had fewer tasks, we should seed the new tasks
+        // but we'll do it silently or let the user trigger it.
+        // For now, just using PTE_TASKS locally is enough to show them in the app.
       }
       setIsLoadingTasks(false);
     };
@@ -3475,10 +3482,11 @@ function PatternView({ onBack }: { onBack: () => void }) {
         { name: "Read Aloud", count: "6–7", description: "Read a short text aloud with natural fluency and pronunciation." },
         { name: "Repeat Sentence", count: "10–12", description: "Listen to a sentence and repeat it exactly." },
         { name: "Describe Image", count: "3–4", description: "Describe the information shown in an image." },
-        { name: "Re-tell Lecture", count: "1–2", description: "Listen to a lecture and summarize it in your own words." },
+        { name: "Respond to a Situation", count: "1–2", description: "Listen to a situation and give a spoken response." },
+        { name: "Summarize Group Discussion", count: "1–2", description: "Listen to a group discussion and summarize it orally." },
         { name: "Answer Short Question", count: "5–6", description: "Answer a simple question with a single word or short phrase." },
         { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." },
-        { name: "Write Essay", count: "1–2", description: "Write a 200–300 word argumentative essay on a given topic." }
+        { name: "Write Email", count: "1", description: "Write an email based on a given situation (about 100 words)." }
       ]
     },
     {
@@ -3721,13 +3729,13 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
       'Read Aloud': 'bg-rose-400/10 text-rose-400 border-rose-400/20',
       'Repeat Sentence': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
       'Describe Image': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-      'Re-tell Lecture': 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20',
       'Respond to a Situation': 'bg-lime-400/10 text-lime-400 border-lime-400/20',
       'Summarize Group Discussion': 'bg-green-400/10 text-green-400 border-green-400/20',
       'Answer Short Question': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
       
       // Writing
       'Summarize Written Text': 'bg-sky-400/10 text-sky-400 border-sky-400/20',
+      'Write Email': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
       'Write Essay': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
       
       // Reading
@@ -4217,13 +4225,28 @@ function TaskModal({
 
           let base64 = null;
           try {
-            const timeoutPromise = new Promise<null>((_, reject) => 
-              setTimeout(() => reject(new Error("Audio preparation timed out after 30s")), 30000)
-            );
+            if (task.audio) {
+              console.log("[Audio] Using pre-recorded audio URL:", task.audio);
+              const audioRes = await fetch(task.audio);
+              const blob = await audioRes.blob();
+              const reader = new FileReader();
+              const base64Promise = new Promise<string>((resolve) => {
+                reader.onloadend = () => {
+                  const base64data = reader.result as string;
+                  resolve(base64data.split(',')[1]);
+                };
+              });
+              reader.readAsDataURL(blob);
+              base64 = await base64Promise;
+            } else {
+              const timeoutPromise = new Promise<null>((_, reject) => 
+                setTimeout(() => reject(new Error("Audio preparation timed out after 30s")), 30000)
+              );
 
-            console.log("[Audio] Starting on-demand audio generation...");
-            const audioContent = task.transcript || task.prompt || "";
-            base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
+              console.log("[Audio] Starting on-demand audio generation...");
+              const audioContent = task.transcript || task.prompt || "";
+              base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
+            }
             
             if (base64) {
               // High-performance AudioBuffer pre-decode

@@ -13,6 +13,7 @@ export interface PTETask {
   transcript?: string; // For audio-based tasks
   passage?: string; // For reading tasks with long texts
   image?: string;
+  audio?: string;
   hasAudio?: boolean;
   options?: string[];
   correctAnswers?: string[];
@@ -276,32 +277,6 @@ export const PTE_TASKS: PTETask[] = [
     image: "https://quickchart.io/chart?c={type:'pie',data:{labels:['Asia','Europe','Americas','Africa'],datasets:[{data:[40,25,20,15]}]}}"
   },
   { 
-    id: 'rl-1', 
-    title: 'Question 1', 
-    category: 'Re-tell Lecture',
-    description: 'Listen to a lecture and summarize it in your own words.', 
-    section: 'speaking', 
-    type: 'speaking', 
-    prepTime: 10, 
-    recordingTime: 40,
-    hasAudio: true,
-    prompt: "The study of economics is often divided into two main branches: microeconomics and macroeconomics. Microeconomics focuses on the behavior of individual consumers and firms, examining how they make decisions and how these decisions affect the allocation of resources. It looks at things like supply and demand, and how prices are determined in specific markets. Macroeconomics, on the other hand, looks at the economy as a whole, dealing with aggregate variables such as national income, inflation, and unemployment. It examines the performance, structure, and behavior of an entire economy rather than individual markets. Understanding both branches is crucial for a comprehensive view of how financial systems operate and how government policies can influence economic stability and growth.",
-    image: "https://picsum.photos/seed/economics/600/400"
-  },
-  { 
-    id: 'rl-2', 
-    title: 'Question 2', 
-    category: 'Re-tell Lecture',
-    description: 'Listen to a lecture and summarize it in your own words.', 
-    section: 'speaking', 
-    type: 'speaking', 
-    prepTime: 10, 
-    recordingTime: 40,
-    hasAudio: true,
-    prompt: "Artificial Intelligence is transforming the way we live and work. From self-driving cars to personalized recommendations, AI algorithms are becoming increasingly sophisticated. However, this rapid advancement also raises ethical concerns regarding privacy, bias, and the potential impact on the job market. It is essential for policymakers and technologists to collaborate to ensure that AI is developed and deployed responsibly, benefiting society as a whole while mitigating potential risks.",
-    image: "https://picsum.photos/seed/ai/600/400"
-  },
-  { 
     id: 'rsit-1', 
     title: 'Question 1', 
     category: 'Respond to a Situation',
@@ -310,7 +285,24 @@ export const PTE_TASKS: PTETask[] = [
     type: 'speaking', 
     prepTime: 20, 
     recordingTime: 40,
-    prompt: "You are at a library and you want to borrow a book that is currently checked out by another student. You need the book for an assignment that is due tomorrow. Speak to the librarian and explain your situation to see if they can help you."
+    hasAudio: true,
+    prompt: "You are at a library and you want to borrow a book that is currently checked out by another student. You need the book for an assignment that is due tomorrow. Speak to the librarian and explain your situation to see if they can help you.",
+    audio: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+  },
+  { 
+    id: 'sgd-1', 
+    title: 'Question 1', 
+    category: 'Summarize Group Discussion',
+    description: 'Listen to a group discussion and summarize it in your own words.', 
+    section: 'speaking', 
+    type: 'speaking', 
+    prepTime: 10, 
+    recordingTime: 40,
+    hasAudio: true,
+    prompt: "You will hear a group discussion about the impact of remote work on team collaboration. Listen carefully and then summarize the main points of the discussion in your own words. You will have 10 seconds to prepare and 40 seconds to give your response.",
+    transcript: "Speaker 1: I think remote work has really improved our productivity. We spend less time commuting and more time actually working. Speaker 2: That's true, but I feel like we're losing that spontaneous collaboration we used to have in the office. You can't just walk over to someone's desk and ask a quick question. Speaker 3: I agree with both of you. While productivity might be up, we need to find better ways to maintain our team culture and ensure everyone feels connected. Maybe we should have more regular video check-ins that aren't just about work.",
+    audio: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    image: "https://picsum.photos/seed/discussion/600/400"
   },
   { 
     id: 'asq-1', 
@@ -326,6 +318,28 @@ export const PTE_TASKS: PTETask[] = [
   },
   
   // Writing
+  {
+    id: 'email-1',
+    title: 'Question 1',
+    category: 'Write Email',
+    description: 'Write an email based on a given situation.',
+    section: 'writing',
+    type: 'writing',
+    prepTime: 0,
+    recordingTime: 540,
+    prompt: "You recently bought a new laptop from an online store, but it arrived with a cracked screen. Write an email to the customer service department. In your email, you should: \n- Explain when you bought the laptop and when it arrived. \n- Describe the problem with the laptop. \n- State what you would like the customer service department to do (e.g., refund or replacement). \nWrite about 100 words."
+  },
+  {
+    id: 'email-2',
+    title: 'Question 2',
+    category: 'Write Email',
+    description: 'Write an email based on a given situation.',
+    section: 'writing',
+    type: 'writing',
+    prepTime: 0,
+    recordingTime: 540,
+    prompt: "You are planning a surprise birthday party for a friend. Write an email to another friend to invite them and ask for their help. In your email, you should: \n- Tell them whose birthday it is and when the party will be. \n- Explain why you are keeping it a surprise. \n- Ask them to help with a specific task (e.g., bringing food or decorations). \nWrite about 100 words."
+  },
   { 
     id: 'swt-1', 
     title: 'Question 1', 
@@ -363,7 +377,7 @@ export const PTE_TASKS: PTETask[] = [
     summaryExample: "The e-commerce boom has transformed retail by prioritizing consumer convenience and logistics efficiency, but it also compels traditional stores to adapt and necessitates sustainable solutions to address its growing environmental footprint."
   },
   { 
-    id: 'we-1', 
+    id: 'essay-1', 
     title: 'Question 1', 
     category: 'Write Essay',
     description: 'You will have 20 minutes to plan, write and revise an essay about the topic below. Your response will be judged on how well you develop a position, organize your ideas, present supporting details, and control the elements of standard written English. You should write 200-300 words.', 
@@ -375,7 +389,7 @@ export const PTE_TASKS: PTETask[] = [
     summaryExample: "Technology has undoubtedly simplified many aspects of life through automation and instant communication, yet it has also introduced new stressors such as information overload and the blurring of work-life boundaries. In my opinion, while technology offers immense benefits, its overall impact depends on our ability to manage its use mindfully to avoid being overwhelmed by its complexity."
   },
   { 
-    id: 'we-2', 
+    id: 'essay-2', 
     title: 'Question 2', 
     category: 'Write Essay',
     description: 'You will have 20 minutes to plan, write and revise an essay about the topic below. You should write 200-300 words.', 
@@ -926,18 +940,6 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "Analyze the graph comparing the economic growth of different regions.",
     "Explain the mechanism of a volcanic eruption as illustrated in the cross-section."
   ],
-  'Re-tell Lecture': [
-    "The lecture discussed the fundamental principles of thermodynamics and their application in modern engineering.",
-    "The speaker explored the history of the Renaissance and its impact on European art and culture.",
-    "The presentation focused on the challenges of urban waste management in rapidly growing cities.",
-    "The discussion highlighted the importance of early childhood nutrition for cognitive development.",
-    "The lecture examined the impact of the printing press on the spread of information in the 15th century.",
-    "The speaker discussed the concept of sustainable tourism and its role in preserving natural heritage.",
-    "The presentation explored the relationship between exercise and cardiovascular health.",
-    "The discussion focused on the potential of nanotechnology to revolutionize the field of medicine.",
-    "The lecture examined the history of the Silk Road and its role in global trade.",
-    "The speaker discussed the impact of social media on political discourse and public opinion."
-  ],
   'Summarize Written Text': [
     {
       prompt: "The impact of social media on modern communication is a complex topic with both positive and negative implications for society. While it facilitates global connectivity and information sharing, it also raises concerns about privacy, misinformation, and mental health. Consequently, there is a growing debate about the need for regulation to mitigate these risks while preserving the benefits of digital interaction.",
@@ -1090,6 +1092,18 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "Select the most accurate summary of the future trends predicted in the lecture.",
     "Which of the following options provides the best overview of the challenges discussed?"
   ],
+  'Summarize Group Discussion': [
+    "The group discussion focused on the benefits and challenges of implementing a four-day work week. Speaker 1 mentioned increased productivity, while Speaker 2 was concerned about meeting deadlines.",
+    "The speakers debated the role of artificial intelligence in modern education and its impact on student learning. Most agreed it's a tool, not a replacement.",
+    "The discussion highlighted the importance of urban green spaces for improving public health and well-being. They discussed the need for more parks in city centers.",
+    "The participants explored the potential of renewable energy to address global climate change. Solar and wind were the main topics.",
+    "The group discussed the impact of social media on interpersonal relationships and communication. They noted both increased connectivity and reduced face-to-face time.",
+    "The speakers debated the merits of universal basic income as a solution to economic inequality. Opinions were divided on its feasibility.",
+    "The discussion focused on the challenges of maintaining work-life balance in a digital age. Constant connectivity was seen as a major hurdle.",
+    "The participants explored the role of space exploration in advancing human knowledge and technology. They discussed the benefits of spin-off technologies.",
+    "The group discussed the importance of biodiversity for ecosystem stability and resilience. They emphasized the need for conservation efforts.",
+    "The speakers debated the impact of globalization on local cultures and traditions. They discussed the tension between global trends and local identity."
+  ],
   'Respond to a Situation': [
     "You are at a restaurant and your order is incorrect. Speak to the waiter and explain the issue.",
     "You missed a deadline for an assignment. Speak to your professor and explain why.",
@@ -1101,6 +1115,16 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "You are at a bank and you want to open a new account. Speak to the bank teller.",
     "You are at a hotel and you are checking in. Speak to the receptionist.",
     "You are at a post office and you want to send a package. Speak to the postal worker."
+  ],
+  'Write Email': [
+    {
+      prompt: "You recently bought a new laptop from an online store, but it arrived with a cracked screen. Write an email to the customer service department. In your email, you should: \n- Explain when you bought the laptop and when it arrived. \n- Describe the problem with the laptop. \n- State what you would like the customer service department to do (e.g., refund or replacement). \nWrite about 100 words.",
+      example: "Subject: Damaged Laptop Received - Order #12345\n\nDear Customer Service,\n\nI am writing to report an issue with a laptop I purchased from your online store on March 15th. The package arrived yesterday, but upon opening it, I discovered that the screen is severely cracked.\n\nI am very disappointed as I need this laptop for my work. I would like to request an immediate replacement for this damaged item. Please let me know the process for returning the faulty unit and when I can expect the new one to arrive.\n\nThank you for your prompt attention to this matter.\n\nBest regards,\nJohn Doe"
+    },
+    {
+      prompt: "You are planning a surprise birthday party for a friend. Write an email to another friend to invite them and ask for their help. In your email, you should: \n- Tell them whose birthday it is and when the party will be. \n- Explain why you are keeping it a surprise. \n- Ask them to help with a specific task (e.g., bringing food or decorations). \nWrite about 100 words.",
+      example: "Subject: Surprise Party for Sarah!\n\nHi Mike,\n\nI'm planning a surprise birthday party for Sarah next Saturday at 7 PM at my place. It's her 30th, so I want to make it special! I'm keeping it a surprise because she's always the one planning things for others, and she deserves a treat.\n\nCould you please help me with the decorations? If you could bring some balloons and streamers, that would be amazing. Also, please remember to keep it a secret from her!\n\nLet me know if you can make it.\n\nBest,\nAlex"
+    }
   ],
   'Fill in the Blanks': [
     "The ________ of the new library was a major milestone for the university community.",
@@ -1136,7 +1160,7 @@ taskGroups.forEach(groupKey => {
     };
 
     // Add specific properties for Reading tasks
-    if (category === 'Summarize Written Text' || category === 'Summarize Spoken Text' || category === 'Write Essay') {
+    if (category === 'Summarize Written Text' || category === 'Summarize Spoken Text' || category === 'Write Essay' || category === 'Write Email') {
       const selected = templates[(i - 1) % templates.length];
       if (selected && typeof selected === 'object') {
         newTask.prompt = selected.prompt;
@@ -1335,6 +1359,17 @@ taskGroups.forEach(groupKey => {
       newTask.transcript = selected.transcript;
       newTask.prompt = selected.prompt;
       newTask.correctAnswers = selected.correct;
+    } else if (category === 'Summarize Group Discussion') {
+      const selected = templates[(i - 1) % templates.length];
+      if (typeof selected === 'string') {
+        newTask.transcript = selected;
+        newTask.prompt = "Summarize the key points of the group discussion you just heard.";
+      }
+    } else if (category === 'Respond to a Situation') {
+      const selected = templates[(i - 1) % templates.length];
+      if (typeof selected === 'string') {
+        newTask.prompt = selected;
+      }
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {
       newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript
     }
