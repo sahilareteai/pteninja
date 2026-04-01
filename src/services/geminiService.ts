@@ -148,17 +148,26 @@ export async function generateTTS(text: string, retries: number = 1) {
   }
 }
 
-export async function analyzeSpeaking(audioData: string, taskType: string, mimeType: string = "audio/webm") {
-  const model = "gemini-3-flash-preview";
+export async function analyzeSpeaking(audioData: string, taskType: string, mimeType: string = "audio/webm", correctAnswer?: string) {
+  const model = "gemini-3.1-pro-preview";
   
   try {
+    // Sanitize mimeType (remove parameters like ;codecs=opus)
+    const cleanMimeType = mimeType.split(';')[0].trim();
+    
+    let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words.`;
+    
+    if (taskType === 'Answer Short Question' && correctAnswer) {
+      prompt += ` The expected answer is: "${correctAnswer}". Please check if the spoken response matches this answer or is a valid synonym.`;
+    }
+
     const response = await callGemini({
       model,
       contents: [
         {
           parts: [
-            { text: `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words.` },
-            { inlineData: { mimeType, data: audioData } }
+            { text: prompt },
+            { inlineData: { mimeType: cleanMimeType, data: audioData } }
           ]
         }
       ],
@@ -171,6 +180,7 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
             fluency: { type: Type.NUMBER },
             pronunciation: { type: Type.NUMBER },
             content: { type: Type.NUMBER },
+            transcription: { type: Type.STRING },
             feedback: { 
               type: Type.ARRAY,
               items: { type: Type.STRING }
@@ -183,7 +193,7 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
             pace: { type: Type.STRING },
             stress: { type: Type.STRING }
           },
-          required: ["overall", "fluency", "pronunciation", "content"]
+          required: ["overall", "fluency", "pronunciation", "content", "transcription"]
         }
       }
     });

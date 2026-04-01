@@ -29,6 +29,7 @@ interface AdminUser extends UserData {
 
 export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'users' | 'promoCodes'>('users');
+  const [userFilter, setUserFilter] = useState<'all' | 'paid' | 'guests'>('all');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,10 +125,19 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    u.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         u.displayName?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    
+    if (userFilter === 'paid') return u.subscriptionStatus === 'active';
+    if (userFilter === 'guests') return u.accessType === 'guest';
+    return true;
+  });
+
+  const guestCount = users.filter(u => u.accessType === 'guest').length;
+  const paidCount = users.filter(u => u.subscriptionStatus === 'active').length;
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl">
@@ -194,15 +204,47 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
             <div className="space-y-6">
               {activeTab === 'users' ? (
                 <>
-                  <div className="relative max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-app-text-muted" size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Search users by email or name..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-app-bg border border-app-primary/10 rounded-xl pl-10 pr-4 py-2 text-sm focus:border-app-primary transition-all"
-                    />
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div className="relative max-w-md flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-app-text-muted" size={18} />
+                      <input 
+                        type="text" 
+                        placeholder="Search users by email or name..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-app-bg border border-app-primary/10 rounded-xl pl-10 pr-4 py-2 text-sm focus:border-app-primary transition-all"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-app-bg p-1 rounded-xl border border-app-primary/10">
+                      <button 
+                        onClick={() => setUserFilter('all')}
+                        className={cn(
+                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                          userFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                        )}
+                      >
+                        All ({users.length})
+                      </button>
+                      <button 
+                        onClick={() => setUserFilter('paid')}
+                        className={cn(
+                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                          userFilter === 'paid' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                        )}
+                      >
+                        Paid ({paidCount})
+                      </button>
+                      <button 
+                        onClick={() => setUserFilter('guests')}
+                        className={cn(
+                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                          userFilter === 'guests' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                        )}
+                      >
+                        Guests ({guestCount})
+                      </button>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -225,8 +267,13 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                                   <UserIcon size={16} />
                                 </div>
                                 <div>
-                                  <div className="text-sm font-bold text-app-text">{user.displayName || 'Anonymous'}</div>
-                                  <div className="text-xs text-app-text-muted">{user.email}</div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-bold text-app-text">{user.displayName || 'Anonymous'}</div>
+                                    {user.accessType === 'guest' && (
+                                      <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-black uppercase tracking-tighter border border-gray-200 dark:border-gray-700">Guest</span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-app-text-muted">{user.email || 'No email provided'}</div>
                                 </div>
                               </div>
                             </td>

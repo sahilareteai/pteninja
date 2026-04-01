@@ -29,6 +29,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
@@ -82,6 +85,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               return;
             }
 
+            // Sync emailVerified if it changed
+            if (firebaseUser && userData.emailVerified !== firebaseUser.emailVerified) {
+              updateDoc(userRef, { emailVerified: firebaseUser.emailVerified }).catch(() => {});
+            }
+
             setUser(userData);
           } else {
             // New user or guest
@@ -92,6 +100,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const newUser: UserData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || null,
+              emailVerified: firebaseUser.emailVerified,
               displayName: firebaseUser.displayName || null,
               createdAt,
               accessType: isGuest ? 'guest' : 'user',
@@ -235,6 +244,13 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
   };
 
   const continueAsGuest = async () => {
+    setShowGuestModal(true);
+  };
+
+  const handleGuestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestName.trim()) return;
+
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError(null);
@@ -243,8 +259,37 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       localStorage.setItem('pte_session_id', newSessionId);
       
-      await signInAnonymously(auth);
+      const cred = await signInAnonymously(auth);
+      const firebaseUser = cred.user;
+      
+      // Update the user document immediately with the name and email
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const now = new Date();
+      const createdAt = now.toISOString();
+      
+      const newUser: UserData = {
+        uid: firebaseUser.uid,
+        email: guestEmail.trim() || null,
+        displayName: guestName.trim(),
+        createdAt,
+        accessType: 'guest',
+        subscriptionStatus: 'guest',
+        activityLog: [now.toISOString().split('T')[0]],
+        completedTasks: [],
+        completedTasksDetailed: [],
+        taskScores: {},
+        favoriteWords: [],
+        schedule: [],
+        goals: [],
+        currentSessionId: newSessionId
+      };
+
+      await setDoc(userRef, newUser);
+      setUser(newUser);
+      
+      setShowGuestModal(false);
       setShowAuthModal(false);
+      setIsAuthenticating(false);
     } catch (error: any) {
       console.error("Guest login failed:", error);
       setIsAuthenticating(false);
@@ -356,6 +401,85 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
               >
                 Got it
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Guest Info Modal */}
+      <AnimatePresence>
+        {showGuestModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden relative"
+            >
+              <button 
+                onClick={() => setShowGuestModal(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+
+              <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center mb-6">
+                <User className="w-8 h-8 text-app-primary" />
+              </div>
+
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome, Guest!</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-8">
+                Please enter your name to start your free PTE practice session.
+              </p>
+
+              <form onSubmit={handleGuestSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5 ml-1">
+                    Your Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5 ml-1">
+                    Email Address <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all"
+                  />
+                </div>
+
+                {authError && (
+                  <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                    {authError}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isAuthenticating || !guestName.trim()}
+                  className="w-full py-4 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+                >
+                  {isAuthenticating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    "Start Practice Now"
+                  )}
+                </button>
+              </form>
             </motion.div>
           </div>
         )}

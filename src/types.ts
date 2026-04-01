@@ -83,6 +83,7 @@ export interface MockTestResult {
 export interface UserData {
   uid: string;
   email?: string | null;
+  emailVerified?: boolean;
   displayName?: string | null;
   createdAt: string;
   accessType: 'guest' | 'user';
@@ -326,7 +327,8 @@ export const PTE_TASKS: PTETask[] = [
     recordingTime: 10,
     hasAudio: true,
     prompt: "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.",
-    transcript: "What is the capital city of Australia?"
+    transcript: "What is the capital city of Australia?",
+    correctAnswers: ["Canberra"]
   },
   
   // Writing
@@ -915,7 +917,7 @@ export const PTE_TASKS: PTETask[] = [
 // Programmatically generate 100 questions for each category with more variety
 const categoriesToExpand = Array.from(new Set(PTE_TASKS.map(t => t.category)));
 
-const promptTemplates: Record<string, (string | { prompt: string; example: string })[]> = {
+const promptTemplates: Record<string, (string | { prompt: string; example?: string; answer?: string })[]> = {
   'Read Aloud': [
     "The study of linguistics explores the structure and evolution of human language, examining how sounds and symbols convey meaning across different cultures.",
     "Renewable energy technologies such as solar and wind power are becoming increasingly cost-effective, driving a global transition away from fossil fuels.",
@@ -1019,16 +1021,16 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "Select the words that do not match what the speaker said."
   ],
   'Answer Short Question': [
-    "What is the capital city of Australia?",
-    "Which planet is known as the Red Planet?",
-    "What do you call a person who studies the stars?",
-    "Which organ pumps blood through the human body?",
-    "What is the term for a word with the same meaning as another?",
-    "Which force pulls objects toward the center of the Earth?",
-    "What is the name of the process by which plants make food?",
-    "What do you call a large body of salt water?",
-    "Which instrument is used to measure temperature?",
-    "What is the capital of Japan?"
+    { prompt: "What is the capital city of Australia?", answer: "Canberra" },
+    { prompt: "Which planet is known as the Red Planet?", answer: "Mars" },
+    { prompt: "What do you call a person who studies the stars?", answer: "Astronomer" },
+    { prompt: "Which organ pumps blood through the human body?", answer: "Heart" },
+    { prompt: "What is the term for a word with the same meaning as another?", answer: "Synonym" },
+    { prompt: "Which force pulls objects toward the center of the Earth?", answer: "Gravity" },
+    { prompt: "What is the name of the process by which plants make food?", answer: "Photosynthesis" },
+    { prompt: "What do you call a large body of salt water?", answer: "Ocean" },
+    { prompt: "Which instrument is used to measure temperature?", answer: "Thermometer" },
+    { prompt: "What is the capital of Japan?", answer: "Tokyo" }
   ],
   'Summarize Spoken Text': [
     {
@@ -1400,6 +1402,10 @@ taskGroups.forEach(groupKey => {
       const selected = templates[(i - 1) % templates.length];
       if (typeof selected === 'string') {
         newTask.transcript = selected;
+        newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
+      } else if (selected && typeof selected === 'object') {
+        newTask.transcript = selected.prompt;
+        if (selected.answer) newTask.correctAnswers = [selected.answer];
         newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
       }
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {

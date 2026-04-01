@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Settings,
   User,
+  Mail,
   BarChart3,
   Flame,
   Star,
@@ -1132,6 +1133,7 @@ function AppContent() {
                 key="profile" 
                 user={user} 
                 onLogout={logout} 
+                onLogin={login}
                 onUpgrade={() => setShowSubscriptionModal(true)}
                 isDarkMode={isDarkMode}
                 onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
@@ -1678,6 +1680,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [isProcessing, setIsProcessing] = useState(false);
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [emailInput, setEmailInput] = useState(user?.email || '');
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleApplyPromo = async () => {
     const promo = await PromoService.validate(promoInput);
@@ -1691,10 +1696,27 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   };
 
   const handleSelectPlan = async (plan: any) => {
+    if (!user?.email && !emailInput) {
+      setShowEmailPrompt(true);
+      setSelectedPlan(plan);
+      return;
+    }
+
     setSelectedPlan(plan);
     setIsProcessing(true);
     
     try {
+      // If user is guest, we strongly recommend signing up first
+      if (user?.accessType === 'guest' && !user?.emailVerified) {
+        toast.info("We recommend signing up with Google before upgrading to keep your progress safe across devices.", {
+          duration: 5000,
+          action: {
+            label: "Sign Up Now",
+            onClick: onLogin
+          }
+        });
+      }
+
       let basePrice = plan.price;
       if (appliedPromo) {
         basePrice = PromoService.calculateDiscount(basePrice, appliedPromo.discountPercent);
@@ -1706,7 +1728,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount: convertedAmount * 100, 
-          currency: currency.code.toLowerCase() 
+          currency: currency.code.toLowerCase(),
+          receipt_email: emailInput || user?.email
         }),
       });
       
@@ -1750,14 +1773,20 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     
     try {
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
+      const updateData: any = {
         subscriptionStatus: 'active',
         subscriptionTier: selectedPlan.id,
-        subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
-      });
+        subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+      };
+
+      if (emailInput && !user.email) {
+        updateData.email = emailInput;
+      }
+
+      await updateDoc(userRef, updateData);
       
+      setShowSuccess(true);
       toast.success(`Successfully upgraded to ${selectedPlan.name}!`);
-      onClose();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
@@ -1772,7 +1801,101 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
       >
         <div className="flex flex-col items-center text-center space-y-6">
-          {!selectedPlan ? (
+          {showSuccess ? (
+            <div className="w-full max-w-md space-y-8 py-12">
+              <div className="relative">
+                <div className="w-24 h-24 bg-app-accent/20 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                  <CheckCircle className="text-app-accent" size={48} />
+                </div>
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-2 -right-2 w-8 h-8 bg-app-primary rounded-full flex items-center justify-center text-app-bg"
+                >
+                  <Star size={16} className="fill-current" />
+                </motion.div>
+              </div>
+              
+              <div className="space-y-4">
+                <h2 className="text-4xl font-black text-app-text tracking-tighter">PAYMENT CONFIRMED!</h2>
+                <div className="space-y-2">
+                  <p className="text-app-text-muted text-lg">Welcome to the Pro Ninja family.</p>
+                  <div className="p-4 bg-app-bg/50 border border-app-primary/10 rounded-2xl inline-block">
+                    <p className="text-xs text-app-text-muted uppercase tracking-widest font-bold mb-1">Confirmation sent to</p>
+                    <p className="text-app-primary font-bold">{emailInput || user?.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-left">
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Plan</p>
+                  <p className="text-sm font-bold text-app-text">{selectedPlan?.name}</p>
+                </div>
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Amount</p>
+                  <p className="text-sm font-bold text-app-text">{formatPrice(selectedPlan?.price)}</p>
+                </div>
+              </div>
+
+              <button 
+                onClick={onClose}
+                className="w-full py-4 bg-app-primary text-app-bg font-black text-lg rounded-2xl hover:bg-app-accent transition-all shadow-xl shadow-app-primary/20"
+              >
+                START TRAINING NOW
+              </button>
+              
+              <p className="text-xs text-app-text-muted/50">
+                Transaction ID: PTE-{Math.random().toString(36).substr(2, 9).toUpperCase()}
+              </p>
+            </div>
+          ) : showEmailPrompt ? (
+            <div className="w-full max-w-md space-y-6 py-8">
+              <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                <Mail className="text-app-primary" size={32} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-app-text">Email Required</h2>
+                <p className="text-app-text-muted">Please provide your email to receive payment confirmation and secure your account.</p>
+              </div>
+              <div className="space-y-4">
+                <input 
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all"
+                />
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => {
+                      setShowEmailPrompt(false);
+                      setSelectedPlan(null);
+                    }}
+                    className="flex-1 py-3 px-6 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:bg-app-primary/5 transition-all"
+                  >
+                    Back
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (emailInput.includes('@')) {
+                        setShowEmailPrompt(false);
+                        handleSelectPlan(selectedPlan);
+                      } else {
+                        toast.error("Please enter a valid email address");
+                      }
+                    }}
+                    className="flex-1 py-3 px-6 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-app-text-muted/50">
+                Or <button onClick={onLogin} className="text-app-primary hover:underline">Sign in with Google</button> for a faster experience.
+              </p>
+            </div>
+          ) : !selectedPlan ? (
             <>
               <div className="w-full bg-gradient-to-r from-orange-500/20 via-red-500/20 to-orange-500/20 border border-orange-500/30 rounded-2xl p-4 mb-2 flex items-center justify-center gap-3 animate-pulse">
                 <div className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">Limited Time</div>
@@ -2178,9 +2301,10 @@ function FAQView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ProfileView({ user, onLogout, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate }: { 
+function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate }: { 
   user: any, 
   onLogout: () => void, 
+  onLogin: () => void,
   onUpgrade: () => void, 
   isDarkMode: boolean, 
   onOpenAdminDashboard?: () => void,
@@ -2291,9 +2415,19 @@ function ProfileView({ user, onLogout, onUpgrade, isDarkMode, onOpenAdminDashboa
             <ShieldCheck className="text-app-primary" /> Account Security
           </h3>
           <div className="space-y-4">
-            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
-              <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Email Verified</p>
-              <p className="text-base md:text-lg font-bold text-app-text mt-1">{user?.emailVerified ? 'Yes' : 'No'}</p>
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Email Verified</p>
+                <p className="text-base md:text-lg font-bold text-app-text mt-1">{user?.emailVerified ? 'Yes' : 'No'}</p>
+              </div>
+              {!user?.emailVerified && (
+                <button 
+                  onClick={onLogin}
+                  className="px-4 py-2 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-xs"
+                >
+                  Verify Email & Get 14-Day Trial
+                </button>
+              )}
             </div>
           </div>
           
@@ -4532,7 +4666,7 @@ function TaskModal({
         if (!base64 || base64.length < 100) {
            throw new Error("No audio detected");
         }
-        result = await analyzeSpeaking(base64, task.title, mediaRecorder?.mimeType || 'audio/webm');
+        result = await analyzeSpeaking(base64, task.category, mediaRecorder?.mimeType || 'audio/webm', task.correctAnswers?.[0]);
       } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
         // Local scoring for objective tasks
         let score = 0;
@@ -4734,7 +4868,8 @@ function TaskModal({
             pace: result.pace || "Good",
             stress: result.stress || "Good"
           },
-          tips: Array.isArray(tips) ? tips : [tips]
+          tips: Array.isArray(tips) ? tips : [tips],
+          transcription: result.transcription
         });
       }
       const finalScore = result.overall ?? result.Score ?? 0;
@@ -5001,7 +5136,7 @@ function TaskModal({
                         {phase === 'prep' ? (
                           task.category === 'Repeat Sentence' ? `Beginning in ${timeLeft} sec` : `Recording starts in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
                         ) : phase === 'recording' ? (
                           'Recording...'
                         ) : 'Ready'}
@@ -5029,18 +5164,20 @@ function TaskModal({
                             }
                           }
                         }}
-                        disabled={phase === 'audio' && isAudioPlaying}
+                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
                         className={cn(
                           "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl shrink-0",
                           phase === 'prep' ? "bg-app-primary text-app-bg hover:scale-105" : 
                           phase === 'recording' ? "bg-red-500 text-white hover:scale-105" :
-                          "bg-blue-500 text-white hover:scale-105 disabled:opacity-50"
+                          "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
+                          isPreparingAudio && "cursor-wait"
                         )}
-                        title={phase === 'prep' ? 'Start' : phase === 'recording' ? 'Stop' : 'Play'}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Start' : phase === 'recording' ? 'Stop' : 'Play')}
                       >
-                        {phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
-                         phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
-                         (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />)}
+                        {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
+                         (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
+                          phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                          (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
                       </button>
 
                       <div className="flex-1">
@@ -5211,7 +5348,7 @@ function TaskModal({
                     
                     <div className="flex flex-col">
                       <p className="text-xs font-bold text-app-text uppercase tracking-wider">
-                        {phase === 'audio' ? (isAudioPlaying ? "Playing Audio" : "Ready to Play") : 
+                        {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : (isAudioPlaying ? "Playing Audio" : "Ready to Play")) : 
                          (phase === 'prep' ? "Preparing..." : "Recording...")}
                       </p>
                       {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
@@ -5834,9 +5971,13 @@ function TaskModal({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
                       <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">
-                        {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? "Sensei's Wisdom" : 'Diagnostic Data'}
+                        {task.category === 'Answer Short Question' ? 'Expected Answer' : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? "Sensei's Wisdom" : 'Diagnostic Data'}
                       </h5>
-                      {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
+                      {task.category === 'Answer Short Question' ? (
+                        <div className="text-[10px] text-app-text-muted leading-tight italic bg-app-surface/50 p-3 rounded-xl border border-white/5">
+                          {task.correctAnswers && task.correctAnswers[0] || "No expected answer available."}
+                        </div>
+                      ) : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? (
                         <ul className="space-y-2">
                           {Array.isArray(feedback.tips) && feedback.tips.slice(0, 3).map((tip: string, i: number) => (
                             <li key={i} className="text-[10px] text-app-text-muted flex gap-2 leading-tight">
@@ -5860,15 +6001,21 @@ function TaskModal({
                     </div>
                     <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
                       <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">
-                        {(task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
+                        {task.category === 'Answer Short Question' ? 'Your Answer' : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? 'Grammatical and Other Mistakes' : 'Mispronounced'}
                       </h5>
-                      <div className="flex flex-wrap gap-1">
-                        {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string, i: number) => (
-                          <span key={i} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
-                            {word}
-                          </span>
-                        ))}
-                      </div>
+                      {task.category === 'Answer Short Question' ? (
+                        <div className="text-[10px] text-app-text-muted leading-tight italic bg-app-surface/50 p-3 rounded-xl border border-white/5">
+                          {feedback.transcription || userInput || "No answer provided."}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {Array.isArray(feedback.details.mispronounced) && feedback.details.mispronounced.map((word: string, i: number) => (
+                            <span key={i} className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded-md border border-red-500/20">
+                              {word}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
