@@ -3482,6 +3482,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
         { name: "Read Aloud", count: "6–7", description: "Read a short text aloud with natural fluency and pronunciation." },
         { name: "Repeat Sentence", count: "10–12", description: "Listen to a sentence and repeat it exactly." },
         { name: "Describe Image", count: "3–4", description: "Describe the information shown in an image." },
+        { name: "Retell Lecture", count: "1–2", description: "Listen to a lecture and re-tell the lecture in your own words." },
         { name: "Respond to a Situation", count: "1–2", description: "Listen to a situation and give a spoken response." },
         { name: "Summarize Group Discussion", count: "1–2", description: "Listen to a group discussion and summarize it orally." },
         { name: "Answer Short Question", count: "5–6", description: "Answer a simple question with a single word or short phrase." },
@@ -3729,6 +3730,7 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
       'Read Aloud': 'bg-rose-400/10 text-rose-400 border-rose-400/20',
       'Repeat Sentence': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
       'Describe Image': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+      'Retell Lecture': 'bg-rose-400/10 text-rose-400 border-rose-400/20',
       'Respond to a Situation': 'bg-lime-400/10 text-lime-400 border-lime-400/20',
       'Summarize Group Discussion': 'bg-green-400/10 text-green-400 border-green-400/20',
       'Answer Short Question': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
@@ -3911,6 +3913,7 @@ function TaskModal({
   });
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isPreparingAudio, setIsPreparingAudio] = useState(false);
+  const [audioFinished, setAudioFinished] = useState(false);
   const beepPlayedRef = useRef(false);
 
   const needsBeep = task.section === 'listening' || 
@@ -4039,6 +4042,7 @@ function TaskModal({
     const initialPhase = isListeningPrep ? 'prep' : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
     
     setPhase(initialPhase);
+    setAudioFinished(false);
     
     let initialTime = 0;
     if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
@@ -4096,6 +4100,7 @@ function TaskModal({
         console.log("[Audio] Audio playback ended");
         setIsAudioPlaying(false);
         setIsPreparingAudio(false);
+        setAudioFinished(true);
         // Small pause after audio before next phase
         setTimeout(() => {
           if (isCancelled) return;
@@ -4226,19 +4231,28 @@ function TaskModal({
           let base64 = null;
           try {
             if (task.audio) {
-              console.log("[Audio] Using pre-recorded audio URL:", task.audio);
-              const audioRes = await fetch(task.audio);
-              const blob = await audioRes.blob();
-              const reader = new FileReader();
-              const base64Promise = new Promise<string>((resolve) => {
-                reader.onloadend = () => {
-                  const base64data = reader.result as string;
-                  resolve(base64data.split(',')[1]);
-                };
-              });
-              reader.readAsDataURL(blob);
-              base64 = await base64Promise;
-            } else {
+              try {
+                console.log("[Audio] Attempting to fetch pre-recorded audio:", task.audio);
+                const audioRes = await fetch(task.audio);
+                if (!audioRes.ok) throw new Error(`HTTP error! status: ${audioRes.status}`);
+                const blob = await audioRes.blob();
+                const reader = new FileReader();
+                const base64Promise = new Promise<string>((resolve) => {
+                  reader.onloadend = () => {
+                    const base64data = reader.result as string;
+                    resolve(base64data.split(',')[1]);
+                  };
+                });
+                reader.readAsDataURL(blob);
+                base64 = await base64Promise;
+                console.log("[Audio] Pre-recorded audio fetched successfully");
+              } catch (fetchErr) {
+                console.warn("[Audio] Pre-recorded audio fetch failed (likely CORS), falling back to AI generation:", fetchErr);
+                // Fall through to generateTTS
+              }
+            }
+            
+            if (!base64) {
               const timeoutPromise = new Promise<null>((_, reject) => 
                 setTimeout(() => reject(new Error("Audio preparation timed out after 30s")), 30000)
               );
@@ -4766,7 +4780,7 @@ function TaskModal({
       audioContextRef.current.resume().catch(e => console.error("Failed to resume audio context:", e));
     }
 
-    if (task.hasAudio) {
+    if (task.hasAudio && !audioFinished) {
       // We don't set isPreparingAudio here anymore to avoid stuck states
       // The useEffect will handle it when phase changes to 'audio'
       setPhase('audio');
@@ -4869,13 +4883,13 @@ function TaskModal({
           {/* Instruction Area */}
           <div className={cn(
             "p-6 rounded-xl border transition-all",
-            (task.category === 'Read Aloud' || task.category === 'Repeat Sentence')
+            (task.category === 'Read Aloud' || task.category === 'Repeat Sentence' || task.category === 'Retell Lecture' || task.category === 'Summarize Group Discussion')
               ? "bg-white/95 border-gray-200 shadow-sm mb-6" 
               : "bg-app-surface/30 border-app-primary/20"
           )}>
             <p className={cn(
               "text-sm leading-relaxed",
-              (task.category === 'Read Aloud' || task.category === 'Repeat Sentence') ? "text-gray-800 italic font-medium" : "text-app-text"
+              (task.category === 'Read Aloud' || task.category === 'Repeat Sentence' || task.category === 'Retell Lecture' || task.category === 'Summarize Group Discussion') ? "text-gray-800 italic font-medium" : "text-app-text"
             )}>
               {task.category === 'Read Aloud' ? (
                 <>
@@ -4884,6 +4898,14 @@ function TaskModal({
               ) : task.category === 'Repeat Sentence' ? (
                 <>
                   You will hear a sentence. Please repeat the sentence exactly as you hear it. You will hear the sentence only once.
+                </>
+              ) : task.category === 'Retell Lecture' ? (
+                <>
+                  You will hear a lecture. After listening to the lecture, in <span className="font-bold not-italic">7 seconds</span>, please speak into the microphone and retell what you have just heard from the lecture in your own words. You will have <span className="font-bold not-italic">40 seconds</span> to give your response.
+                </>
+              ) : task.category === 'Summarize Group Discussion' ? (
+                <>
+                  You will hear a group discussion. After listening to the discussion, in <span className="font-bold not-italic">10 seconds</span>, please speak into the microphone and summarize what you have just heard in your own words. You will have <span className="font-bold not-italic">40 seconds</span> to give your response.
                 </>
               ) : (
                 <>
@@ -4960,8 +4982,8 @@ function TaskModal({
             </div>
           ) : (
             <>
-              {/* Audio Controls for Read Aloud / Repeat Sentence (Above prompt to match image) */}
-              {(task.category === 'Read Aloud' || task.category === 'Repeat Sentence') && (phase === 'prep' || phase === 'recording' || phase === 'audio') && (
+              {/* Audio Controls for Speaking Tasks (Above prompt to match image) */}
+              {(task.category === 'Read Aloud' || task.category === 'Repeat Sentence' || task.category === 'Retell Lecture' || task.category === 'Summarize Group Discussion') && (phase === 'prep' || phase === 'recording' || phase === 'audio') && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -4970,7 +4992,7 @@ function TaskModal({
                   <div className="w-full space-y-6">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                       <span className="text-gray-500 font-medium text-base">
-                        {task.category === 'Read Aloud' || phase === 'recording' ? 'Audio Recorder' : 'Audio Player'}
+                        {phase === 'audio' ? 'Audio Player' : 'Audio Recorder'}
                       </span>
                       <span className={cn(
                         "font-bold text-base",
@@ -4991,10 +5013,19 @@ function TaskModal({
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
                           else if (phase === 'recording') handleFinish();
-                          else if (phase === 'audio' && !isAudioPlaying) {
+                          else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
                             if (audioRef.current) {
                               audioRef.current.play().catch(e => console.error("Manual play failed", e));
                               setIsAudioPlaying(true);
+                            }
+                          } else if (phase === 'audio' && audioFinished) {
+                            // If audio finished but we're still in 'audio' phase (the 1s pause), skip to next
+                            if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+                              setPhase('prep');
+                              setTimeLeft(task.prepTime);
+                            } else {
+                              setPhase('recording');
+                              setTimeLeft(task.recordingTime ?? 40);
                             }
                           }
                         }}
@@ -5066,7 +5097,8 @@ function TaskModal({
                 <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group">
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
-                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg"
+                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
+                    task.category === 'Answer Short Question' && "italic font-bold"
                   )}>
                     {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
                     {task.section === 'listening' 
@@ -5089,7 +5121,7 @@ function TaskModal({
                       Retry Audio
                     </button>
                   )}
-                  {task.image && (
+                  {task.image && task.category !== 'Summarize Group Discussion' && (
                     <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
                       <img 
                         src={task.image} 
@@ -5102,12 +5134,12 @@ function TaskModal({
                 </div>
               )}
 
-              {/* Audio Controls (For non-Read Aloud/Repeat Sentence tasks) */}
-              {task.category !== 'Read Aloud' && task.category !== 'Repeat Sentence' && (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
+              {/* Audio Controls (For non-Read Aloud/Repeat Sentence/Retell Lecture/Summarize Group Discussion tasks) */}
+              {task.category !== 'Read Aloud' && task.category !== 'Repeat Sentence' && task.category !== 'Retell Lecture' && task.category !== 'Summarize Group Discussion' && (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10"
+                  className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10 mb-8"
                 >
                   {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
                     <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
@@ -5140,12 +5172,21 @@ function TaskModal({
                       onClick={() => {
                         if (isPreparingAudio) return;
                         
-                        if (phase === 'audio' && !isAudioPlaying) {
+                        if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
                           if (audioRef.current) {
                             audioRef.current.play().catch(e => console.error("Manual play failed", e));
                             setIsAudioPlaying(true);
                           } else {
                             setAudioRetryCount(prev => prev + 1);
+                          }
+                        } else if (phase === 'audio' && audioFinished) {
+                          // If audio finished but we're still in 'audio' phase (the 1s pause), skip to next
+                          if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+                            setPhase('prep');
+                            setTimeLeft(task.prepTime);
+                          } else {
+                            setPhase('recording');
+                            setTimeLeft(task.recordingTime ?? 40);
                           }
                         } else if (phase === 'recording') {
                           handleFinish();

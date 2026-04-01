@@ -286,8 +286,7 @@ export const PTE_TASKS: PTETask[] = [
     prepTime: 20, 
     recordingTime: 40,
     hasAudio: true,
-    prompt: "You are at a library and you want to borrow a book that is currently checked out by another student. You need the book for an assignment that is due tomorrow. Speak to the librarian and explain your situation to see if they can help you.",
-    audio: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+    prompt: "You are at a library and you want to borrow a book that is currently checked out by another student. You need the book for an assignment that is due tomorrow. Speak to the librarian and explain your situation to see if they can help you."
   },
   { 
     id: 'sgd-1', 
@@ -300,9 +299,21 @@ export const PTE_TASKS: PTETask[] = [
     recordingTime: 40,
     hasAudio: true,
     prompt: "You will hear a group discussion about the impact of remote work on team collaboration. Listen carefully and then summarize the main points of the discussion in your own words. You will have 10 seconds to prepare and 40 seconds to give your response.",
-    transcript: "Speaker 1: I think remote work has really improved our productivity. We spend less time commuting and more time actually working. Speaker 2: That's true, but I feel like we're losing that spontaneous collaboration we used to have in the office. You can't just walk over to someone's desk and ask a quick question. Speaker 3: I agree with both of you. While productivity might be up, we need to find better ways to maintain our team culture and ensure everyone feels connected. Maybe we should have more regular video check-ins that aren't just about work.",
-    audio: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    image: "https://picsum.photos/seed/discussion/600/400"
+    transcript: "Speaker 1: I think remote work has really improved our productivity. We spend less time commuting and more time actually working. Speaker 2: That's true, but I feel like we're losing that spontaneous collaboration we used to have in the office. You can't just walk over to someone's desk and ask a quick question. Speaker 3: I agree with both of you. While productivity might be up, we need to find better ways to maintain our team culture and ensure everyone feels connected. Maybe we should have more regular video check-ins that aren't just about work."
+  },
+  { 
+    id: 'rl-1', 
+    title: 'Question 1', 
+    category: 'Retell Lecture',
+    description: 'Listen to a lecture and retell it in your own words.', 
+    section: 'speaking', 
+    type: 'speaking', 
+    prepTime: 7, 
+    recordingTime: 40,
+    hasAudio: true,
+    prompt: "You will hear a lecture. After listening to the lecture, in 7 seconds, please speak into the microphone and retell what you have just heard from the lecture in your own words. You will have 40 seconds to give your response.",
+    transcript: "The lecture discusses the importance of sustainable urban planning in the 21st century. As global populations shift towards cities, the demand for resources like water, energy, and housing increases dramatically. The speaker argues that traditional urban models are no longer viable and that we must adopt greener technologies and smarter infrastructure. Key points include the integration of renewable energy sources, the expansion of public transportation, and the creation of more green spaces to improve air quality and public health. Ultimately, the goal is to create resilient cities that can thrive despite environmental challenges.",
+    image: "https://picsum.photos/seed/lecture/600/400"
   },
   { 
     id: 'asq-1', 
@@ -314,7 +325,8 @@ export const PTE_TASKS: PTETask[] = [
     prepTime: 0, 
     recordingTime: 10,
     hasAudio: true,
-    prompt: "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough."
+    prompt: "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.",
+    transcript: "What is the capital city of Australia?"
   },
   
   // Writing
@@ -1104,6 +1116,18 @@ const promptTemplates: Record<string, (string | { prompt: string; example: strin
     "The group discussed the importance of biodiversity for ecosystem stability and resilience. They emphasized the need for conservation efforts.",
     "The speakers debated the impact of globalization on local cultures and traditions. They discussed the tension between global trends and local identity."
   ],
+  'Retell Lecture': [
+    "The lecture discussed the history of the industrial revolution and its impact on modern society. It highlighted the shift from agrarian economies to manufacturing-based ones, the rise of urbanization, and the significant technological advancements that paved the way for the modern world.",
+    "The speaker explored the concept of emotional intelligence and its importance in the workplace. They argued that self-awareness, empathy, and effective communication are just as critical as technical skills for successful leadership and team collaboration in a modern corporate environment.",
+    "The presentation focused on the challenges of achieving global food security in a changing climate. It discussed the need for sustainable agricultural practices, the impact of extreme weather events on crop yields, and the importance of international cooperation to ensure a stable food supply for a growing population.",
+    "The lecture examined the role of renewable energy in reducing global carbon emissions. It emphasized the transition from fossil fuels to solar and wind power, the importance of energy storage technologies, and the need for policy support to accelerate the green energy transition.",
+    "The speaker discussed the impact of biodiversity loss on ecosystem services and human well-being. They highlighted the threats posed by habitat destruction, climate change, and invasive species, and called for urgent conservation actions to protect the planet's natural heritage.",
+    "The presentation explored the future of work in the age of automation and artificial intelligence. It discussed the potential for job displacement, the need for lifelong learning and reskilling, and the importance of human-centric design in technological development.",
+    "The lecture focused on the history and evolution of the global financial system. It discussed the shift from the gold standard to fiat currency, the role of central banks in managing economic stability, and the impact of globalization on international trade and finance.",
+    "The speaker examined the relationship between urbanization and public health. They highlighted the challenges of overcrowding, pollution, and inadequate infrastructure in rapidly growing cities, and discussed strategies for creating healthier and more livable urban environments.",
+    "The presentation explored the impact of social media on political discourse and democracy. It discussed the rise of echo chambers, the spread of misinformation, and the potential for digital platforms to both empower and polarize citizens.",
+    "The lecture discussed the importance of early childhood education for long-term social and economic outcomes. It highlighted the role of quality preschool programs in narrowing the achievement gap and promoting lifelong success."
+  ],
   'Respond to a Situation': [
     "You are at a restaurant and your order is incorrect. Speak to the waiter and explain the issue.",
     "You missed a deadline for an assignment. Speak to your professor and explain why.",
@@ -1359,16 +1383,24 @@ taskGroups.forEach(groupKey => {
       newTask.transcript = selected.transcript;
       newTask.prompt = selected.prompt;
       newTask.correctAnswers = selected.correct;
-    } else if (category === 'Summarize Group Discussion') {
+    } else if (category === 'Summarize Group Discussion' || category === 'Retell Lecture') {
       const selected = templates[(i - 1) % templates.length];
       if (typeof selected === 'string') {
         newTask.transcript = selected;
-        newTask.prompt = "Summarize the key points of the group discussion you just heard.";
+        newTask.prompt = category === 'Retell Lecture' 
+          ? "You will hear a lecture. After listening to the lecture, in 7 seconds, please speak into the microphone and retell what you have just heard from the lecture in your own words. You will have 40 seconds to give your response."
+          : "Summarize the key points of the group discussion you just heard.";
       }
     } else if (category === 'Respond to a Situation') {
       const selected = templates[(i - 1) % templates.length];
       if (typeof selected === 'string') {
         newTask.prompt = selected;
+      }
+    } else if (category === 'Answer Short Question') {
+      const selected = templates[(i - 1) % templates.length];
+      if (typeof selected === 'string') {
+        newTask.transcript = selected;
+        newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
       }
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {
       newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript

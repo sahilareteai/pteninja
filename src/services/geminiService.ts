@@ -1,6 +1,7 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+console.log("[Gemini] SDK initialized. API Key present:", !!process.env.GEMINI_API_KEY);
 
 let quotaExceededUntil = 0;
 
@@ -73,8 +74,10 @@ async function callGemini(params: any, retries: number = 3): Promise<any> {
 
   for (let i = 0; i <= retries; i++) {
     try {
+      console.log(`[Gemini] Calling generateContent for model: ${params.model}`);
       return await ai.models.generateContent(params);
     } catch (e: any) {
+      console.error(`[Gemini] API Call Error:`, e);
       const isQuotaError = e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED') || (e.error?.code === 429);
       
       if (isQuotaError) {
