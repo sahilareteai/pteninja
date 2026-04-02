@@ -3,6 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Stripe from "stripe";
 import dotenv from "dotenv";
+import { cert, getApps, initializeApp as initAdminApp } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
 
 dotenv.config();
 
@@ -20,6 +23,39 @@ const getStripe = () => {
   }
   return stripe;
 };
+
+// Lazy Firebase Admin initialization
+// FIREBASE_DATABASE_ID defaults to the project's custom database (same value as in firebase-applet-config.json)
+const FIREBASE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID ?? "ai-studio-37d37134-5b01-4f97-94a8-1826017ba501";
+// ADMIN_EMAILS: comma-separated list of emails that have admin access (same check as Firestore security rules)
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "sg.analyst93@gmail.com")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean);
+const getAdminApp = () => {
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!serviceAccount) return null;
+  if (getApps().length > 0) return getApps()[0];
+  try {
+    return initAdminApp({ credential: cert(JSON.parse(serviceAccount)) });
+  } catch {
+    return null;
+  }
+};
+
+// Simple in-memory rate limiter: max requests per window per IP
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(ip: string, maxRequests = 10, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxRequests) return false;
+  entry.count++;
+  return true;
+}
 
 // Map planId → Stripe recurring interval
 const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number }> = {
@@ -424,6 +460,76 @@ app.post("/api/create-payment-intent", async (req, res) => {
   } catch (error: any) {
     console.error("Stripe error:", error);
     res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Delete User ──────────────────────────────────────────────────────────────
+// Deletes a user's Firestore document and Firebase Auth account.
+// Requires a valid Firebase ID token from an admin user.
+app.post("/api/delete-user", async (req, res) => {
+  // Rate-limit: max 10 delete requests per minute per IP
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress
+    ?? "unknown";
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: "Too many requests. Please try again later." });
+  }
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const { uid } = req.body;
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+  if (!uid || typeof uid !== "string") {
+    return res.status(400).json({ error: "uid is required" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+
+    // Resolve admin status: match Firestore rules (email allowlist or role field)
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch {
+        // If the lookup fails, deny access
+      }
+    }
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    // Delete Firestore document
+    await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(uid)
+      .delete();
+
+    // Delete Firebase Auth user (best-effort — may not exist for guest sessions)
+    try {
+      await getAdminAuth(adminInstance).deleteUser(uid);
+    } catch (authErr: any) {
+      console.warn("Could not delete Firebase Auth user:", uid, authErr.message);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Delete user error:", error);
+    res.status(400).json({ error: "Failed to delete user" });
   }
 });
 

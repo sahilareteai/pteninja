@@ -17,7 +17,7 @@ import {
   User as UserIcon,
   Loader2
 } from 'lucide-react';
-import { db, collection, getDocs, getDoc, doc, updateDoc, deleteDoc, setDoc, query, where, OperationType, handleFirestoreError } from '../firebase';
+import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, query, where, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { PromoCode } from '../services/promoService';
 import { toast } from 'sonner';
@@ -131,12 +131,26 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     if (!userToDelete) return;
     setIsDeletingUser(true);
     try {
-      await deleteDoc(doc(db, 'users', userToDelete.uid));
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+      const response = await fetch('/api/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ uid: userToDelete.uid }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? 'Failed to delete user');
+      }
       setUsers(prev => prev.filter(u => u.uid !== userToDelete.uid));
       toast.success(`User ${userToDelete.displayName || userToDelete.email || userToDelete.uid} deleted`);
       setUserToDelete(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${userToDelete.uid}`);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete user');
+      console.error('Delete user error:', error);
     } finally {
       setIsDeletingUser(false);
     }
