@@ -17,7 +17,7 @@ import {
   User as UserIcon,
   Loader2
 } from 'lucide-react';
-import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, query, where, OperationType, handleFirestoreError } from '../firebase';
+import { db, collection, getDocs, getDoc, doc, updateDoc, deleteDoc, setDoc, query, where, OperationType, handleFirestoreError } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { PromoCode } from '../services/promoService';
 import { toast } from 'sonner';
@@ -35,6 +35,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingPromo, setIsAddingPromo] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [newPromo, setNewPromo] = useState<PromoCode>({
     code: '',
     discountPercent: 10,
@@ -122,6 +124,21 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       toast.success('Promo code added successfully');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'promoCodes');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    try {
+      await deleteDoc(doc(db, 'users', userToDelete.uid));
+      setUsers(prev => prev.filter(u => u.uid !== userToDelete.uid));
+      toast.success(`User ${userToDelete.displayName || userToDelete.email || userToDelete.uid} deleted`);
+      setUserToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${userToDelete.uid}`);
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -256,6 +273,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                           <th className="px-4 py-3 font-bold">Plan</th>
                           <th className="px-4 py-3 font-bold">Joined</th>
                           <th className="px-4 py-3 font-bold">Role</th>
+                          <th className="px-4 py-3 font-bold">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-app-primary/5">
@@ -305,6 +323,15 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               )}>
                                 {user.role || 'user'}
                               </span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <button
+                                onClick={() => setUserToDelete(user)}
+                                className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                title="Delete user"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -421,6 +448,48 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </motion.div>
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface border border-red-500/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-500">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-app-text">Delete User</h3>
+                <p className="text-xs text-app-text-muted">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-app-text">
+              Are you sure you want to delete{' '}
+              <span className="font-bold">{userToDelete.displayName || userToDelete.email || userToDelete.uid}</span>?
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setUserToDelete(null)}
+                disabled={isDeletingUser}
+                className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={isDeletingUser}
+                className="flex items-center gap-2 bg-red-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+              >
+                {isDeletingUser ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Delete
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
