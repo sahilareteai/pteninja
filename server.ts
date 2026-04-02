@@ -80,21 +80,18 @@ app.post("/api/create-subscription", async (req, res) => {
       customerId = customer.id;
     }
 
-    // Create subscription with inline price so no pre-created Stripe Price IDs are needed.
-    // price_data.product_data is valid at runtime; `product` is required in the SDK union
-    // type but product_data is the accepted alternative per the Stripe REST API.
+    // Create an inline price first (product_data is valid on prices.create but NOT
+    // on subscription item price_data – passing it there causes a Stripe API error).
+    const price = await stripeInstance.prices.create({
+      currency,
+      product_data: { name: `PTENinja ${planName ?? planId}` },
+      recurring,
+      unit_amount: amount, // already in cents
+    });
+
     const subscription = await stripeInstance.subscriptions.create({
       customer: customerId,
-      items: [
-        {
-          price_data: {
-            currency,
-            product_data: { name: `PTENinja ${planName ?? planId}` },
-            recurring,
-            unit_amount: amount, // already in cents
-          } as unknown as Stripe.SubscriptionCreateParams.Item.PriceData,
-        },
-      ],
+      items: [{ price: price.id }],
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       expand: ["latest_invoice.payment_intent"],
