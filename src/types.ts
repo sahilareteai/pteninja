@@ -1161,7 +1161,7 @@ taskGroups.forEach(groupKey => {
       ...template,
       id: `${template.id.split('-')[0]}-${i}`,
       title: `Question ${i}`,
-      prompt: typeof promptBase === 'string' ? (i <= 10 ? promptBase : `${promptBase} (Version ${Math.ceil(i/10)})`) : ""
+      prompt: typeof promptBase === 'string' ? promptBase : ""
     };
 
     // Add specific properties for Reading tasks

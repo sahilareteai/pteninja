@@ -1799,15 +1799,22 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       }
 
       const convertedAmount = CurrencyService.convert(basePrice);
+      const amountInCents = Math.round((convertedAmount ?? basePrice) * 100);
+      if (!amountInCents || amountInCents <= 0 || !Number.isFinite(amountInCents)) {
+        toast.error("Could not calculate payment amount. Please try again.");
+        return;
+      }
+
+      const receiptEmail = (emailInput || user?.email || "").trim() || undefined;
       const response = await fetch('/api/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           planId: plan.id,
           planName: plan.name,
-          amount: Math.round(convertedAmount * 100), // cents
+          amount: amountInCents,
           currency: currency.code.toLowerCase(),
-          email: emailInput || user?.email || undefined,
+          email: receiptEmail,
           existingCustomerId: user?.stripeCustomerId || undefined,
         }),
       });
@@ -1868,7 +1875,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
       if (pendingSubscriptionId) updateData.stripeSubscriptionId = pendingSubscriptionId;
       if (pendingCustomerId)    updateData.stripeCustomerId    = pendingCustomerId;
-      if (emailInput && !user.email) updateData.email = emailInput;
+      if (emailInput && !user.email) updateData.email = emailInput.trim();
 
       await updateDoc(userRef, updateData);
       
@@ -1964,6 +1971,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                   type="email"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const trimmed = emailInput.trim();
+                      if (trimmed.includes('@') && trimmed.includes('.')) {
+                        setEmailInput(trimmed);
+                        setShowEmailPrompt(false);
+                        handleSelectPlan(selectedPlan);
+                      }
+                    }
+                  }}
                   placeholder="your@email.com"
                   className="w-full px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all"
                 />
@@ -1973,21 +1990,26 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       setShowEmailPrompt(false);
                       setSelectedPlan(null);
                     }}
-                    className="flex-1 py-3 px-6 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:bg-app-primary/5 transition-all"
+                    disabled={isProcessing}
+                    className="flex-1 py-3 px-6 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:bg-app-primary/5 transition-all disabled:opacity-50"
                   >
                     Back
                   </button>
                   <button 
+                    disabled={isProcessing}
                     onClick={() => {
-                      if (emailInput.includes('@')) {
+                      const trimmed = emailInput.trim();
+                      if (trimmed.includes('@') && trimmed.includes('.')) {
+                        setEmailInput(trimmed);
                         setShowEmailPrompt(false);
                         handleSelectPlan(selectedPlan);
                       } else {
                         toast.error("Please enter a valid email address");
                       }
                     }}
-                    className="flex-1 py-3 px-6 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
+                    className="flex-1 py-3 px-6 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
+                    {isProcessing ? <Loader2 className="animate-spin" size={16} /> : null}
                     Continue
                   </button>
                 </div>
