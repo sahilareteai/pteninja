@@ -97,9 +97,9 @@ app.post("/api/create-subscription", async (req, res) => {
       expand: ["latest_invoice.payment_intent"],
     }) as unknown as SubscriptionRuntime;
 
-    // Stripe expands latest_invoice.payment_intent when requested. If the field
-    // is a plain string the expand was skipped (e.g. invoice amount is $0) and
-    // we need to surface a clear error rather than returning null silently.
+    // Stripe expands latest_invoice.payment_intent when requested.
+    // The field is a plain string when the expand was skipped (payment already
+    // collected server-side, e.g. returning customer with a saved default method).
     const paymentIntent = subscription.latest_invoice?.payment_intent;
     const clientSecret =
       paymentIntent && typeof paymentIntent === "object"
@@ -107,21 +107,35 @@ app.post("/api/create-subscription", async (req, res) => {
         : null;
 
     if (!clientSecret) {
-      // Subscription was created but payment intent is missing or already charged.
-      // Cancel the incomplete subscription to avoid leaving orphaned records.
+      // No client-side confirmation needed.  This happens when the customer
+      // already has a saved default payment method in Stripe and the first
+      // invoice was charged immediately (subscription is now "active" or
+      // "trialing" without requiring any frontend interaction).
+      if (subscription.status === "active" || subscription.status === "trialing") {
+        return res.json({
+          clientSecret: null,
+          immediatelyActive: true,
+          subscriptionId: subscription.id,
+          customerId,
+          currentPeriodEnd: subscription.current_period_end,
+        });
+      }
+
+      // Unexpected state — subscription was created but is neither active nor
+      // has a payment_intent for the client to confirm.  Cancel the orphaned
+      // record and return a useful error.
       try {
         await stripeInstance.subscriptions.cancel(subscription.id);
       } catch {
         // Best-effort cleanup — ignore any cancel error
       }
       console.error(
-        "Stripe subscription created but clientSecret is missing. status=%s, sub=%s",
+        "Stripe subscription created but clientSecret is missing and status is not active. status=%s, sub=%s",
         subscription.status,
         subscription.id
       );
       return res.status(500).json({
-        error:
-          "Payment could not be initialised. Please check your Stripe configuration (payment_behavior=default_incomplete requires no default payment method on the customer).",
+        error: "Payment could not be initialised. Please try again or contact support.",
       });
     }
 

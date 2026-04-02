@@ -1845,6 +1845,17 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         setPendingSubscriptionId(data.subscriptionId ?? null);
         setPendingCustomerId(data.customerId ?? null);
         setPendingPeriodEnd(data.currentPeriodEnd ?? null);
+      } else if (data.immediatelyActive) {
+        // Returning customer: Stripe auto-charged via their saved payment method.
+        // No frontend card form needed — update Firestore directly.
+        setPendingSubscriptionId(data.subscriptionId ?? null);
+        setPendingCustomerId(data.customerId ?? null);
+        setPendingPeriodEnd(data.currentPeriodEnd ?? null);
+        await handlePaymentSuccess({
+          subscriptionId: data.subscriptionId ?? null,
+          customerId: data.customerId ?? null,
+          periodEnd: data.currentPeriodEnd ?? null,
+        });
       } else {
         toast.error(data.error || "Failed to initialize payment");
       }
@@ -1856,14 +1867,20 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     }
   };
 
-  const handlePaymentSuccess = async () => {
+  const handlePaymentSuccess = async (overrides?: { subscriptionId?: string | null; customerId?: string | null; periodEnd?: number | null }) => {
     if (!user?.uid) return;
     
     try {
       const userRef = doc(db, 'users', user.uid);
+      // Prefer explicitly-passed values (e.g. from immediatelyActive flow where
+      // React state may not have flushed yet) then fall back to state.
+      const resolvedSubscriptionId = overrides?.subscriptionId !== undefined ? overrides.subscriptionId : pendingSubscriptionId;
+      const resolvedCustomerId     = overrides?.customerId     !== undefined ? overrides.customerId     : pendingCustomerId;
+      const resolvedPeriodEnd      = overrides?.periodEnd      !== undefined ? overrides.periodEnd      : pendingPeriodEnd;
+
       // Use Stripe's authoritative period end if available, otherwise fall back
-      const periodEnd = pendingPeriodEnd
-        ? new Date(pendingPeriodEnd * 1000).toISOString()
+      const periodEnd = resolvedPeriodEnd
+        ? new Date(resolvedPeriodEnd * 1000).toISOString()
         : new Date(Date.now() + selectedPlan.durationDays * 24 * 60 * 60 * 1000).toISOString();
 
       const updateData: any = {
@@ -1873,8 +1890,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         cancelAtPeriodEnd: false,
       };
 
-      if (pendingSubscriptionId) updateData.stripeSubscriptionId = pendingSubscriptionId;
-      if (pendingCustomerId)    updateData.stripeCustomerId    = pendingCustomerId;
+      if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
+      if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
       if (emailInput && !user.email) updateData.email = emailInput.trim();
 
       await updateDoc(userRef, updateData);
