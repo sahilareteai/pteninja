@@ -1845,10 +1845,15 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     
     try {
       const userRef = doc(db, 'users', user.uid);
+      const planDurationMs = selectedPlan.id === 'annual'
+        ? 365 * 24 * 60 * 60 * 1000
+        : selectedPlan.id === 'quarterly'
+          ? 90 * 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000;
       const updateData: any = {
         subscriptionStatus: 'active',
-        subscriptionTier: selectedPlan.id,
-        subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+        planId: selectedPlan.id,
+        subscriptionEndsAt: new Date(Date.now() + planDurationMs).toISOString()
       };
 
       if (emailInput && !user.email) {
@@ -2467,7 +2472,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
               <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Current Plan</p>
               <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                {isActive ? `${user.planId?.toUpperCase()} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
+                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
