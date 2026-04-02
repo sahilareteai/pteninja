@@ -8,13 +8,20 @@ const mockCustomersCreate        = vi.hoisted(() => vi.fn());
 const mockPricesCreate           = vi.hoisted(() => vi.fn());
 const mockSubscriptionsCreate    = vi.hoisted(() => vi.fn());
 const mockSubscriptionsCancel    = vi.hoisted(() => vi.fn());
+const mockSubscriptionsList      = vi.hoisted(() => vi.fn());
+const mockSubscriptionsUpdate    = vi.hoisted(() => vi.fn());
 
 vi.mock("stripe", () => {
   class MockStripe {
     paymentIntents = { create: mockPaymentIntentsCreate, retrieve: mockPaymentIntentsRetrieve };
     customers      = { create: mockCustomersCreate };
     prices         = { create: mockPricesCreate };
-    subscriptions  = { create: mockSubscriptionsCreate, cancel: mockSubscriptionsCancel };
+    subscriptions  = {
+      create: mockSubscriptionsCreate,
+      cancel: mockSubscriptionsCancel,
+      list:   mockSubscriptionsList,
+      update: mockSubscriptionsUpdate,
+    };
   }
   return { default: MockStripe };
 });
@@ -107,6 +114,8 @@ describe("POST /api/create-subscription", () => {
     mockPricesCreate.mockReset();
     mockSubscriptionsCreate.mockReset();
     mockSubscriptionsCancel.mockReset();
+    mockSubscriptionsList.mockReset();
+    mockSubscriptionsUpdate.mockReset();
     mockPaymentIntentsRetrieve.mockReset();
 
     // Default stubs
@@ -238,3 +247,67 @@ describe("POST /api/create-subscription", () => {
   });
 });
 
+// ─── Cancel subscription endpoint ─────────────────────────────────────────────
+describe("POST /api/cancel-subscription", () => {
+  const cancelledSub = {
+    id: "sub_cancel",
+    status: "active",
+    current_period_end: 1800000000,
+    cancel_at_period_end: true,
+  };
+
+  beforeEach(() => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_dummy");
+    mockSubscriptionsUpdate.mockReset();
+    mockSubscriptionsList.mockReset();
+    mockSubscriptionsUpdate.mockResolvedValue(cancelledSub);
+  });
+
+  it("cancels by subscriptionId when provided", async () => {
+    const res = await request(app)
+      .post("/api/cancel-subscription")
+      .send({ subscriptionId: "sub_cancel" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cancelAtPeriodEnd).toBe(true);
+    expect(res.body.subscriptionId).toBe("sub_cancel");
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith("sub_cancel", { cancel_at_period_end: true });
+    expect(mockSubscriptionsList).not.toHaveBeenCalled();
+  });
+
+  it("looks up subscription by customerId when subscriptionId is missing", async () => {
+    mockSubscriptionsList.mockResolvedValue({ data: [{ id: "sub_found" }] });
+    mockSubscriptionsUpdate.mockResolvedValue({ ...cancelledSub, id: "sub_found" });
+
+    const res = await request(app)
+      .post("/api/cancel-subscription")
+      .send({ customerId: "cus_lookup" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.subscriptionId).toBe("sub_found");
+    expect(mockSubscriptionsList).toHaveBeenCalledWith(
+      expect.objectContaining({ customer: "cus_lookup", status: "active" })
+    );
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith("sub_found", { cancel_at_period_end: true });
+  });
+
+  it("returns 400 when neither subscriptionId nor customerId is provided", async () => {
+    const res = await request(app)
+      .post("/api/cancel-subscription")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/subscriptionId is required/i);
+  });
+
+  it("returns 400 when customerId is provided but no active subscription found", async () => {
+    mockSubscriptionsList.mockResolvedValue({ data: [] });
+
+    const res = await request(app)
+      .post("/api/cancel-subscription")
+      .send({ customerId: "cus_empty" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/subscriptionId is required/i);
+  });
+});

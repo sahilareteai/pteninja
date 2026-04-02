@@ -89,15 +89,17 @@ app.post("/api/create-subscription", async (req, res) => {
       unit_amount: amount, // already in cents
     });
 
-    // Use the default payment_behavior ("allow_incomplete") so Stripe works
-    // correctly for both new customers (no saved card → subscription starts
-    // incomplete, client_secret returned) and returning customers (saved card
-    // → Stripe auto-charges, subscription immediately active).
-    // "default_incomplete" explicitly forbids customers who have a saved
-    // default_payment_method, which breaks returning customers.
+    // "default_incomplete" always creates the subscription in an incomplete state
+    // and returns a PaymentIntent with a client_secret regardless of whether the
+    // customer has a saved default payment method.  This is the correct choice
+    // for a checkout flow: the frontend must confirm the payment via the Stripe
+    // Payment Element before the subscription becomes active.
+    // "allow_incomplete" (Stripe default) would try to charge immediately, which
+    // fails with a 400 when the customer has no attached payment source.
     const subscription = await stripeInstance.subscriptions.create({
       customer: customerId,
       items: [{ price: price.id }],
+      payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       expand: ["latest_invoice.payment_intent"],
     }) as unknown as SubscriptionRuntime;
@@ -228,24 +230,42 @@ app.post("/api/apply-retention-discount", async (req, res) => {
 // ─── Cancel Subscription (at period end) ─────────────────────────────────────
 // Marks the subscription to cancel at the end of the current billing period.
 // The user keeps access until that date; no further charges are made.
+// If subscriptionId is not provided, customerId can be used to locate the
+// active subscription automatically (handles stale Firestore records).
 app.post("/api/cancel-subscription", async (req, res) => {
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
-  const { subscriptionId } = req.body;
-  if (!subscriptionId) {
-    return res.status(400).json({ error: "subscriptionId is required" });
-  }
+  const { subscriptionId, customerId } = req.body;
 
   try {
-    const subscription = await stripeInstance.subscriptions.update(subscriptionId, {
+    let resolvedSubscriptionId: string = subscriptionId ?? "";
+
+    if (!resolvedSubscriptionId && customerId) {
+      // No subscriptionId supplied — look it up from the customer record.
+      const subs = await stripeInstance.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        resolvedSubscriptionId = subs.data[0].id;
+      }
+    }
+
+    if (!resolvedSubscriptionId) {
+      return res.status(400).json({ error: "subscriptionId is required" });
+    }
+
+    const subscription = await stripeInstance.subscriptions.update(resolvedSubscriptionId, {
       cancel_at_period_end: true,
     }) as unknown as SubscriptionRuntime;
     res.json({
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       currentPeriodEnd: subscription.current_period_end,
+      subscriptionId: resolvedSubscriptionId,
     });
   } catch (error: any) {
     console.error("Cancel subscription error:", error);

@@ -2530,8 +2530,8 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   };
 
   const handleCancelSubscription = async () => {
-    if (!user?.stripeSubscriptionId) {
-      toast.error('Subscription ID not found. Please contact support to cancel your subscription.');
+    if (!user?.stripeSubscriptionId && !user?.stripeCustomerId) {
+      toast.error('Subscription information not found. Please contact support to cancel your subscription.');
       return;
     }
     setIsCanceling(true);
@@ -2539,11 +2539,19 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       const res = await fetch('/api/cancel-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+        body: JSON.stringify({
+          subscriptionId: user.stripeSubscriptionId || undefined,
+          customerId: user.stripeCustomerId || undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: true });
+        const updates: Record<string, unknown> = { cancelAtPeriodEnd: true };
+        // If the server discovered the subscriptionId via customerId, persist it
+        if (data.subscriptionId && !user?.stripeSubscriptionId) {
+          updates.stripeSubscriptionId = data.subscriptionId;
+        }
+        await updateDoc(doc(db, 'users', user.uid), updates);
         setShowCancelDialog(false);
         setCancelStep('offer');
         toast.success('Subscription cancelled. You keep full access until the end of your billing period.');
