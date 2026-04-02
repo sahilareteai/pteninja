@@ -115,6 +115,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 21, 
     originalPrice: 35,
     interval: 'month',
+    durationDays: 30,
     badge: 'Popular',
     isSpecial: false
   },
@@ -124,6 +125,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 50, 
     originalPrice: 90,
     interval: '3 months',
+    durationDays: 90,
     badge: 'Best Value',
     isSpecial: true
   },
@@ -133,6 +135,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 175, 
     originalPrice: 350,
     interval: 'year',
+    durationDays: 365,
     badge: 'Save 50%',
     isSpecial: false
   },

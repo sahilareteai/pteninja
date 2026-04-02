@@ -1845,11 +1845,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     
     try {
       const userRef = doc(db, 'users', user.uid);
-      const planDurationMs = selectedPlan.id === 'annual'
-        ? 365 * 24 * 60 * 60 * 1000
-        : selectedPlan.id === 'quarterly'
-          ? 90 * 24 * 60 * 60 * 1000
-          : 30 * 24 * 60 * 60 * 1000;
+      const planDurationMs = selectedPlan.durationDays * 24 * 60 * 60 * 1000;
       const updateData: any = {
         subscriptionStatus: 'active',
         planId: selectedPlan.id,
