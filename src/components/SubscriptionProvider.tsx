@@ -64,22 +64,35 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (!localSessionId) {
           localSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
           localStorage.setItem('pte_session_id', localSessionId);
-          
-          // Update firestore with new session ID
-          updateDoc(userRef, { currentSessionId: localSessionId }).catch(() => {
-            // If doc doesn't exist yet, it will be created in the snapshot listener's else block
-          });
         }
+
+        // Always claim this device's session in Firestore.
+        // This fixes a race condition where login() pre-sets a new session ID in
+        // localStorage but onAuthStateChanged previously skipped the Firestore write
+        // (because a local ID already existed), causing an immediate false mismatch.
+        let sessionClaimed = false;
+        updateDoc(userRef, { currentSessionId: localSessionId })
+          .then(() => { sessionClaimed = true; })
+          .catch(() => {
+            // Doc doesn't exist yet – it will be created in the snapshot handler's
+            // else block. sessionClaimed will be set to true once the snapshot
+            // confirms our session ID is reflected in Firestore.
+          });
 
         // Listen for real-time updates to user data
         unsubDoc = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as UserData;
             
-            // Session check
+            // Session check – only enforce after our session is established in
+            // Firestore to prevent false "session expired" errors during sign-in.
             const currentLocalSessionId = localStorage.getItem('pte_session_id');
-            if (userData.currentSessionId && currentLocalSessionId && userData.currentSessionId !== currentLocalSessionId) {
-              // Another device logged in
+            // Confirm session is claimed once Firestore reflects our session ID.
+            if (userData.currentSessionId === currentLocalSessionId) {
+              sessionClaimed = true;
+            }
+            if (sessionClaimed && userData.currentSessionId && currentLocalSessionId && userData.currentSessionId !== currentLocalSessionId) {
+              // Another device logged in after we established our session
               auth.signOut();
               localStorage.removeItem('pte_session_id');
               setSessionError("You have been signed out because your account is being used on another device.");
@@ -446,12 +459,20 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
               <p className="text-gray-600 dark:text-gray-400 mb-8">
                 {sessionError}
               </p>
-              <button
-                onClick={() => setSessionError(null)}
-                className="w-full py-3 px-6 bg-primary text-white rounded-xl font-semibold hover:opacity-90 transition-opacity"
-              >
-                Got it
-              </button>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => { setSessionError(null); login(); }}
+                  className="w-full py-3 px-6 bg-app-primary text-white rounded-xl font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Sign In Again
+                </button>
+                <button
+                  onClick={() => setSessionError(null)}
+                  className="w-full py-3 px-6 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Dismiss
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
