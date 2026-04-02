@@ -13,8 +13,10 @@ export const generateMockTests = (): MockTest[] => {
     const seed = i;
     const shuffle = <T>(array: T[], s: number) => {
       const shuffled = [...array];
+      let seed = s;
       for (let j = shuffled.length - 1; j > 0; j--) {
-        const k = (s * (j + 1)) % (j + 1);
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        const k = seed % (j + 1);
         [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
       }
       return shuffled;

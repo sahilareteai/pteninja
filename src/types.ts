@@ -1382,23 +1382,52 @@ taskGroups.forEach(groupKey => {
         newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
       }
     } else if (category === 'Describe Image') {
+        // Seeded deterministic RNG based on task index so images are stable across page loads
+        let diSeed = i * 2654435761;
+        const diRng = () => {
+          diSeed ^= diSeed << 13;
+          diSeed ^= diSeed >> 17;
+          diSeed ^= diSeed << 5;
+          return (diSeed >>> 0) / 0xffffffff;
+        };
+
+        const diLabelSets = [
+          ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+          ['2016', '2017', '2018', '2019', '2020', '2021', '2022', '2023', '2024'],
+          ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East', 'Africa'],
+          ['Q1 2022', 'Q2 2022', 'Q3 2022', 'Q4 2022', 'Q1 2023', 'Q2 2023', 'Q3 2023', 'Q4 2023'],
+          ['Product A', 'Product B', 'Product C', 'Product D', 'Product E', 'Product F'],
+          ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'History', 'Geography'],
+          ['Under 18', '18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'],
+          ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          ['Agriculture', 'Manufacturing', 'Services', 'Technology', 'Healthcare', 'Education'],
+          ['Coal', 'Oil', 'Natural Gas', 'Nuclear', 'Solar', 'Wind', 'Hydro'],
+        ];
+        const diDatasetLabels = [
+          'Revenue', 'Population', 'Temperature (°C)', 'Exports (USD)', 'Consumption',
+          'Growth Rate (%)', 'Employment (%)', 'Sales Volume', 'Production Output', 'Import Value',
+          'Investment (USD)', 'Expenditure', 'Market Share (%)', 'Demand Index', 'Supply Units',
+        ];
+
         const chartTypes = ['bar', 'line', 'pie', 'doughnut', 'radar', 'polarArea', 'bubble', 'scatter'];
         const chartType = chartTypes[i % chartTypes.length];
-        const numDataPoints = 5 + (i % 8); // 5 to 12 data points
-        const labels = Array.from({length: numDataPoints}, (_, j) => `20${10 + j}`);
-        const data = Array.from({length: numDataPoints}, () => Math.floor(Math.random() * 1000) + 50);
-        
+        const labelSet = diLabelSets[i % diLabelSets.length];
+        const numDataPoints = Math.min(4 + (i % 6) + 1, labelSet.length); // 5 to 10, capped to label set size
+        const labels = labelSet.slice(0, numDataPoints);
+        const datasetLabel = diDatasetLabels[i % diDatasetLabels.length];
+        const data = Array.from({length: numDataPoints}, () => Math.floor(diRng() * 950) + 50);
+
         let chartConfig;
         if (chartType === 'bubble') {
           chartConfig = {
             type: 'bubble',
             data: {
               datasets: [{
-                label: `Dataset ${i}`,
+                label: datasetLabel,
                 data: Array.from({length: numDataPoints}, (_,j) => ({
                   x: 10 + j * 5,
-                  y: Math.floor(Math.random() * 100),
-                  r: Math.floor(Math.random() * 20) + 5
+                  y: Math.floor(diRng() * 100),
+                  r: Math.floor(diRng() * 20) + 5
                 }))
               }]
             }
@@ -1408,10 +1437,10 @@ taskGroups.forEach(groupKey => {
             type: 'scatter',
             data: {
               datasets: [{
-                label: `Dataset ${i}`,
-                data: Array.from({length: numDataPoints}, (_,j) => ({
-                  x: Math.floor(Math.random() * 100),
-                  y: Math.floor(Math.random() * 100)
+                label: datasetLabel,
+                data: Array.from({length: numDataPoints}, () => ({
+                  x: Math.floor(diRng() * 100),
+                  y: Math.floor(diRng() * 100)
                 }))
               }]
             }
@@ -1422,7 +1451,7 @@ taskGroups.forEach(groupKey => {
             data: {
               labels: labels,
               datasets: [{
-                label: `Revenue ${i}`,
+                label: datasetLabel,
                 data: data
               }]
             }
