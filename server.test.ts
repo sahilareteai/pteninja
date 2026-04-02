@@ -2,15 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
 // Use vi.hoisted so the mock functions are available when vi.mock is hoisted
-const mockPaymentIntentsCreate = vi.hoisted(() => vi.fn());
-const mockCustomersCreate      = vi.hoisted(() => vi.fn());
-const mockPricesCreate         = vi.hoisted(() => vi.fn());
-const mockSubscriptionsCreate  = vi.hoisted(() => vi.fn());
-const mockSubscriptionsCancel  = vi.hoisted(() => vi.fn());
+const mockPaymentIntentsCreate   = vi.hoisted(() => vi.fn());
+const mockPaymentIntentsRetrieve = vi.hoisted(() => vi.fn());
+const mockCustomersCreate        = vi.hoisted(() => vi.fn());
+const mockPricesCreate           = vi.hoisted(() => vi.fn());
+const mockSubscriptionsCreate    = vi.hoisted(() => vi.fn());
+const mockSubscriptionsCancel    = vi.hoisted(() => vi.fn());
 
 vi.mock("stripe", () => {
   class MockStripe {
-    paymentIntents = { create: mockPaymentIntentsCreate };
+    paymentIntents = { create: mockPaymentIntentsCreate, retrieve: mockPaymentIntentsRetrieve };
     customers      = { create: mockCustomersCreate };
     prices         = { create: mockPricesCreate };
     subscriptions  = { create: mockSubscriptionsCreate, cancel: mockSubscriptionsCancel };
@@ -106,6 +107,7 @@ describe("POST /api/create-subscription", () => {
     mockPricesCreate.mockReset();
     mockSubscriptionsCreate.mockReset();
     mockSubscriptionsCancel.mockReset();
+    mockPaymentIntentsRetrieve.mockReset();
 
     // Default stubs
     mockCustomersCreate.mockResolvedValue({ id: "cus_test" });
@@ -151,6 +153,27 @@ describe("POST /api/create-subscription", () => {
     expect(res.body.clientSecret).toBe("pi_secret_existing");
     expect(res.body.customerId).toBe("cus_existing");
     expect(mockCustomersCreate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to paymentIntents.retrieve when payment_intent is a string ID (expand skipped)", async () => {
+    // Stripe sometimes returns payment_intent as a plain string ID even when
+    // expand was requested (e.g. for recently-settled invoices).
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_fallback",
+      status: "incomplete",
+      current_period_end: 1234567890,
+      cancel_at_period_end: false,
+      latest_invoice: {
+        payment_intent: "pi_string_id", // unexpanded string
+      },
+    });
+    mockPaymentIntentsRetrieve.mockResolvedValue({ client_secret: "pi_fetched_secret" });
+
+    const res = await request(app).post("/api/create-subscription").send(validBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.clientSecret).toBe("pi_fetched_secret");
+    expect(mockPaymentIntentsRetrieve).toHaveBeenCalledWith("pi_string_id");
   });
 
   it("returns immediatelyActive when subscription is already active (returning customer with saved card)", async () => {

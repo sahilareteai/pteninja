@@ -89,50 +89,58 @@ app.post("/api/create-subscription", async (req, res) => {
       unit_amount: amount, // already in cents
     });
 
+    // Use the default payment_behavior ("allow_incomplete") so Stripe works
+    // correctly for both new customers (no saved card → subscription starts
+    // incomplete, client_secret returned) and returning customers (saved card
+    // → Stripe auto-charges, subscription immediately active).
+    // "default_incomplete" explicitly forbids customers who have a saved
+    // default_payment_method, which breaks returning customers.
     const subscription = await stripeInstance.subscriptions.create({
       customer: customerId,
       items: [{ price: price.id }],
-      payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       expand: ["latest_invoice.payment_intent"],
     }) as unknown as SubscriptionRuntime;
 
-    // Stripe expands latest_invoice.payment_intent when requested.
-    // The field is a plain string when the expand was skipped (payment already
-    // collected server-side, e.g. returning customer with a saved default method).
+    // If the subscription is already active/trialing, the customer's saved
+    // payment method was charged immediately — no client-side action needed.
+    if (subscription.status === "active" || subscription.status === "trialing") {
+      return res.json({
+        clientSecret: null,
+        immediatelyActive: true,
+        subscriptionId: subscription.id,
+        customerId,
+        currentPeriodEnd: subscription.current_period_end,
+      });
+    }
+
+    // Subscription is incomplete — extract the client_secret so the frontend
+    // can confirm payment via the Stripe Payment Element.
     const paymentIntent = subscription.latest_invoice?.payment_intent;
-    const clientSecret =
-      paymentIntent && typeof paymentIntent === "object"
-        ? paymentIntent.client_secret ?? null
-        : null;
+    let clientSecret: string | null = null;
+
+    if (paymentIntent && typeof paymentIntent === "object") {
+      // Expand succeeded — payment_intent is the full object.
+      clientSecret = paymentIntent.client_secret ?? null;
+    } else if (paymentIntent && typeof paymentIntent === "string") {
+      // Expand was skipped (e.g. invoice already settled) — fetch by ID.
+      const pi = await stripeInstance.paymentIntents.retrieve(paymentIntent);
+      clientSecret = (pi as unknown as { client_secret: string | null }).client_secret ?? null;
+    }
 
     if (!clientSecret) {
-      // No client-side confirmation needed.  This happens when the customer
-      // already has a saved default payment method in Stripe and the first
-      // invoice was charged immediately (subscription is now "active" or
-      // "trialing" without requiring any frontend interaction).
-      if (subscription.status === "active" || subscription.status === "trialing") {
-        return res.json({
-          clientSecret: null,
-          immediatelyActive: true,
-          subscriptionId: subscription.id,
-          customerId,
-          currentPeriodEnd: subscription.current_period_end,
-        });
-      }
-
-      // Unexpected state — subscription was created but is neither active nor
-      // has a payment_intent for the client to confirm.  Cancel the orphaned
-      // record and return a useful error.
+      // Unexpected: subscription incomplete but no way to confirm payment.
+      // Cancel the orphaned record and fail gracefully.
       try {
         await stripeInstance.subscriptions.cancel(subscription.id);
       } catch {
         // Best-effort cleanup — ignore any cancel error
       }
       console.error(
-        "Stripe subscription created but clientSecret is missing and status is not active. status=%s, sub=%s",
+        "Stripe subscription incomplete but no clientSecret. status=%s, sub=%s, paymentIntent=%s",
         subscription.status,
-        subscription.id
+        subscription.id,
+        typeof paymentIntent === "string" ? paymentIntent : typeof paymentIntent
       );
       return res.status(500).json({
         error: "Payment could not be initialised. Please try again or contact support.",
