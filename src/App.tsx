@@ -63,7 +63,7 @@ import { PromoService, PromoCode } from './services/promoService';
 import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
-import { db, doc, updateDoc, handleFirestoreError, OperationType } from './firebase';
+import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
 import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
 
 // Mock Data for Initial State
@@ -1650,7 +1650,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
       <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
           <StatItem value="98%" label="Accuracy Rate" />
-          <StatItem value="50k+" label="Practice Tasks" />
+          <StatItem value="5k+" label="Practice Tasks" />
           <StatItem value="15k+" label="Active Ninjas" />
           <StatItem value="24/7" label="AI Support" />
         </div>
@@ -5009,6 +5009,7 @@ function TaskModal({
   const handleFinish = async () => {
     try {
       let result;
+      let finalInput = userInput;
       if (task.id === 'personal-intro') {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
           const stopPromise = new Promise(resolve => {
@@ -5204,8 +5205,6 @@ function TaskModal({
           };
         }
       } else {
-        let finalInput = userInput;
-        
         if (!finalInput.trim() && task.category !== 'Re-order Paragraphs') {
            // Instead of throwing, provide a default very low score result for empty submissions
            result = {
