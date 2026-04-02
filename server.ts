@@ -137,6 +137,46 @@ app.post("/api/customer-portal", async (req, res) => {
   }
 });
 
+// ─── Apply Retention Discount ─────────────────────────────────────────────────
+// Applies a 10% off "once" coupon to the subscription as a retention offer.
+// The coupon PTENINJA_RETENTION_10 is created on first use and reused thereafter.
+app.post("/api/apply-retention-discount", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId } = req.body;
+  if (!subscriptionId) {
+    return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  const COUPON_ID = "PTENINJA_RETENTION_10";
+
+  try {
+    // Ensure the coupon exists — create it if not.
+    try {
+      await stripeInstance.coupons.retrieve(COUPON_ID);
+    } catch {
+      await stripeInstance.coupons.create({
+        id: COUPON_ID,
+        percent_off: 10,
+        duration: "once",
+        name: "10% loyalty discount",
+      });
+    }
+
+    await stripeInstance.subscriptions.update(subscriptionId, {
+      coupon: COUPON_ID,
+    } as any);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Apply retention discount error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // ─── Cancel Subscription (at period end) ─────────────────────────────────────
 // Marks the subscription to cancel at the end of the current billing period.
 // The user keeps access until that date; no further charges are made.

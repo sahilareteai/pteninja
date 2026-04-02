@@ -2438,7 +2438,9 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const isGuest = user?.subscriptionStatus === 'guest';
   const isActive = user?.subscriptionStatus === 'active';
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelStep, setCancelStep] = useState<'offer' | 'confirm'>('offer');
   const [isCanceling, setIsCanceling] = useState(false);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
@@ -2487,6 +2489,29 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     }
   };
 
+  const handleApplyRetentionDiscount = async () => {
+    if (!user?.stripeSubscriptionId) return;
+    setIsApplyingDiscount(true);
+    try {
+      const res = await fetch('/api/apply-retention-discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowCancelDialog(false);
+        toast.success('🎉 10% discount applied to your next billing cycle. Thanks for staying!');
+      } else {
+        toast.error(data.error || 'Could not apply discount');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsApplyingDiscount(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     if (!user?.stripeSubscriptionId) return;
     setIsCanceling(true);
@@ -2500,6 +2525,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       if (res.ok) {
         await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: true });
         setShowCancelDialog(false);
+        setCancelStep('offer');
         toast.success('Subscription cancelled. You keep full access until the end of your billing period.');
       } else {
         toast.error(data.error || 'Failed to cancel subscription');
@@ -2536,45 +2562,81 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
 
   return (
     <>
-    {/* Cancel Confirmation Dialog */}
+    {/* Cancel / Retention Dialog */}
     <AnimatePresence>
       {showCancelDialog && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <motion.div
+            key={cancelStep}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="w-full max-w-md bg-app-surface border border-red-500/20 rounded-3xl p-8 shadow-2xl space-y-6"
+            className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl space-y-6"
           >
-            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
-              <AlertCircle className="text-red-500" size={28} />
-            </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-bold text-app-text">Cancel Subscription?</h3>
-              <p className="text-app-text-muted text-sm leading-relaxed">
-                Your subscription will remain active until{' '}
-                <span className="font-bold text-app-text">
-                  {user?.subscriptionEndsAt
-                    ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
-                    : 'the end of your billing period'}
-                </span>. No further charges will be made after that date.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCancelDialog(false)}
-                className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
-              >
-                Keep Subscription
-              </button>
-              <button
-                onClick={handleCancelSubscription}
-                disabled={isCanceling}
-                className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isCanceling ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Cancel'}
-              </button>
-            </div>
+            {cancelStep === 'offer' ? (
+              <>
+                <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                  <span className="text-3xl">🎁</span>
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-app-text">Wait! Before you cancel…</h3>
+                  <p className="text-app-text-muted text-sm leading-relaxed">
+                    We'd hate to see you go. As a valued member, we'd like to offer you{' '}
+                    <span className="font-bold text-app-primary">10% off your next billing cycle</span>{' '}
+                    to keep your PTENinja subscription.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleApplyRetentionDiscount}
+                    disabled={isApplyingDiscount}
+                    className="w-full py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isApplyingDiscount ? <Loader2 className="animate-spin" size={18} /> : '🎉'}
+                    {isApplyingDiscount ? 'Applying discount…' : 'Keep Plan & Save 10%'}
+                  </button>
+                  <button
+                    onClick={() => setCancelStep('confirm')}
+                    disabled={isApplyingDiscount}
+                    className="w-full py-3 bg-transparent text-app-text-muted text-sm font-medium rounded-xl hover:text-app-text transition-all"
+                  >
+                    No thanks, still cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                  <AlertCircle className="text-red-500" size={28} />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-app-text">Cancel Subscription?</h3>
+                  <p className="text-app-text-muted text-sm leading-relaxed">
+                    Your subscription will remain active until{' '}
+                    <span className="font-bold text-app-text">
+                      {user?.subscriptionEndsAt
+                        ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                        : 'the end of your billing period'}
+                    </span>. No further charges will be made after that date.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowCancelDialog(false); setCancelStep('offer'); }}
+                    className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
+                  >
+                    Keep Subscription
+                  </button>
+                  <button
+                    onClick={handleCancelSubscription}
+                    disabled={isCanceling}
+                    className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isCanceling ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Cancel'}
+                  </button>
+                </div>
+              </>
+            )}
           </motion.div>
         </div>
       )}
@@ -2693,7 +2755,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </button>
               {!user?.cancelAtPeriodEnd && (
                 <button
-                  onClick={() => setShowCancelDialog(true)}
+                  onClick={() => { setCancelStep('offer'); setShowCancelDialog(true); }}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 text-red-500 font-bold rounded-xl hover:bg-red-500/20 transition-all text-sm"
                 >
                   <X size={16} />
