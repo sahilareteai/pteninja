@@ -1650,7 +1650,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
       <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
           <StatItem value="98%" label="Accuracy Rate" />
-          <StatItem value="5k+" label="Practice Tasks" />
+          <StatItem value="22k+" label="Practice Tasks" />
           <StatItem value="15k+" label="Active Ninjas" />
           <StatItem value="24/7" label="AI Support" />
         </div>
@@ -1755,6 +1755,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [emailInput, setEmailInput] = useState(user?.email || '');
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  // Stripe subscription details returned from the server
+  const [pendingSubscriptionId, setPendingSubscriptionId] = useState<string | null>(null);
+  const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
+  const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
   const handleApplyPromo = async () => {
     const promo = await PromoService.validate(promoInput);
@@ -1795,13 +1799,23 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       }
 
       const convertedAmount = CurrencyService.convert(basePrice);
-      const response = await fetch('/api/create-payment-intent', {
+      const amountInCents = Math.round((convertedAmount ?? basePrice) * 100);
+      if (!amountInCents || amountInCents <= 0 || !Number.isFinite(amountInCents)) {
+        toast.error("Could not calculate payment amount. Please try again.");
+        return;
+      }
+
+      const receiptEmail = (emailInput || user?.email || "").trim() || undefined;
+      const response = await fetch('/api/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          amount: convertedAmount * 100, 
+          planId: plan.id,
+          planName: plan.name,
+          amount: amountInCents,
           currency: currency.code.toLowerCase(),
-          receipt_email: emailInput || user?.email
+          email: receiptEmail,
+          existingCustomerId: user?.stripeCustomerId || undefined,
         }),
       });
       
@@ -1814,9 +1828,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
         } catch (e) {
-          // If not JSON, it might be a Vercel error page
           if (errorText.includes("FUNCTION_INVOCATION_FAILED")) {
-            errorMessage = "Payment server is currently unavailable (Function Invocation Failed). Please check Vercel logs.";
+            errorMessage = "Payment server is currently unavailable. Please check Vercel logs.";
           } else if (errorText.includes("Internal Server Error")) {
             errorMessage = "Server error occurred. Please check your STRIPE_SECRET_KEY configuration.";
           }
@@ -1829,6 +1842,20 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       const data = await response.json();
       if (data.clientSecret) {
         setClientSecret(data.clientSecret);
+        setPendingSubscriptionId(data.subscriptionId ?? null);
+        setPendingCustomerId(data.customerId ?? null);
+        setPendingPeriodEnd(data.currentPeriodEnd ?? null);
+      } else if (data.immediatelyActive) {
+        // Returning customer: Stripe auto-charged via their saved payment method.
+        // No frontend card form needed — update Firestore directly.
+        setPendingSubscriptionId(data.subscriptionId ?? null);
+        setPendingCustomerId(data.customerId ?? null);
+        setPendingPeriodEnd(data.currentPeriodEnd ?? null);
+        await handlePaymentSuccess({
+          subscriptionId: data.subscriptionId ?? null,
+          customerId: data.customerId ?? null,
+          periodEnd: data.currentPeriodEnd ?? null,
+        });
       } else {
         toast.error(data.error || "Failed to initialize payment");
       }
@@ -1840,25 +1867,37 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     }
   };
 
-  const handlePaymentSuccess = async () => {
+  const handlePaymentSuccess = async (overrides?: { subscriptionId?: string | null; customerId?: string | null; periodEnd?: number | null }) => {
     if (!user?.uid) return;
     
     try {
       const userRef = doc(db, 'users', user.uid);
+      // Prefer explicitly-passed values (e.g. from immediatelyActive flow where
+      // React state may not have flushed yet) then fall back to state.
+      const resolvedSubscriptionId = overrides?.subscriptionId !== undefined ? overrides.subscriptionId : pendingSubscriptionId;
+      const resolvedCustomerId     = overrides?.customerId     !== undefined ? overrides.customerId     : pendingCustomerId;
+      const resolvedPeriodEnd      = overrides?.periodEnd      !== undefined ? overrides.periodEnd      : pendingPeriodEnd;
+
+      // Use Stripe's authoritative period end if available, otherwise fall back
+      const periodEnd = resolvedPeriodEnd
+        ? new Date(resolvedPeriodEnd * 1000).toISOString()
+        : new Date(Date.now() + selectedPlan.durationDays * 24 * 60 * 60 * 1000).toISOString();
+
       const updateData: any = {
         subscriptionStatus: 'active',
-        subscriptionTier: selectedPlan.id,
-        subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+        planId: selectedPlan.id,
+        subscriptionEndsAt: periodEnd,
+        cancelAtPeriodEnd: false,
       };
 
-      if (emailInput && !user.email) {
-        updateData.email = emailInput;
-      }
+      if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
+      if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
+      if (emailInput && !user.email) updateData.email = emailInput.trim();
 
       await updateDoc(userRef, updateData);
       
       setShowSuccess(true);
-      toast.success(`Successfully upgraded to ${selectedPlan.name}!`);
+      toast.success(`Successfully subscribed to ${selectedPlan.name}!`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
@@ -1889,7 +1928,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               </div>
               
               <div className="space-y-4">
-                <h2 className="text-4xl font-black text-app-text tracking-tighter">PAYMENT CONFIRMED!</h2>
+                <h2 className="text-4xl font-black text-app-text tracking-tighter">SUBSCRIPTION ACTIVE!</h2>
                 <div className="space-y-2">
                   <p className="text-app-text-muted text-lg">Welcome to the Pro Ninja family.</p>
                   <div className="p-4 bg-app-bg/50 border border-app-primary/10 rounded-2xl inline-block">
@@ -1906,7 +1945,19 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </div>
                 <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
                   <p className="text-[10px] text-app-text-muted uppercase font-bold">Amount</p>
-                  <p className="text-sm font-bold text-app-text">{formatPrice(selectedPlan?.price)}</p>
+                  <p className="text-sm font-bold text-app-text">{formatPrice(appliedPromo ? PromoService.calculateDiscount(selectedPlan?.price, appliedPromo.discountPercent) : selectedPlan?.price)}</p>
+                </div>
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Next Renewal</p>
+                  <p className="text-sm font-bold text-app-text">
+                    {pendingPeriodEnd
+                      ? new Date(pendingPeriodEnd * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </p>
+                </div>
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Billing</p>
+                  <p className="text-sm font-bold text-app-text capitalize">{selectedPlan?.interval}</p>
                 </div>
               </div>
 
@@ -1917,9 +1968,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 START TRAINING NOW
               </button>
               
-              <p className="text-xs text-app-text-muted/50">
-                Transaction ID: PTE-{Math.random().toString(36).substr(2, 9).toUpperCase()}
-              </p>
+              {pendingSubscriptionId && (
+                <p className="text-[10px] text-app-text-muted/40">
+                  Subscription ID: {pendingSubscriptionId}
+                </p>
+              )}
             </div>
           ) : showEmailPrompt ? (
             <div className="w-full max-w-md space-y-6 py-8">
@@ -1935,6 +1988,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                   type="email"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const trimmed = emailInput.trim();
+                      if (trimmed.includes('@') && trimmed.includes('.')) {
+                        setEmailInput(trimmed);
+                        setShowEmailPrompt(false);
+                        handleSelectPlan(selectedPlan);
+                      }
+                    }
+                  }}
                   placeholder="your@email.com"
                   className="w-full px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all"
                 />
@@ -1944,21 +2007,26 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       setShowEmailPrompt(false);
                       setSelectedPlan(null);
                     }}
-                    className="flex-1 py-3 px-6 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:bg-app-primary/5 transition-all"
+                    disabled={isProcessing}
+                    className="flex-1 py-3 px-6 bg-app-surface border border-app-primary/10 text-app-text-muted font-bold rounded-xl hover:bg-app-primary/5 transition-all disabled:opacity-50"
                   >
                     Back
                   </button>
                   <button 
+                    disabled={isProcessing}
                     onClick={() => {
-                      if (emailInput.includes('@')) {
+                      const trimmed = emailInput.trim();
+                      if (trimmed.includes('@') && trimmed.includes('.')) {
+                        setEmailInput(trimmed);
                         setShowEmailPrompt(false);
                         handleSelectPlan(selectedPlan);
                       } else {
                         toast.error("Please enter a valid email address");
                       }
                     }}
-                    className="flex-1 py-3 px-6 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
+                    className="flex-1 py-3 px-6 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
+                    {isProcessing ? <Loader2 className="animate-spin" size={16} /> : null}
                     Continue
                   </button>
                 </div>
@@ -2106,6 +2174,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     <CheckoutForm 
                       amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
                       clientSecret={clientSecret}
+                      isSubscription={true}
                       onCancel={() => {
                         setSelectedPlan(null);
                         setClientSecret(null);
@@ -2385,8 +2454,15 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
   const isActive = user?.subscriptionStatus === 'active';
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelStep, setCancelStep] = useState<'offer' | 'confirm'>('offer');
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
   const getStatusColor = () => {
+    if (isActive && user?.cancelAtPeriodEnd) return 'text-orange-400 bg-orange-400/10 border-orange-400/20';
     if (isActive) return 'text-green-500 bg-green-500/10 border-green-500/20';
     if (isTrial) return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
     if (isGuest) return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
@@ -2408,7 +2484,191 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     return 0;
   };
 
+  const handleManageBilling = async () => {
+    if (!user?.stripeCustomerId) return;
+    setIsOpeningPortal(true);
+    try {
+      const res = await fetch('/api/customer-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: user.stripeCustomerId, returnUrl: window.location.href }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.error(data.error || 'Could not open billing portal');
+      }
+    } catch {
+      toast.error('Could not connect to billing portal');
+    } finally {
+      setIsOpeningPortal(false);
+    }
+  };
+
+  const handleApplyRetentionDiscount = async () => {
+    if (!user?.stripeSubscriptionId) return;
+    setIsApplyingDiscount(true);
+    try {
+      const res = await fetch('/api/apply-retention-discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowCancelDialog(false);
+        toast.success('🎉 10% discount applied to your next billing cycle. Thanks for staying!');
+      } else {
+        toast.error(data.error || 'Could not apply discount');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsApplyingDiscount(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!user?.stripeSubscriptionId && !user?.stripeCustomerId) {
+      toast.error('Subscription information not found. Please contact support to cancel your subscription.');
+      return;
+    }
+    setIsCanceling(true);
+    try {
+      const res = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionId: user.stripeSubscriptionId || undefined,
+          customerId: user.stripeCustomerId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const updates: Record<string, unknown> = { cancelAtPeriodEnd: true };
+        // If the server discovered the subscriptionId via customerId, persist it
+        if (data.subscriptionId && !user?.stripeSubscriptionId) {
+          updates.stripeSubscriptionId = data.subscriptionId;
+        }
+        await updateDoc(doc(db, 'users', user.uid), updates);
+        setShowCancelDialog(false);
+        setCancelStep('offer');
+        toast.success('Subscription cancelled. You keep full access until the end of your billing period.');
+      } else {
+        toast.error(data.error || 'Failed to cancel subscription');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!user?.stripeSubscriptionId) return;
+    setIsReactivating(true);
+    try {
+      const res = await fetch('/api/reactivate-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: false });
+        toast.success('Subscription reactivated! Your plan will continue to renew automatically.');
+      } else {
+        toast.error(data.error || 'Failed to reactivate subscription');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
   return (
+    <>
+    {/* Cancel / Retention Dialog */}
+    <AnimatePresence>
+      {showCancelDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <motion.div
+            key={cancelStep}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl space-y-6"
+          >
+            {cancelStep === 'offer' ? (
+              <>
+                <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                  <span className="text-3xl">🎁</span>
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-app-text">Wait! Before you cancel…</h3>
+                  <p className="text-app-text-muted text-sm leading-relaxed">
+                    We'd hate to see you go. As a valued member, we'd like to offer you{' '}
+                    <span className="font-bold text-app-primary">10% off your next billing cycle</span>{' '}
+                    to keep your PTENinja subscription.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleApplyRetentionDiscount}
+                    disabled={isApplyingDiscount}
+                    className="w-full py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isApplyingDiscount ? <Loader2 className="animate-spin" size={18} /> : '🎉'}
+                    {isApplyingDiscount ? 'Applying discount…' : 'Keep Plan & Save 10%'}
+                  </button>
+                  <button
+                    onClick={() => setCancelStep('confirm')}
+                    disabled={isApplyingDiscount}
+                    className="w-full py-3 bg-transparent text-app-text-muted text-sm font-medium rounded-xl hover:text-app-text transition-all"
+                  >
+                    No thanks, still cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                  <AlertCircle className="text-red-500" size={28} />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-app-text">Cancel Subscription?</h3>
+                  <p className="text-app-text-muted text-sm leading-relaxed">
+                    Your subscription will remain active until{' '}
+                    <span className="font-bold text-app-text">
+                      {user?.subscriptionEndsAt
+                        ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                        : 'the end of your billing period'}
+                    </span>. No further charges will be made after that date.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowCancelDialog(false); setCancelStep('offer'); }}
+                    className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
+                  >
+                    Keep Subscription
+                  </button>
+                  <button
+                    onClick={handleCancelSubscription}
+                    disabled={isCanceling}
+                    className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isCanceling ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Cancel'}
+                  </button>
+                </div>
+              </>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -2462,24 +2722,86 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </button>
             )}
           </div>
+
+          {/* Cancels-at-period-end warning */}
+          {isActive && user?.cancelAtPeriodEnd && (
+            <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-start gap-3">
+              <AlertCircle className="text-orange-400 shrink-0 mt-0.5" size={18} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-orange-400">Subscription Cancels Soon</p>
+                <p className="text-xs text-app-text-muted mt-0.5">
+                  Your access continues until{' '}
+                  <span className="font-bold text-app-text">
+                    {user.subscriptionEndsAt
+                      ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                      : 'the end of your billing period'}
+                  </span>. No further charges will be made.
+                </p>
+              </div>
+              <button
+                onClick={handleReactivate}
+                disabled={isReactivating}
+                className="shrink-0 px-3 py-1.5 bg-app-primary text-app-bg text-xs font-bold rounded-lg hover:bg-app-accent transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isReactivating ? <Loader2 className="animate-spin" size={12} /> : null}
+                Reactivate
+              </button>
+            </div>
+          )}
           
           <div className="space-y-3 md:space-y-4">
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
               <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Current Plan</p>
               <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                {isActive ? `${user.planId?.toUpperCase()} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
+                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
-            {isActive && (
+            {isActive && user?.subscriptionEndsAt && (
               <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
-                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Next Billing Date</p>
+                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">
+                  {user?.cancelAtPeriodEnd ? 'Expiry Date' : 'Next Renewal'}
+                </p>
                 <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                  {new Date(user.subscriptionEndsAt).toLocaleDateString()}
+                  {new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               </div>
             )}
           </div>
+
+          {/* Subscription management actions */}
+          {isActive && (
+            <div className="space-y-3 pt-2">
+              {user?.stripeCustomerId && (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={isOpeningPortal}
+                  aria-label={isOpeningPortal ? 'Opening billing portal…' : 'Manage billing and invoices'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-sm disabled:opacity-50"
+                >
+                  {isOpeningPortal ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <CreditCard size={16} aria-hidden="true" />}
+                  {isOpeningPortal ? <span>Opening Portal…</span> : <span>Manage Billing &amp; Invoices</span>}
+                </button>
+              )}
+              {!user?.cancelAtPeriodEnd && (
+                <button
+                  onClick={() => { setCancelStep('offer'); setShowCancelDialog(true); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 text-red-500 font-bold rounded-xl hover:bg-red-500/20 transition-all text-sm"
+                >
+                  <X size={16} />
+                  Cancel Subscription
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Legal notice about card storage */}
+          {isActive && (
+            <p className="text-[10px] text-app-text-muted/40 leading-relaxed">
+              Payments and card details are managed securely by Stripe. PTENinja does not store your card number.{' '}
+              <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-app-text-muted">Stripe Privacy Policy</a>
+            </p>
+          )}
         </div>
 
         <div className="bg-app-surface p-8 rounded-3xl border border-app-primary/20 space-y-6">
@@ -2555,6 +2877,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
         </div>
       </div>
     </motion.div>
+    </>
   );
 }
 

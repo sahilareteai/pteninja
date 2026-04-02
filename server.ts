@@ -21,24 +21,373 @@ const getStripe = () => {
   return stripe;
 };
 
+// Map planId → Stripe recurring interval
+const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number }> = {
+  monthly:   { interval: "month", interval_count: 1 },
+  quarterly: { interval: "month", interval_count: 3 },
+  annual:    { interval: "year",  interval_count: 1 },
+};
+
+// Minimal subscription shape we need at runtime.
+// Stripe SDK v21 wraps responses in Stripe.Response<T> and doesn't surface every
+// field on the TS types; we rely on the well-documented REST contract instead.
+interface SubscriptionRuntime {
+  id: string;
+  status: string;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+  // latest_invoice is a string ID when NOT expanded, or a full Invoice object when expanded.
+  latest_invoice?: {
+    id?: string;
+    // payment_intent is a string ID when NOT expanded, or a full PI object when expanded.
+    payment_intent?: { client_secret: string | null } | string | null;
+  } | string | null;
+}
+
+// Extract a payment client_secret from the subscription, handling every possible
+// shape Stripe can return (fully-expanded PI object, string PI ID, string invoice ID,
+// or missing expand entirely).  Makes extra API calls only when necessary.
+async function extractClientSecret(
+  stripeInstance: Stripe,
+  subscription: SubscriptionRuntime,
+): Promise<string | null> {
+  const rawInvoice = subscription.latest_invoice;
+
+  // ── Case 1: fully-expanded Invoice object ──────────────────────────────────
+  if (rawInvoice && typeof rawInvoice === "object") {
+    const pi = rawInvoice.payment_intent;
+    if (pi && typeof pi === "object") {
+      // Fully expanded – use client_secret directly
+      return pi.client_secret ?? null;
+    }
+    if (typeof pi === "string") {
+      // Invoice expanded but PI is a string ID – retrieve PI
+      const piObj = await stripeInstance.paymentIntents.retrieve(pi) as unknown as { client_secret: string | null };
+      return piObj.client_secret ?? null;
+    }
+    // PI is null/undefined on the invoice object – fall through to invoice retrieval
+    if (rawInvoice.id) {
+      return retrieveClientSecretFromInvoice(stripeInstance, rawInvoice.id);
+    }
+    return null;
+  }
+
+  // ── Case 2: latest_invoice is a plain string ID (expand was not applied) ───
+  if (typeof rawInvoice === "string") {
+    return retrieveClientSecretFromInvoice(stripeInstance, rawInvoice);
+  }
+
+  return null;
+}
+
+// Retrieve an invoice by ID and extract the payment client_secret.
+async function retrieveClientSecretFromInvoice(
+  stripeInstance: Stripe,
+  invoiceId: string,
+): Promise<string | null> {
+  const invoice = await stripeInstance.invoices.retrieve(invoiceId, {
+    expand: ["payment_intent"],
+  }) as unknown as { payment_intent: { client_secret: string | null } | string | null };
+
+  const pi = invoice.payment_intent;
+  if (pi && typeof pi === "object") {
+    return pi.client_secret ?? null;
+  }
+  if (typeof pi === "string") {
+    const piObj = await stripeInstance.paymentIntents.retrieve(pi) as unknown as { client_secret: string | null };
+    return piObj.client_secret ?? null;
+  }
+  return null;
+}
+
 // API Routes
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV, vercel: !!process.env.VERCEL });
 });
 
-// Stripe Payment Intent
-app.post("/api/create-payment-intent", async (req, res) => {
-  console.log("Received payment intent request:", req.body);
-  
+// ─── Create Subscription ───────────────────────────────────────────────────────
+// Creates a Stripe Customer (if needed) and a Subscription.
+// Card details are stored securely by Stripe (PCI DSS Level 1 certified).
+// We never receive or store raw card data.
+app.post("/api/create-subscription", async (req, res) => {
   const stripeInstance = getStripe();
   if (!stripeInstance) {
-    console.error("Stripe is not configured. STRIPE_SECRET_KEY is missing.");
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { planId, planName, amount, currency = "aud", email, existingCustomerId } = req.body;
+
+  if (!planId || !amount || amount <= 0) {
+    return res.status(400).json({ error: "Invalid plan or amount" });
+  }
+
+  const recurring = PLAN_INTERVALS[planId];
+  if (!recurring) {
+    return res.status(400).json({ error: "Unknown plan ID" });
+  }
+
+  try {
+    // Reuse an existing Stripe Customer or create a new one
+    let customerId: string = existingCustomerId ?? "";
+    if (!customerId) {
+      const customer = await stripeInstance.customers.create({
+        ...(email ? { email } : {}),
+        metadata: { planId },
+      });
+      customerId = customer.id;
+    }
+
+    // Create an inline price first (product_data is valid on prices.create but NOT
+    // on subscription item price_data – passing it there causes a Stripe API error).
+    const price = await stripeInstance.prices.create({
+      currency,
+      product_data: { name: `PTENinja ${planName ?? planId}` },
+      recurring,
+      unit_amount: amount, // already in cents
+    });
+
+    // "default_incomplete" always creates the subscription in an incomplete state
+    // and returns a PaymentIntent with a client_secret regardless of whether the
+    // customer has a saved default payment method.  This is the correct choice
+    // for a checkout flow: the frontend must confirm the payment via the Stripe
+    // Payment Element before the subscription becomes active.
+    // "allow_incomplete" (Stripe default) would try to charge immediately, which
+    // fails with a 400 when the customer has no attached payment source.
+    const subscription = await stripeInstance.subscriptions.create({
+      customer: customerId,
+      items: [{ price: price.id }],
+      payment_behavior: "default_incomplete",
+      payment_settings: { save_default_payment_method: "on_subscription" },
+      expand: ["latest_invoice.payment_intent"],
+    }) as unknown as SubscriptionRuntime;
+
+    // If the subscription is already active/trialing, the customer's saved
+    // payment method was charged immediately — no client-side action needed.
+    if (subscription.status === "active" || subscription.status === "trialing") {
+      return res.json({
+        clientSecret: null,
+        immediatelyActive: true,
+        subscriptionId: subscription.id,
+        customerId,
+        currentPeriodEnd: subscription.current_period_end,
+      });
+    }
+
+    // Subscription is incomplete — extract the client_secret so the frontend
+    // can confirm payment via the Stripe Payment Element.  The helper handles
+    // every possible shape Stripe may return (fully-expanded PI, string PI ID,
+    // string invoice ID, or unexpanded latest_invoice).
+    const clientSecret = await extractClientSecret(stripeInstance, subscription);
+
+    if (!clientSecret) {
+      // Unexpected: subscription incomplete but no way to confirm payment.
+      // Cancel the orphaned record and fail gracefully.
+      try {
+        await stripeInstance.subscriptions.cancel(subscription.id);
+      } catch {
+        // Best-effort cleanup — ignore any cancel error
+      }
+      console.error(
+        "Stripe subscription incomplete but no clientSecret. status=%s, sub=%s, latest_invoice=%s",
+        subscription.status,
+        subscription.id,
+        typeof subscription.latest_invoice === "string"
+          ? subscription.latest_invoice
+          : typeof subscription.latest_invoice,
+      );
+      return res.status(500).json({
+        error: "Payment could not be initialised. Please try again or contact support.",
+      });
+    }
+
+    res.json({
+      clientSecret,
+      subscriptionId: subscription.id,
+      customerId,
+      currentPeriodEnd: subscription.current_period_end,
+    });
+  } catch (error: any) {
+    console.error("Stripe subscription error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Stripe Customer Portal ────────────────────────────────────────────────────
+// Opens the Stripe-hosted portal so users can update payment methods, view
+// invoices, and manage their subscription.  No card data touches our servers.
+app.post("/api/customer-portal", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { customerId, returnUrl } = req.body;
+  if (!customerId) {
+    return res.status(400).json({ error: "customerId is required" });
+  }
+
+  try {
+    const session = await stripeInstance.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl ?? "https://pteninja.vercel.app",
+    });
+    res.json({ url: session.url });
+  } catch (error: any) {
+    console.error("Customer portal error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Apply Retention Discount ─────────────────────────────────────────────────
+// Applies a 10% off "once" coupon to the subscription as a retention offer.
+// The coupon PTENINJA_RETENTION_10 is created on first use and reused thereafter.
+app.post("/api/apply-retention-discount", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId } = req.body;
+  if (!subscriptionId) {
+    return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  const COUPON_ID = "PTENINJA_RETENTION_10";
+
+  try {
+    // Ensure the coupon exists — create it if not.
+    try {
+      await stripeInstance.coupons.retrieve(COUPON_ID);
+    } catch {
+      await stripeInstance.coupons.create({
+        id: COUPON_ID,
+        percent_off: 10,
+        duration: "once",
+        name: "10% loyalty discount",
+      });
+    }
+
+    await stripeInstance.subscriptions.update(subscriptionId, {
+      coupon: COUPON_ID,
+    } as any);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Apply retention discount error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Cancel Subscription (at period end) ─────────────────────────────────────
+// Marks the subscription to cancel at the end of the current billing period.
+// The user keeps access until that date; no further charges are made.
+// If subscriptionId is not provided, customerId can be used to locate the
+// active subscription automatically (handles stale Firestore records).
+app.post("/api/cancel-subscription", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId, customerId } = req.body;
+
+  try {
+    let resolvedSubscriptionId: string = subscriptionId ?? "";
+
+    if (!resolvedSubscriptionId && customerId) {
+      // No subscriptionId supplied — look it up from the customer record.
+      const subs = await stripeInstance.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        resolvedSubscriptionId = subs.data[0].id;
+      }
+    }
+
+    if (!resolvedSubscriptionId) {
+      return res.status(400).json({ error: "subscriptionId is required" });
+    }
+
+    const subscription = await stripeInstance.subscriptions.update(resolvedSubscriptionId, {
+      cancel_at_period_end: true,
+    }) as unknown as SubscriptionRuntime;
+    res.json({
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      currentPeriodEnd: subscription.current_period_end,
+      subscriptionId: resolvedSubscriptionId,
+    });
+  } catch (error: any) {
+    console.error("Cancel subscription error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Reactivate Subscription ──────────────────────────────────────────────────
+// Reverses a "cancel at period end" so the subscription continues to renew.
+app.post("/api/reactivate-subscription", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId } = req.body;
+  if (!subscriptionId) {
+    return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  try {
+    const subscription = await stripeInstance.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false,
+    }) as unknown as SubscriptionRuntime;
+    res.json({
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      currentPeriodEnd: subscription.current_period_end,
+    });
+  } catch (error: any) {
+    console.error("Reactivate subscription error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Sync Subscription Status ─────────────────────────────────────────────────
+// Returns the latest subscription state from Stripe so the client can keep
+// Firestore in sync (e.g. after returning from the Customer Portal).
+app.post("/api/sync-subscription", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId } = req.body;
+  if (!subscriptionId) {
+    return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  try {
+    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as unknown as SubscriptionRuntime;
+    res.json({
+      status: subscription.status,
+      currentPeriodEnd: subscription.current_period_end,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    });
+  } catch (error: any) {
+    console.error("Sync subscription error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ─── Legacy: one-time Payment Intent (kept for backward compatibility) ────────
+app.post("/api/create-payment-intent", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
     return res.status(500).json({ 
       error: "Stripe is not configured on the server. Please add STRIPE_SECRET_KEY to environment variables." 
     });
   }
 
-  const { amount, currency = "aud" } = req.body;
+  const { amount, currency = "aud", receipt_email } = req.body;
 
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: "Invalid amount" });
@@ -48,12 +397,9 @@ app.post("/api/create-payment-intent", async (req, res) => {
     const paymentIntent = await stripeInstance.paymentIntents.create({
       amount,
       currency,
-      automatic_payment_methods: {
-        enabled: true,
-      },
+      automatic_payment_methods: { enabled: true },
+      ...(receipt_email ? { receipt_email } : {}),
     });
-
-    console.log("Payment intent created successfully:", paymentIntent.id);
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error: any) {
     console.error("Stripe error:", error);

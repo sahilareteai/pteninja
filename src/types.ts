@@ -93,6 +93,9 @@ export interface UserData {
   subscriptionStatus: 'active' | 'inactive' | 'trial' | 'guest' | 'expired';
   subscriptionEndsAt?: string;
   planId?: 'monthly' | 'quarterly' | 'annual';
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  cancelAtPeriodEnd?: boolean;
   activityLog?: string[];
   completedTasks?: string[];
   completedTasksDetailed?: TaskCompletion[];
@@ -115,6 +118,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 21, 
     originalPrice: 35,
     interval: 'month',
+    durationDays: 30,
     badge: 'Popular',
     isSpecial: false
   },
@@ -124,6 +128,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 50, 
     originalPrice: 90,
     interval: '3 months',
+    durationDays: 90,
     badge: 'Best Value',
     isSpecial: true
   },
@@ -133,6 +138,7 @@ export const SUBSCRIPTION_PLANS = [
     price: 175, 
     originalPrice: 350,
     interval: 'year',
+    durationDays: 365,
     badge: 'Save 50%',
     isSpecial: false
   },
@@ -1155,7 +1161,7 @@ taskGroups.forEach(groupKey => {
       ...template,
       id: `${template.id.split('-')[0]}-${i}`,
       title: `Question ${i}`,
-      prompt: typeof promptBase === 'string' ? (i <= 10 ? promptBase : `${promptBase} (Version ${Math.ceil(i/10)})`) : ""
+      prompt: typeof promptBase === 'string' ? promptBase : ""
     };
 
     // Add specific properties for Reading tasks
