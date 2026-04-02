@@ -37,9 +37,9 @@ interface SubscriptionRuntime {
   current_period_end: number;
   cancel_at_period_end: boolean;
   latest_invoice?: {
-    payment_intent?: {
-      client_secret: string | null;
-    };
+    // After `expand: ["latest_invoice.payment_intent"]` this is an object;
+    // without the expand it is a plain string ID.
+    payment_intent?: { client_secret: string | null } | string | null;
   };
 }
 
@@ -97,7 +97,33 @@ app.post("/api/create-subscription", async (req, res) => {
       expand: ["latest_invoice.payment_intent"],
     }) as unknown as SubscriptionRuntime;
 
-    const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret ?? null;
+    // Stripe expands latest_invoice.payment_intent when requested. If the field
+    // is a plain string the expand was skipped (e.g. invoice amount is $0) and
+    // we need to surface a clear error rather than returning null silently.
+    const paymentIntent = subscription.latest_invoice?.payment_intent;
+    const clientSecret =
+      paymentIntent && typeof paymentIntent === "object"
+        ? paymentIntent.client_secret ?? null
+        : null;
+
+    if (!clientSecret) {
+      // Subscription was created but payment intent is missing or already charged.
+      // Cancel the incomplete subscription to avoid leaving orphaned records.
+      try {
+        await stripeInstance.subscriptions.cancel(subscription.id);
+      } catch {
+        // Best-effort cleanup — ignore any cancel error
+      }
+      console.error(
+        "Stripe subscription created but clientSecret is missing. status=%s, sub=%s",
+        subscription.status,
+        subscription.id
+      );
+      return res.status(500).json({
+        error:
+          "Payment could not be initialised. Please check your Stripe configuration (payment_behavior=default_incomplete requires no default payment method on the customer).",
+      });
+    }
 
     res.json({
       clientSecret,
