@@ -40,7 +40,10 @@ interface SubscriptionRuntime {
   latest_invoice?: {
     id?: string;
     // payment_intent is a string ID when NOT expanded, or a full PI object when expanded.
+    // Removed in Stripe API >= 2025-03-31.basil; prefer confirmation_secret below.
     payment_intent?: { client_secret: string | null } | string | null;
+    // confirmation_secret replaced payment_intent in Stripe API >= 2025-03-31.basil.
+    confirmation_secret?: { client_secret: string | null } | null;
   } | string | null;
 }
 
@@ -55,6 +58,13 @@ async function extractClientSecret(
 
   // ── Case 1: fully-expanded Invoice object ──────────────────────────────────
   if (rawInvoice && typeof rawInvoice === "object") {
+    // Stripe API >= 2025-03-31.basil: use confirmation_secret (preferred)
+    const cs = rawInvoice.confirmation_secret;
+    if (cs && typeof cs === "object" && cs.client_secret) {
+      return cs.client_secret;
+    }
+
+    // Stripe API < 2025-03-31.basil: fall back to payment_intent
     const pi = rawInvoice.payment_intent;
     if (pi && typeof pi === "object") {
       // Fully expanded – use client_secret directly
@@ -65,7 +75,7 @@ async function extractClientSecret(
       const piObj = await stripeInstance.paymentIntents.retrieve(pi) as unknown as { client_secret: string | null };
       return piObj.client_secret ?? null;
     }
-    // PI is null/undefined on the invoice object – fall through to invoice retrieval
+    // Neither found on the expanded object – fall through to invoice retrieval
     if (rawInvoice.id) {
       return retrieveClientSecretFromInvoice(stripeInstance, rawInvoice.id);
     }
@@ -86,9 +96,19 @@ async function retrieveClientSecretFromInvoice(
   invoiceId: string,
 ): Promise<string | null> {
   const invoice = await stripeInstance.invoices.retrieve(invoiceId, {
-    expand: ["payment_intent"],
-  }) as unknown as { payment_intent: { client_secret: string | null } | string | null };
+    expand: ["confirmation_secret", "payment_intent"],
+  }) as unknown as {
+    confirmation_secret?: { client_secret: string | null } | null;
+    payment_intent?: { client_secret: string | null } | string | null;
+  };
 
+  // Stripe API >= 2025-03-31.basil: use confirmation_secret (preferred)
+  const cs = invoice.confirmation_secret;
+  if (cs && typeof cs === "object" && cs.client_secret) {
+    return cs.client_secret;
+  }
+
+  // Stripe API < 2025-03-31.basil: fall back to payment_intent
   const pi = invoice.payment_intent;
   if (pi && typeof pi === "object") {
     return pi.client_secret ?? null;
@@ -158,7 +178,7 @@ app.post("/api/create-subscription", async (req, res) => {
       items: [{ price: price.id }],
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
-      expand: ["latest_invoice.payment_intent"],
+      expand: ["latest_invoice.payment_intent", "latest_invoice.confirmation_secret"],
     }) as unknown as SubscriptionRuntime;
 
     // If the subscription is already active/trialing, the customer's saved
