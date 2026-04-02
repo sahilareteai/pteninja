@@ -38,7 +38,7 @@ app.post("/api/create-payment-intent", async (req, res) => {
     });
   }
 
-  const { amount, currency = "aud" } = req.body;
+  const { amount, currency = "aud", receipt_email } = req.body;
 
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: "Invalid amount" });
@@ -51,6 +51,7 @@ app.post("/api/create-payment-intent", async (req, res) => {
       automatic_payment_methods: {
         enabled: true,
       },
+      ...(receipt_email ? { receipt_email } : {}),
     });
 
     console.log("Payment intent created successfully:", paymentIntent.id);
