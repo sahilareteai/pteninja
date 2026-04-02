@@ -36,11 +36,68 @@ interface SubscriptionRuntime {
   status: string;
   current_period_end: number;
   cancel_at_period_end: boolean;
+  // latest_invoice is a string ID when NOT expanded, or a full Invoice object when expanded.
   latest_invoice?: {
-    // After `expand: ["latest_invoice.payment_intent"]` this is an object;
-    // without the expand it is a plain string ID.
+    id?: string;
+    // payment_intent is a string ID when NOT expanded, or a full PI object when expanded.
     payment_intent?: { client_secret: string | null } | string | null;
-  };
+  } | string | null;
+}
+
+// Extract a payment client_secret from the subscription, handling every possible
+// shape Stripe can return (fully-expanded PI object, string PI ID, string invoice ID,
+// or missing expand entirely).  Makes extra API calls only when necessary.
+async function extractClientSecret(
+  stripeInstance: Stripe,
+  subscription: SubscriptionRuntime,
+): Promise<string | null> {
+  const rawInvoice = subscription.latest_invoice;
+
+  // ── Case 1: fully-expanded Invoice object ──────────────────────────────────
+  if (rawInvoice && typeof rawInvoice === "object") {
+    const pi = rawInvoice.payment_intent;
+    if (pi && typeof pi === "object") {
+      // Fully expanded – use client_secret directly
+      return pi.client_secret ?? null;
+    }
+    if (typeof pi === "string") {
+      // Invoice expanded but PI is a string ID – retrieve PI
+      const piObj = await stripeInstance.paymentIntents.retrieve(pi) as unknown as { client_secret: string | null };
+      return piObj.client_secret ?? null;
+    }
+    // PI is null/undefined on the invoice object – fall through to invoice retrieval
+    if (rawInvoice.id) {
+      return retrieveClientSecretFromInvoice(stripeInstance, rawInvoice.id);
+    }
+    return null;
+  }
+
+  // ── Case 2: latest_invoice is a plain string ID (expand was not applied) ───
+  if (typeof rawInvoice === "string") {
+    return retrieveClientSecretFromInvoice(stripeInstance, rawInvoice);
+  }
+
+  return null;
+}
+
+// Retrieve an invoice by ID and extract the payment client_secret.
+async function retrieveClientSecretFromInvoice(
+  stripeInstance: Stripe,
+  invoiceId: string,
+): Promise<string | null> {
+  const invoice = await stripeInstance.invoices.retrieve(invoiceId, {
+    expand: ["payment_intent"],
+  }) as unknown as { payment_intent: { client_secret: string | null } | string | null };
+
+  const pi = invoice.payment_intent;
+  if (pi && typeof pi === "object") {
+    return pi.client_secret ?? null;
+  }
+  if (typeof pi === "string") {
+    const piObj = await stripeInstance.paymentIntents.retrieve(pi) as unknown as { client_secret: string | null };
+    return piObj.client_secret ?? null;
+  }
+  return null;
 }
 
 // API Routes
@@ -117,18 +174,10 @@ app.post("/api/create-subscription", async (req, res) => {
     }
 
     // Subscription is incomplete — extract the client_secret so the frontend
-    // can confirm payment via the Stripe Payment Element.
-    const paymentIntent = subscription.latest_invoice?.payment_intent;
-    let clientSecret: string | null = null;
-
-    if (paymentIntent && typeof paymentIntent === "object") {
-      // Expand succeeded — payment_intent is the full object.
-      clientSecret = paymentIntent.client_secret ?? null;
-    } else if (paymentIntent && typeof paymentIntent === "string") {
-      // Expand was skipped (e.g. invoice already settled) — fetch by ID.
-      const pi = await stripeInstance.paymentIntents.retrieve(paymentIntent);
-      clientSecret = (pi as unknown as { client_secret: string | null }).client_secret ?? null;
-    }
+    // can confirm payment via the Stripe Payment Element.  The helper handles
+    // every possible shape Stripe may return (fully-expanded PI, string PI ID,
+    // string invoice ID, or unexpanded latest_invoice).
+    const clientSecret = await extractClientSecret(stripeInstance, subscription);
 
     if (!clientSecret) {
       // Unexpected: subscription incomplete but no way to confirm payment.
@@ -139,10 +188,12 @@ app.post("/api/create-subscription", async (req, res) => {
         // Best-effort cleanup — ignore any cancel error
       }
       console.error(
-        "Stripe subscription incomplete but no clientSecret. status=%s, sub=%s, paymentIntent=%s",
+        "Stripe subscription incomplete but no clientSecret. status=%s, sub=%s, latest_invoice=%s",
         subscription.status,
         subscription.id,
-        typeof paymentIntent === "string" ? paymentIntent : typeof paymentIntent
+        typeof subscription.latest_invoice === "string"
+          ? subscription.latest_invoice
+          : typeof subscription.latest_invoice,
       );
       return res.status(500).json({
         error: "Payment could not be initialised. Please try again or contact support.",

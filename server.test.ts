@@ -10,6 +10,7 @@ const mockSubscriptionsCreate    = vi.hoisted(() => vi.fn());
 const mockSubscriptionsCancel    = vi.hoisted(() => vi.fn());
 const mockSubscriptionsList      = vi.hoisted(() => vi.fn());
 const mockSubscriptionsUpdate    = vi.hoisted(() => vi.fn());
+const mockInvoicesRetrieve       = vi.hoisted(() => vi.fn());
 
 vi.mock("stripe", () => {
   class MockStripe {
@@ -22,6 +23,7 @@ vi.mock("stripe", () => {
       list:   mockSubscriptionsList,
       update: mockSubscriptionsUpdate,
     };
+    invoices       = { retrieve: mockInvoicesRetrieve };
   }
   return { default: MockStripe };
 });
@@ -117,6 +119,7 @@ describe("POST /api/create-subscription", () => {
     mockSubscriptionsList.mockReset();
     mockSubscriptionsUpdate.mockReset();
     mockPaymentIntentsRetrieve.mockReset();
+    mockInvoicesRetrieve.mockReset();
 
     // Default stubs
     mockCustomersCreate.mockResolvedValue({ id: "cus_test" });
@@ -183,6 +186,49 @@ describe("POST /api/create-subscription", () => {
     expect(res.status).toBe(200);
     expect(res.body.clientSecret).toBe("pi_fetched_secret");
     expect(mockPaymentIntentsRetrieve).toHaveBeenCalledWith("pi_string_id");
+  });
+
+  it("falls back to invoices.retrieve when latest_invoice is a plain string ID (expand not applied)", async () => {
+    // Stripe returns latest_invoice as a string (not expanded) in some edge cases.
+    // The code must retrieve the invoice explicitly to get the payment_intent.
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_invoice_string",
+      status: "incomplete",
+      current_period_end: 1234567890,
+      cancel_at_period_end: false,
+      latest_invoice: "in_string_id", // string — not expanded
+    });
+    mockInvoicesRetrieve.mockResolvedValue({
+      payment_intent: { client_secret: "pi_from_invoice" },
+    });
+
+    const res = await request(app).post("/api/create-subscription").send(validBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.clientSecret).toBe("pi_from_invoice");
+    expect(mockInvoicesRetrieve).toHaveBeenCalledWith("in_string_id", expect.objectContaining({ expand: ["payment_intent"] }));
+    expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("falls back to invoices.retrieve then paymentIntents.retrieve when both expand steps are strings", async () => {
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_double_fallback",
+      status: "incomplete",
+      current_period_end: 1234567890,
+      cancel_at_period_end: false,
+      latest_invoice: "in_double_id",
+    });
+    mockInvoicesRetrieve.mockResolvedValue({
+      payment_intent: "pi_double_id", // invoice returned but PI is still a string
+    });
+    mockPaymentIntentsRetrieve.mockResolvedValue({ client_secret: "pi_double_secret" });
+
+    const res = await request(app).post("/api/create-subscription").send(validBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.clientSecret).toBe("pi_double_secret");
+    expect(mockInvoicesRetrieve).toHaveBeenCalledWith("in_double_id", expect.anything());
+    expect(mockPaymentIntentsRetrieve).toHaveBeenCalledWith("pi_double_id");
   });
 
   it("returns immediatelyActive when subscription is already active (returning customer with saved card)", async () => {
