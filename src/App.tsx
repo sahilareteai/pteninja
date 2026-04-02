@@ -2663,10 +2663,11 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               <button
                 onClick={handleManageBilling}
                 disabled={isOpeningPortal}
+                aria-label={isOpeningPortal ? 'Opening billing portal…' : 'Manage billing and invoices'}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-sm disabled:opacity-50"
               >
-                {isOpeningPortal ? <Loader2 className="animate-spin" size={16} /> : <CreditCard size={16} />}
-                Manage Billing &amp; Invoices
+                {isOpeningPortal ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <CreditCard size={16} aria-hidden="true" />}
+                {isOpeningPortal ? <span>Opening Portal…</span> : <span>Manage Billing &amp; Invoices</span>}
               </button>
               {!user?.cancelAtPeriodEnd && (
                 <button

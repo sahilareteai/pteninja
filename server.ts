@@ -28,6 +28,21 @@ const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "yea
   annual:    { interval: "year",  interval_count: 1 },
 };
 
+// Minimal subscription shape we need at runtime.
+// Stripe SDK v21 wraps responses in Stripe.Response<T> and doesn't surface every
+// field on the TS types; we rely on the well-documented REST contract instead.
+interface SubscriptionRuntime {
+  id: string;
+  status: string;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+  latest_invoice?: {
+    payment_intent?: {
+      client_secret: string | null;
+    };
+  };
+}
+
 // API Routes
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV, vercel: !!process.env.VERCEL });
@@ -65,7 +80,9 @@ app.post("/api/create-subscription", async (req, res) => {
       customerId = customer.id;
     }
 
-    // Create subscription with inline price so no pre-created Stripe Price IDs are needed
+    // Create subscription with inline price so no pre-created Stripe Price IDs are needed.
+    // price_data.product_data is valid at runtime; `product` is required in the SDK union
+    // type but product_data is the accepted alternative per the Stripe REST API.
     const subscription = await stripeInstance.subscriptions.create({
       customer: customerId,
       items: [
@@ -75,22 +92,21 @@ app.post("/api/create-subscription", async (req, res) => {
             product_data: { name: `PTENinja ${planName ?? planId}` },
             recurring,
             unit_amount: amount, // already in cents
-          } as any,
+          } as unknown as Stripe.SubscriptionCreateParams.Item.PriceData,
         },
       ],
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       expand: ["latest_invoice.payment_intent"],
-    }) as any;
+    }) as unknown as SubscriptionRuntime;
 
-    const invoice = subscription.latest_invoice as Stripe.Invoice & { payment_intent: Stripe.PaymentIntent };
-    const paymentIntent = invoice.payment_intent;
+    const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret ?? null;
 
     res.json({
-      clientSecret: paymentIntent.client_secret,
+      clientSecret,
       subscriptionId: subscription.id,
       customerId,
-      currentPeriodEnd: subscription.current_period_end, // Unix timestamp
+      currentPeriodEnd: subscription.current_period_end,
     });
   } catch (error: any) {
     console.error("Stripe subscription error:", error);
@@ -141,7 +157,7 @@ app.post("/api/cancel-subscription", async (req, res) => {
   try {
     const subscription = await stripeInstance.subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
-    }) as any;
+    }) as unknown as SubscriptionRuntime;
     res.json({
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       currentPeriodEnd: subscription.current_period_end,
@@ -168,7 +184,7 @@ app.post("/api/reactivate-subscription", async (req, res) => {
   try {
     const subscription = await stripeInstance.subscriptions.update(subscriptionId, {
       cancel_at_period_end: false,
-    }) as any;
+    }) as unknown as SubscriptionRuntime;
     res.json({
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       currentPeriodEnd: subscription.current_period_end,
@@ -194,7 +210,7 @@ app.post("/api/sync-subscription", async (req, res) => {
   }
 
   try {
-    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as any;
+    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as unknown as SubscriptionRuntime;
     res.json({
       status: subscription.status,
       currentPeriodEnd: subscription.current_period_end,
