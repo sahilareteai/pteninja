@@ -2513,7 +2513,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   };
 
   const handleCancelSubscription = async () => {
-    if (!user?.stripeSubscriptionId) return;
+    if (!user?.stripeSubscriptionId) {
+      toast.error('Subscription ID not found. Please contact support to cancel your subscription.');
+      return;
+    }
     setIsCanceling(true);
     try {
       const res = await fetch('/api/cancel-subscription', {
@@ -2732,7 +2735,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             {isActive && user?.subscriptionEndsAt && (
               <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
                 <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">
-                  {user?.cancelAtPeriodEnd ? 'Access Until' : 'Next Renewal'}
+                  {user?.cancelAtPeriodEnd ? 'Expiry Date' : 'Next Renewal'}
                 </p>
                 <p className="text-base md:text-lg font-bold text-app-text mt-1">
                   {new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -2741,18 +2744,20 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             )}
           </div>
 
-          {/* Subscription management actions — only shown for Stripe-managed subscriptions */}
-          {isActive && user?.stripeSubscriptionId && (
+          {/* Subscription management actions */}
+          {isActive && (
             <div className="space-y-3 pt-2">
-              <button
-                onClick={handleManageBilling}
-                disabled={isOpeningPortal}
-                aria-label={isOpeningPortal ? 'Opening billing portal…' : 'Manage billing and invoices'}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-sm disabled:opacity-50"
-              >
-                {isOpeningPortal ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <CreditCard size={16} aria-hidden="true" />}
-                {isOpeningPortal ? <span>Opening Portal…</span> : <span>Manage Billing &amp; Invoices</span>}
-              </button>
+              {user?.stripeCustomerId && (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={isOpeningPortal}
+                  aria-label={isOpeningPortal ? 'Opening billing portal…' : 'Manage billing and invoices'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-sm disabled:opacity-50"
+                >
+                  {isOpeningPortal ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <CreditCard size={16} aria-hidden="true" />}
+                  {isOpeningPortal ? <span>Opening Portal…</span> : <span>Manage Billing &amp; Invoices</span>}
+                </button>
+              )}
               {!user?.cancelAtPeriodEnd && (
                 <button
                   onClick={() => { setCancelStep('offer'); setShowCancelDialog(true); }}
