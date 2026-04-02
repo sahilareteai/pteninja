@@ -1136,7 +1136,7 @@ const promptTemplates: Record<string, (string | { prompt: string; example?: stri
   ]
 };
 
-// Programmatically generate 100 questions for each category and section with more variety
+// Programmatically generate 1000 questions for each category and section with more variety
 const taskGroups = Array.from(new Set(PTE_TASKS.map(t => `${t.category}|${t.section}`)));
 
 taskGroups.forEach(groupKey => {
@@ -1144,9 +1144,12 @@ taskGroups.forEach(groupKey => {
   const existingTasks = PTE_TASKS.filter(t => t.category === category && t.section === section);
   const count = existingTasks.length;
   const template = existingTasks[0];
+  
+  if (!template) return; // Skip if no tasks for this category exist
+
   const templates = promptTemplates[category] || [template.prompt || ""];
   
-  for (let i = count + 1; i <= 100; i++) {
+  for (let i = count + 1; i <= 1000; i++) {
     const promptBase = templates[(i - 1) % templates.length];
     const newTask: PTETask = {
       ...template,
@@ -1379,23 +1382,61 @@ taskGroups.forEach(groupKey => {
         newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
       }
     } else if (category === 'Describe Image') {
-      const di_images = [
-        "https://quickchart.io/chart?c={type:'bar',data:{labels:['1900','1925','1950','1975','2000','2025'],datasets:[{label:'Population (Billions)',data:[1.6,2.0,2.5,4.0,6.1,8.0]}]}}",
-        "https://picsum.photos/seed/photosynthesis/800/600",
-        "https://quickchart.io/chart?c={type:'pie',data:{labels:['Oil','Coal','Gas','Renewables','Nuclear'],datasets:[{data:[31,27,24,13,5]}]}}",
-        "https://quickchart.io/chart?c={type:'line',data:{labels:['0','20','40','60','80','100'],datasets:[{label:'Pressure',data:[1,1.2,1.5,1.8,2.2,2.7]}]}}",
-        "https://picsum.photos/seed/orgchart/800/600",
-        "https://picsum.photos/seed/migration/800/600",
-        "https://picsum.photos/seed/watercycle/800/600",
-        "https://picsum.photos/seed/foodpyramid/800/600",
-        "https://quickchart.io/chart?c={type:'bar',data:{labels:['US','China','EU','India','Japan'],datasets:[{label:'GDP Growth %',data:[2.1,5.2,1.5,7.0,1.0]}]}}",
-        "https://picsum.photos/seed/volcano/800/600"
-      ];
-      newTask.image = di_images[(i - 1) % di_images.length];
-      const selectedPrompt = templates[(i - 1) % templates.length];
-      if (typeof selectedPrompt === 'string') {
-        newTask.prompt = `Look at the image below. In 25 seconds, please speak into the microphone and describe in detail what the image is showing. You will have 40 seconds to give your response.\n\nContext: ${selectedPrompt}`;
-      }
+        const chartTypes = ['bar', 'line', 'pie', 'doughnut', 'radar', 'polarArea', 'bubble', 'scatter'];
+        const chartType = chartTypes[i % chartTypes.length];
+        const numDataPoints = 5 + (i % 8); // 5 to 12 data points
+        const labels = Array.from({length: numDataPoints}, (_, j) => `20${10 + j}`);
+        const data = Array.from({length: numDataPoints}, () => Math.floor(Math.random() * 1000) + 50);
+        
+        let chartConfig;
+        if (chartType === 'bubble') {
+          chartConfig = {
+            type: 'bubble',
+            data: {
+              datasets: [{
+                label: `Dataset ${i}`,
+                data: Array.from({length: numDataPoints}, (_,j) => ({
+                  x: 10 + j * 5,
+                  y: Math.floor(Math.random() * 100),
+                  r: Math.floor(Math.random() * 20) + 5
+                }))
+              }]
+            }
+          };
+        } else if (chartType === 'scatter') {
+           chartConfig = {
+            type: 'scatter',
+            data: {
+              datasets: [{
+                label: `Dataset ${i}`,
+                data: Array.from({length: numDataPoints}, (_,j) => ({
+                  x: Math.floor(Math.random() * 100),
+                  y: Math.floor(Math.random() * 100)
+                }))
+              }]
+            }
+          };
+        } else {
+          chartConfig = {
+            type: chartType,
+            data: {
+              labels: labels,
+              datasets: [{
+                label: `Revenue ${i}`,
+                data: data
+              }]
+            }
+          };
+        }
+
+        newTask.image = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
+        const selectedPrompt = templates[(i - 1) % templates.length];
+        if (typeof selectedPrompt === 'string') {
+            newTask.prompt = `Look at the image below. In 25 seconds, please speak into the microphone and describe in detail what the image is showing. You will have 40 seconds to give your response.\n\nContext: ${selectedPrompt} (${i})`;
+        } else {
+            newTask.prompt = `Look at the chart below and describe it in detail. (Chart ${i})`
+        }
+
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {
       newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript
     }
