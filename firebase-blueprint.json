@@ -67,6 +67,33 @@
         "isActive": { "type": "boolean", "description": "Whether the code is active" }
       },
       "required": ["code", "discountPercent", "isActive"]
+    },
+    "TaskAttempt": {
+      "title": "TaskAttempt",
+      "description": "User attempt for a single task",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID" },
+        "taskId": { "type": "string", "description": "Task ID" },
+        "score": { "type": "number", "description": "Score achieved" },
+        "response": { "type": "string", "description": "User response (audio base64 or text)" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "Completion date" }
+      },
+      "required": ["userId", "taskId", "score", "completedAt"]
+    },
+    "MockTestAttempt": {
+      "title": "MockTestAttempt",
+      "description": "User attempt for a full mock test",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID" },
+        "testId": { "type": "string", "description": "Mock Test ID" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "Completion date" },
+        "sectionScores": { "type": "object", "description": "Scores for each section" },
+        "overallScore": { "type": "number", "description": "Overall score" },
+        "taskResponses": { "type": "object", "description": "Responses for each task in the test" }
+      },
+      "required": ["userId", "testId", "completedAt", "sectionScores", "overallScore"]
     }
   },
   "firestore": {
@@ -85,6 +112,14 @@
     "/promoCodes/{codeId}": {
       "schema": "PromoCode",
       "description": "Subscription promo codes"
+    },
+    "/task_attempts/{attemptId}": {
+      "schema": "TaskAttempt",
+      "description": "User task practice attempts"
+    },
+    "/mock_test_attempts/{attemptId}": {
+      "schema": "MockTestAttempt",
+      "description": "User mock test attempts"
     }
   }
 }

@@ -27,8 +27,18 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="prose prose-invert max-w-none space-y-6 text-app-text-muted leading-relaxed">
-          <p className="text-lg text-app-text font-medium">Last Updated: March 31, 2026</p>
+          <p className="text-lg text-app-text font-medium">Last Updated: April 2, 2026</p>
           
+          <section className="space-y-4 bg-app-primary/5 p-6 rounded-2xl border border-app-primary/10">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide flex items-center gap-2">
+              <Shield size={20} className="text-app-primary" />
+              Independent Status Disclaimer
+            </h2>
+            <p className="text-app-text font-semibold italic">
+              Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+            </p>
+          </section>
+
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Introduction</h2>
             <p>
@@ -74,14 +84,28 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">6. Your Rights</h2>
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">6. Cookies and Tracking</h2>
+            <p>
+              We use cookies and similar tracking technologies to track the activity on our Service and hold certain information. Cookies are files with a small amount of data which may include an anonymous unique identifier. You can instruct your browser to refuse all cookies or to indicate when a cookie is being sent.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">7. Data Retention</h2>
+            <p>
+              We will retain your personal data only for as long as is necessary for the purposes set out in this Privacy Policy. We will retain and use your data to the extent necessary to comply with our legal obligations, resolve disputes, and enforce our legal agreements and policies.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">8. Your Rights</h2>
             <p>
               You have the right to access, correct, or delete your personal information. You can manage your profile within the app or contact us at ninja-pte-services@googlegroups.com for data deletion requests.
             </p>
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">7. Contact Us</h2>
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">9. Contact Us</h2>
             <p>
               If you have any questions about this Privacy Policy, please contact us at:
               <br />

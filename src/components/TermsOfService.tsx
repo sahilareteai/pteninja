@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, ChevronLeft } from 'lucide-react';
+import { BookOpen, ChevronLeft, Shield } from 'lucide-react';
 
 export function TermsOfService({ onBack }: { onBack: () => void }) {
   return (
@@ -27,8 +27,18 @@ export function TermsOfService({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="prose prose-invert max-w-none space-y-6 text-app-text-muted leading-relaxed">
-          <p className="text-lg text-app-text font-medium">Last Updated: March 31, 2026</p>
+          <p className="text-lg text-app-text font-medium">Last Updated: April 2, 2026</p>
           
+          <section className="space-y-4 bg-app-primary/5 p-6 rounded-2xl border border-app-primary/10">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide flex items-center gap-2">
+              <Shield size={20} className="text-app-primary" />
+              Independent Status Disclaimer
+            </h2>
+            <p className="text-app-text font-semibold italic">
+              Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+            </p>
+          </section>
+
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Acceptance of Terms</h2>
             <p>
@@ -79,7 +89,14 @@ export function TermsOfService({ onBack }: { onBack: () => void }) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">8. Contact Us</h2>
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">8. Governing Law</h2>
+            <p>
+              These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which the Service operates, without regard to its conflict of law provisions.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">9. Contact Us</h2>
             <p>
               If you have any questions about these Terms of Service, please contact us at:
               <br />

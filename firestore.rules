@@ -26,6 +26,8 @@ service cloud.firestore {
              (!('activityLog' in data) || data.activityLog is list) &&
              (!('completedTasks' in data) || data.completedTasks is list) &&
              (!('taskScores' in data) || data.taskScores is map) &&
+             (!('mockTestResults' in data) || data.mockTestResults is list) &&
+             (!('completedTasksDetailed' in data) || data.completedTasksDetailed is list) &&
              (!('targetScore' in data) || data.targetScore is number) &&
              (!('favoriteWords' in data) || data.favoriteWords is list) &&
              (!('subscriptionEndsAt' in data) || data.subscriptionEndsAt is string) &&
@@ -86,6 +88,18 @@ service cloud.firestore {
     match /promoCodes/{codeId} {
       allow read: if true; // Promo codes are publicly readable for validation
       allow write: if isAdmin(); // Only admins can modify promo codes
+    }
+
+    match /task_attempts/{attemptId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /mock_test_attempts/{attemptId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
   }
 }

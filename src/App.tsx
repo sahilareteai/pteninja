@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronUp,
   ChevronDown,
+  Info,
   Lock, 
   Play,
   RefreshCw,
@@ -913,7 +914,7 @@ function AppContent() {
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
   };
 
-  const handleTaskFinish = async (taskId: string, score: number) => {
+  const handleTaskFinish = async (taskId: string, score: number, response?: string) => {
     if (!user?.uid) return;
     
     const userRef = doc(db, 'users', user.uid);
@@ -928,10 +929,22 @@ function AppContent() {
     const newTaskCompletion: TaskCompletion = {
       taskId,
       score,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      response: response?.length && response.length < 5000 ? response : undefined // Only store small responses in user doc
     };
 
     try {
+      // Save detailed attempt to a separate collection for large responses
+      if (response) {
+        await addDoc(collection(db, 'task_attempts'), {
+          userId: user.uid,
+          taskId,
+          score,
+          response,
+          completedAt: new Date().toISOString()
+        });
+      }
+
       await updateDoc(userRef, { 
         taskScores: newTaskScores,
         completedTasks: Array.from(new Set([...(user.completedTasks || []), taskId])),
@@ -946,9 +959,20 @@ function AppContent() {
     if (!user?.uid) return;
     
     const userRef = doc(db, 'users', user.uid);
-    const newResults = [...(user.mockTestResults || []), result];
+    
+    // Create a copy without taskResponses for the user document to save space
+    const resultForUserDoc = { ...result };
+    delete resultForUserDoc.taskResponses;
+    
+    const newResults = [...(user.mockTestResults || []), resultForUserDoc];
     
     try {
+      // Save full result with responses to a separate collection
+      await addDoc(collection(db, 'mock_test_attempts'), {
+        userId: user.uid,
+        ...result
+      });
+
       await updateDoc(userRef, { mockTestResults: newResults });
       toast.success(`Mock Test Completed! Overall Score: ${result.overallScore}`);
     } catch (err) {
@@ -1682,6 +1706,10 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
               </span>
             </div>
           </div>
+          
+          <p className="text-[10px] text-app-text-muted/20 text-center mt-8 max-w-2xl mx-auto leading-relaxed italic">
+            Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+          </p>
         </div>
       </footer>
     </div>
@@ -2673,40 +2701,67 @@ function MockTestSession({
   onFinish: (result: MockTestResult) => void, 
   onClose: () => void 
 }) {
+  const [phase, setPhase] = useState<'instructions' | 'personal-intro' | 'section-instructions' | 'testing' | 'calculating'>('instructions');
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [sectionTimeLeft, setSectionTimeLeft] = useState(test.sections[0].duration * 60);
+  const [taskResponses, setTaskResponses] = useState<Record<string, string>>({});
   const [taskScores, setTaskScores] = useState<Record<string, number>>({});
+  const [calculationProgress, setCalculationProgress] = useState(0);
+  const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
   const currentTask = allTasks.find(t => t.id === currentTaskId)!;
 
+  const personalIntroTask: PTETask = {
+    id: 'personal-intro',
+    title: 'Personal Introduction',
+    category: 'Personal Introduction',
+    description: 'Introduce yourself to the institutions. This is not scored.',
+    section: 'speaking',
+    type: 'speaking',
+    prepTime: 25,
+    recordingTime: 30,
+    prompt: 'Please read the prompt below and give a personal introduction. You should speak about your reasons for taking the test, your interests, your future plans, and why you want to study or work in an English-speaking country.'
+  };
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSectionTimeLeft(prev => {
-        if (prev <= 1) {
-          handleNextSection();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [currentSectionIndex]);
+    if (phase === 'testing') {
+      const timer = setInterval(() => {
+        setSectionTimeLeft(prev => {
+          if (prev <= 1) {
+            handleNextSection();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [currentSectionIndex, phase]);
 
   const handleNextSection = () => {
     if (currentSectionIndex < test.sections.length - 1) {
       setCurrentSectionIndex(prev => prev + 1);
       setCurrentTaskIndex(0);
       setSectionTimeLeft(test.sections[currentSectionIndex + 1].duration * 60);
+      setPhase('section-instructions');
     } else {
       handleCompleteTest();
     }
   };
 
-  const handleNextTask = (score: number) => {
-    setTaskScores(prev => ({ ...prev, [currentTaskId]: score }));
+  const handleNextTask = (score: number, response?: string) => {
+    if (phase === 'personal-intro') {
+      setPhase('section-instructions');
+      return;
+    }
+
+    // Store response for later analysis if it's a mock test
+    // If score is passed as a string (from my previous edit), handle it
+    const actualResponse = typeof score === 'string' ? score : response;
+    setTaskResponses(prev => ({ ...prev, [currentTaskId]: String(actualResponse || '') }));
     
     if (currentTaskIndex < currentSection.taskIds.length - 1) {
       setCurrentTaskIndex(prev => prev + 1);
@@ -2715,9 +2770,8 @@ function MockTestSession({
     }
   };
 
-  const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
-
-  const handleCompleteTest = () => {
+  const handleCompleteTest = async () => {
+    setPhase('calculating');
     const sectionScores: Record<PTESection, number> = {
       speaking: 0,
       writing: 0,
@@ -2725,9 +2779,75 @@ function MockTestSession({
       listening: 0
     };
 
+    const allTaskIds = test.sections.flatMap(s => s.taskIds);
+    const totalTasks = allTaskIds.length;
+    const scores: Record<string, number> = {};
+
+    for (let i = 0; i < totalTasks; i++) {
+      const taskId = allTaskIds[i];
+      const task = allTasks.find(t => t.id === taskId)!;
+      const response = taskResponses[taskId];
+      
+      setCalculationProgress(Math.round((i / totalTasks) * 100));
+
+      if (!response) {
+        scores[taskId] = 10;
+        continue;
+      }
+
+      try {
+        if (task.section === 'speaking') {
+          const result = await analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]);
+          scores[taskId] = result.overall ?? 70;
+        } else if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
+          const result = await analyzeWriting(response, task.title);
+          scores[taskId] = result.overall ?? 70;
+        } else {
+          // Local scoring for objective tasks
+          let score = 10;
+          if (task.category.includes('Fill in the Blanks')) {
+            const blankAnswers = JSON.parse(response);
+            const answers = Object.values(blankAnswers);
+            const correct = task.correctAnswers || [];
+            const maxScore = Math.max(correct.length, 1);
+            let correctCount = 0;
+            correct.forEach((ans, j) => {
+              if (answers[j]?.toString().toLowerCase().trim() === ans.toLowerCase().trim()) correctCount++;
+            });
+            score = correctCount === 0 ? 10 : Math.round((correctCount / maxScore) * 80) + 10;
+          } else if (task.category.includes('Multiple Choice') || task.category === 'Highlight Correct Summary' || task.category === 'Select Missing Word') {
+            const selectedOptions = JSON.parse(response);
+            const correct = task.correctAnswers || [];
+            const isMultiple = task.category.includes('Multiple Answer');
+            const maxScore = isMultiple ? Math.max(correct.length, 1) : 1;
+            let correctSelected = 0;
+            let incorrectSelected = 0;
+            
+            selectedOptions.forEach((opt: string) => {
+              if (correct.includes(opt)) correctSelected++;
+              else incorrectSelected++;
+            });
+            
+            const netCorrect = Math.max(0, correctSelected - (isMultiple ? incorrectSelected : 0));
+            score = netCorrect === 0 ? 10 : Math.max(10, Math.min(90, Math.round((netCorrect / maxScore) * 80) + 10));
+          }
+          scores[taskId] = score;
+        }
+      } catch (err) {
+        console.error(`Analysis failed for task ${taskId}:`, err);
+        scores[taskId] = 10;
+      }
+      
+      // Small delay to avoid quota issues
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    setCalculationProgress(100);
+    setTaskScores(scores);
+
     test.sections.forEach(s => {
-      const scores = s.taskIds.map(id => taskScores[id] || 0);
-      const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+      const sectionTaskScores = s.taskIds.map(id => scores[id] || 10);
+      const avg = sectionTaskScores.length > 0 ? Math.round(sectionTaskScores.reduce((a, b) => a + b, 0) / sectionTaskScores.length) : 10;
       sectionScores[s.section] = avg;
     });
 
@@ -2737,7 +2857,8 @@ function MockTestSession({
       testId: test.id,
       completedAt: new Date().toISOString(),
       sectionScores,
-      overallScore
+      overallScore,
+      taskResponses
     };
 
     setFinalResult(result);
@@ -2786,6 +2907,131 @@ function MockTestSession({
     );
   }
 
+  if (phase === 'calculating') {
+    return (
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-md w-full text-center space-y-8 shadow-2xl"
+        >
+          <div className="w-20 h-20 bg-app-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
+            <Loader2 className="text-app-primary animate-spin" size={40} />
+          </div>
+          
+          <div>
+            <h2 className="text-2xl font-black text-app-text uppercase tracking-tight mb-2">Calculating Results</h2>
+            <p className="text-app-text-muted text-sm">Sensei is analyzing your performance. This may take a moment.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="h-2 bg-app-bg rounded-full overflow-hidden border border-app-primary/10">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${calculationProgress}%` }}
+                className="h-full bg-app-primary shadow-[0_0_15px_rgba(69,162,158,0.5)]"
+              />
+            </div>
+            <p className="text-xs font-bold text-app-primary uppercase tracking-widest">{calculationProgress}% Complete</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (phase === 'instructions') {
+    return (
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+        >
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
+              <Info className="text-app-primary" size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Test Instructions</h2>
+              <p className="text-app-text-muted text-sm">PTE Academic Mock Test</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
+            <p>Welcome to the PTE Academic Mock Test. This test consists of three main parts:</p>
+            <ul className="list-disc list-inside space-y-2 ml-4">
+              <li>Part 1: Speaking & Writing (54–67 minutes)</li>
+              <li>Part 2: Reading (29–30 minutes)</li>
+              <li>Part 3: Listening (30–43 minutes)</li>
+            </ul>
+            <p>Before Part 1, you will complete a non-scored Personal Introduction. This is your chance to introduce yourself to the institutions you are applying to.</p>
+            <p>Please ensure your microphone and speakers are working correctly before starting.</p>
+          </div>
+
+          <button 
+            onClick={() => setPhase('personal-intro')}
+            className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+          >
+            Start Personal Intro <ArrowRight size={20} />
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (phase === 'section-instructions') {
+    const sectionNames: Record<string, string> = {
+      speaking: 'Speaking & Writing',
+      reading: 'Reading',
+      listening: 'Listening'
+    };
+
+    const sectionDetails: Record<string, string> = {
+      speaking: 'This section tests your ability to speak and write in English in an academic environment. You will be asked to read aloud, repeat sentences, describe images, and write an essay.',
+      reading: 'This section tests your ability to read and understand academic English. You will be asked to fill in blanks, re-order paragraphs, and answer multiple-choice questions.',
+      listening: 'This section tests your ability to understand spoken English in an academic environment. You will be asked to summarize spoken text, fill in blanks, and answer multiple-choice questions.'
+    };
+
+    return (
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+        >
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
+              <Layout className="text-app-primary" size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Section {currentSectionIndex + 1}</h2>
+              <p className="text-app-primary font-bold text-sm uppercase tracking-widest">{sectionNames[currentSection.section]}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
+            <p className="text-lg font-bold text-app-text mb-2">Instructions:</p>
+            <p>{sectionDetails[currentSection.section]}</p>
+            <div className="bg-app-bg p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock size={16} className="text-app-primary" />
+                <span className="font-bold uppercase tracking-widest text-[10px]">Duration</span>
+              </div>
+              <span className="text-app-text font-black">{currentSection.duration} Minutes</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setPhase('testing')}
+            className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+          >
+            Begin Section <Play size={20} />
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[100] bg-app-bg flex flex-col">
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between bg-app-bg">
@@ -2796,23 +3042,31 @@ function MockTestSession({
           <div>
             <h2 className="text-lg font-bold text-app-text uppercase tracking-tight">{test.title}</h2>
             <div className="flex items-center gap-2 text-[10px] font-bold text-app-primary uppercase tracking-widest">
-              <span>Section {currentSectionIndex + 1}: {currentSection.section}</span>
-              <span className="text-app-border">|</span>
-              <span>Task {currentTaskIndex + 1} of {currentSection.taskIds.length}</span>
+              {phase === 'personal-intro' ? (
+                <span>Personal Introduction</span>
+              ) : (
+                <>
+                  <span>Section {currentSectionIndex + 1}: {currentSection.section === 'speaking' ? 'Speaking & Writing' : currentSection.section}</span>
+                  <span className="text-app-border">|</span>
+                  <span>Task {currentTaskIndex + 1} of {currentSection.taskIds.length}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-widest mb-1">Section Time Left</span>
-            <div className={cn(
-              "text-2xl font-mono font-bold",
-              sectionTimeLeft < 300 ? "text-red-500 animate-pulse" : "text-app-accent"
-            )}>
-              {Math.floor(sectionTimeLeft / 60)}:{(sectionTimeLeft % 60).toString().padStart(2, '0')}
+          {(phase === 'testing' || phase === 'personal-intro') && (
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-widest mb-1">Section Time Left</span>
+              <div className={cn(
+                "text-2xl font-mono font-bold",
+                sectionTimeLeft < 300 ? "text-red-500 animate-pulse" : "text-app-accent"
+              )}>
+                {Math.floor(sectionTimeLeft / 60)}:{(sectionTimeLeft % 60).toString().padStart(2, '0')}
+              </div>
             </div>
-          </div>
+          )}
           <button 
             onClick={onClose}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
@@ -2824,8 +3078,8 @@ function MockTestSession({
 
       <div className="flex-1 overflow-hidden relative">
         <TaskModal 
-          key={currentTaskId}
-          task={currentTask}
+          key={phase === 'personal-intro' ? 'personal-intro' : currentTaskId}
+          task={phase === 'personal-intro' ? personalIntroTask : currentTask}
           onClose={onClose}
           onFinish={handleNextTask}
           isMockTest={true}
@@ -4049,7 +4303,7 @@ function TaskModal({
 }: { 
   task: PTETask, 
   onClose: () => void, 
-  onFinish: (score: number) => void | Promise<void>,
+  onFinish: (score: number, response?: string) => void | Promise<void>,
   onPrev?: () => void,
   onNext?: () => void,
   isMockTest?: boolean
@@ -4090,6 +4344,11 @@ function TaskModal({
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isPreparingAudio, setIsPreparingAudio] = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
+  const [volume, setVolume] = useState(0);
+  const recordingAnalyzerRef = useRef<AnalyserNode | null>(null);
+  const recordingAnimationFrameRef = useRef<number | null>(null);
+  const recordingAudioContextRef = useRef<AudioContext | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
   const beepPlayedRef = useRef(false);
 
   const needsBeep = task.section === 'listening' || 
@@ -4596,6 +4855,28 @@ function TaskModal({
     }
   }, [phase, task.id, task.hasAudio, audioRetryCount, needsBeep]);
 
+  const cleanupRecordingAnalysis = () => {
+    if (recordingAnimationFrameRef.current) {
+      cancelAnimationFrame(recordingAnimationFrameRef.current);
+      recordingAnimationFrameRef.current = null;
+    }
+    if (recordingAnalyzerRef.current) {
+      recordingAnalyzerRef.current.disconnect();
+      recordingAnalyzerRef.current = null;
+    }
+    if (recordingAudioContextRef.current) {
+      if (recordingAudioContextRef.current.state !== 'closed') {
+        recordingAudioContextRef.current.close().catch(e => console.error("Failed to close recording context:", e));
+      }
+      recordingAudioContextRef.current = null;
+    }
+    if (recordingStreamRef.current) {
+      recordingStreamRef.current.getTracks().forEach(track => track.stop());
+      recordingStreamRef.current = null;
+    }
+    setVolume(0);
+  };
+
   // Recording logic
   useEffect(() => {
     if (phase === 'recording' && task.section === 'speaking') {
@@ -4605,6 +4886,7 @@ function TaskModal({
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
       }
+      cleanupRecordingAnalysis();
     };
   }, [phase]);
 
@@ -4614,6 +4896,35 @@ function TaskModal({
       await playBeep();
       
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      
+      // Setup Audio Analysis
+      const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+      const audioContext = new AudioContextClass();
+      recordingAudioContextRef.current = audioContext;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyzer = audioContext.createAnalyser();
+      analyzer.fftSize = 256;
+      source.connect(analyzer);
+      recordingAnalyzerRef.current = analyzer;
+      
+      const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+      
+      const updateVolume = () => {
+        if (recordingAnalyzerRef.current) {
+          recordingAnalyzerRef.current.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          setVolume(average);
+          recordingAnimationFrameRef.current = requestAnimationFrame(updateVolume);
+        }
+      };
+      updateVolume();
+
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
 
@@ -4626,13 +4937,17 @@ function TaskModal({
       setMediaRecorder(recorder);
     } catch (err) {
       console.error("Failed to start recording:", err);
+      toast.error("Microphone Error", {
+        description: "Could not access your microphone. Please check permissions."
+      });
+      setPhase('prep'); // Go back to prep phase
     }
   };
 
   const getAudioBase64 = (): Promise<string> => {
     return new Promise((resolve, reject) => {
-      if (chunksRef.current.length === 0) {
-        reject(new Error("No audio chunks recorded"));
+      if (!chunksRef.current || chunksRef.current.length === 0) {
+        reject(new Error("No audio recorded. Please try speaking louder or check your microphone."));
         return;
       }
       const blob = new Blob(chunksRef.current, { type: mediaRecorder?.mimeType || 'audio/webm' });
@@ -4692,10 +5007,20 @@ function TaskModal({
   }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
 
   const handleFinish = async () => {
-    setPhase('analyzing');
-    
     try {
       let result;
+      if (task.id === 'personal-intro') {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          const stopPromise = new Promise(resolve => {
+            mediaRecorder.onstop = resolve;
+          });
+          mediaRecorder.stop();
+          await stopPromise;
+          cleanupRecordingAnalysis();
+        }
+        onFinish(90);
+        return;
+      }
       if (task.section === 'speaking') {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
           const stopPromise = new Promise(resolve => {
@@ -4703,13 +5028,32 @@ function TaskModal({
           });
           mediaRecorder.stop();
           await stopPromise;
+          cleanupRecordingAnalysis();
         }
+        
+        // Small delay to ensure all chunks are processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (isMockTest) {
+          const base64 = await getAudioBase64();
+          onFinish(base64 as any); // Pass base64 for later analysis
+          return;
+        }
+
+        setPhase('analyzing');
         const base64 = await getAudioBase64();
         if (!base64 || base64.length < 100) {
            throw new Error("No audio detected");
         }
         result = await analyzeSpeaking(base64, task.category, mediaRecorder?.mimeType || 'audio/webm', task.correctAnswers?.[0]);
       } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
+        if (isMockTest) {
+          // For objective tasks in mock test, we can just pass the selected options/input
+          const response = task.category.includes('Fill in the Blanks') ? JSON.stringify(blankAnswers) : JSON.stringify(selectedOptions);
+          onFinish(response as any);
+          return;
+        }
+        setPhase('analyzing');
         // Local scoring for objective tasks
         let score = 0;
         let maxScore = 10; // Default base
@@ -4874,6 +5218,10 @@ function TaskModal({
              mistakes: ["Empty response submitted."]
            };
         } else {
+          if (isMockTest) {
+            onFinish(finalInput as any);
+            return;
+          }
           result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
         }
       }
@@ -4918,12 +5266,13 @@ function TaskModal({
       
       if (isMockTest) {
         try {
-          await onFinish(finalScore);
+          await onFinish(finalScore as any, finalInput || userInput);
         } catch (e) {
           console.error("Failed to save progress:", e);
           setPhase('feedback'); // Fallback to feedback if navigation fails
         }
       } else {
+        onFinish(finalScore, finalInput || userInput);
         setPhase('feedback');
       }
     } catch (error: any) {
@@ -5159,7 +5508,49 @@ function TaskModal({
             </div>
           ) : (
             <>
-              {/* Audio Controls for Speaking Tasks (Above prompt to match image) */}
+              {/* Prompt Area (Moved above recorder for Read Aloud) */}
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
+                <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
+                  <p className={cn(
+                    "text-app-text leading-relaxed font-medium",
+                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
+                    task.category === 'Answer Short Question' && "italic font-bold"
+                  )}>
+                    {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
+                    {task.section === 'listening' 
+                      ? (hasAudioError 
+                          ? "Audio failed to load. Please check your connection and try again." 
+                          : (task.category === 'Highlight Incorrect Words' 
+                              ? "Listen to the recording and identify the discrepancies in the transcript below." 
+                              : (task.prompt || "Complete the task based on the recording.")))
+                      : (task.prompt || "No prompt available for this task.")}
+                  </p>
+                  {hasAudioError && (
+                    <button 
+                      onClick={() => {
+                        setHasAudioError(false);
+                        setAudioRetryCount(prev => prev + 1);
+                      }}
+                      className="mt-4 px-6 py-2 bg-app-primary text-app-bg rounded-lg font-bold hover:bg-app-accent transition-all flex items-center gap-2"
+                    >
+                      <RefreshCw size={16} />
+                      Retry Audio
+                    </button>
+                  )}
+                  {task.image && task.category !== 'Summarize Group Discussion' && (
+                    <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
+                      <img 
+                        src={task.image} 
+                        alt="Task Prompt" 
+                        className="w-full h-auto object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Audio Controls for Speaking Tasks */}
               {(task.category === 'Read Aloud' || task.category === 'Repeat Sentence' || task.category === 'Retell Lecture' || task.category === 'Summarize Group Discussion') && (phase === 'prep' || phase === 'recording' || phase === 'audio') && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
@@ -5222,24 +5613,27 @@ function TaskModal({
                           (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
                       </button>
 
-                      <div className="flex-1">
+                      <div className="flex-1 overflow-hidden">
                         {/* Wave Animation when active */}
                         {(isAudioPlaying || phase === 'recording') ? (
-                          <div className="w-full h-12 flex items-center justify-start gap-1.5">
-                            {[...Array(40)].map((_, i) => (
+                          <div className="w-full h-12 flex items-center justify-center gap-1">
+                            {[...Array(20)].map((_, i) => (
                               <motion.div 
                                 key={i}
-                                animate={{ 
+                                animate={phase === 'recording' ? {
+                                  height: Math.max(6, (volume / 128) * 32 + (Math.random() * 4)),
+                                  opacity: Math.min(1, (volume / 128) + 0.4)
+                                } : { 
                                   height: [6, Math.random() * 32 + 6, 6],
                                   opacity: [0.4, 1, 0.4]
                                 }}
                                 transition={{ 
-                                  repeat: Infinity, 
-                                  duration: 0.4 + Math.random() * 0.2, 
-                                  delay: i * 0.02 
+                                  repeat: phase === 'recording' ? 0 : Infinity, 
+                                  duration: phase === 'recording' ? 0.05 : (0.4 + Math.random() * 0.2), 
+                                  delay: phase === 'recording' ? 0 : (i * 0.02)
                                 }}
                                 className={cn(
-                                  "w-1.5 rounded-full",
+                                  "w-1.5 rounded-full shrink-0",
                                   isAudioPlaying ? "bg-blue-400" : "bg-red-400"
                                 )}
                               />
@@ -5269,48 +5663,6 @@ function TaskModal({
                     </div>
                   </div>
                 </motion.div>
-              )}
-
-              {/* Prompt Area */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
-                <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group">
-                  <p className={cn(
-                    "text-app-text leading-relaxed font-medium",
-                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
-                    task.category === 'Answer Short Question' && "italic font-bold"
-                  )}>
-                    {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
-                    {task.section === 'listening' 
-                      ? (hasAudioError 
-                          ? "Audio failed to load. Please check your connection and try again." 
-                          : (task.category === 'Highlight Incorrect Words' 
-                              ? "Listen to the recording and identify the discrepancies in the transcript below." 
-                              : (task.prompt || "Complete the task based on the recording.")))
-                      : (task.prompt || "No prompt available for this task.")}
-                  </p>
-                  {hasAudioError && (
-                    <button 
-                      onClick={() => {
-                        setHasAudioError(false);
-                        setAudioRetryCount(prev => prev + 1);
-                      }}
-                      className="mt-4 px-6 py-2 bg-app-primary text-app-bg rounded-lg font-bold hover:bg-app-accent transition-all flex items-center gap-2"
-                    >
-                      <RefreshCw size={16} />
-                      Retry Audio
-                    </button>
-                  )}
-                  {task.image && task.category !== 'Summarize Group Discussion' && (
-                    <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
-                      <img 
-                        src={task.image} 
-                        alt="Task Prompt" 
-                        className="w-full h-auto object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                  )}
-                </div>
               )}
 
               {/* Audio Controls (For non-Read Aloud/Repeat Sentence/Retell Lecture/Summarize Group Discussion tasks) */}

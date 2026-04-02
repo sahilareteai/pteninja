@@ -60,6 +60,7 @@ export interface TaskCompletion {
   taskId: string;
   score: number;
   completedAt: string; // ISO string
+  response?: string; // Audio base64 or text
 }
 
 export interface MockTest {
@@ -78,6 +79,7 @@ export interface MockTestResult {
   completedAt: string;
   sectionScores: Record<PTESection, number>;
   overallScore: number;
+  taskResponses?: Record<string, string>;
 }
 
 export interface UserData {
