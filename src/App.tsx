@@ -1755,6 +1755,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [emailInput, setEmailInput] = useState(user?.email || '');
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  // Stripe subscription details returned from the server
+  const [pendingSubscriptionId, setPendingSubscriptionId] = useState<string | null>(null);
+  const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
+  const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
   const handleApplyPromo = async () => {
     const promo = await PromoService.validate(promoInput);
@@ -1795,13 +1799,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       }
 
       const convertedAmount = CurrencyService.convert(basePrice);
-      const response = await fetch('/api/create-payment-intent', {
+      const response = await fetch('/api/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          amount: convertedAmount * 100, 
+          planId: plan.id,
+          planName: plan.name,
+          amount: Math.round(convertedAmount * 100), // cents
           currency: currency.code.toLowerCase(),
-          receipt_email: emailInput || user?.email
+          email: emailInput || user?.email || undefined,
+          existingCustomerId: user?.stripeCustomerId || undefined,
         }),
       });
       
@@ -1814,9 +1821,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
         } catch (e) {
-          // If not JSON, it might be a Vercel error page
           if (errorText.includes("FUNCTION_INVOCATION_FAILED")) {
-            errorMessage = "Payment server is currently unavailable (Function Invocation Failed). Please check Vercel logs.";
+            errorMessage = "Payment server is currently unavailable. Please check Vercel logs.";
           } else if (errorText.includes("Internal Server Error")) {
             errorMessage = "Server error occurred. Please check your STRIPE_SECRET_KEY configuration.";
           }
@@ -1829,6 +1835,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       const data = await response.json();
       if (data.clientSecret) {
         setClientSecret(data.clientSecret);
+        setPendingSubscriptionId(data.subscriptionId ?? null);
+        setPendingCustomerId(data.customerId ?? null);
+        setPendingPeriodEnd(data.currentPeriodEnd ?? null);
       } else {
         toast.error(data.error || "Failed to initialize payment");
       }
@@ -1845,21 +1854,26 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     
     try {
       const userRef = doc(db, 'users', user.uid);
-      const planDurationMs = selectedPlan.durationDays * 24 * 60 * 60 * 1000;
+      // Use Stripe's authoritative period end if available, otherwise fall back
+      const periodEnd = pendingPeriodEnd
+        ? new Date(pendingPeriodEnd * 1000).toISOString()
+        : new Date(Date.now() + selectedPlan.durationDays * 24 * 60 * 60 * 1000).toISOString();
+
       const updateData: any = {
         subscriptionStatus: 'active',
         planId: selectedPlan.id,
-        subscriptionEndsAt: new Date(Date.now() + planDurationMs).toISOString()
+        subscriptionEndsAt: periodEnd,
+        cancelAtPeriodEnd: false,
       };
 
-      if (emailInput && !user.email) {
-        updateData.email = emailInput;
-      }
+      if (pendingSubscriptionId) updateData.stripeSubscriptionId = pendingSubscriptionId;
+      if (pendingCustomerId)    updateData.stripeCustomerId    = pendingCustomerId;
+      if (emailInput && !user.email) updateData.email = emailInput;
 
       await updateDoc(userRef, updateData);
       
       setShowSuccess(true);
-      toast.success(`Successfully upgraded to ${selectedPlan.name}!`);
+      toast.success(`Successfully subscribed to ${selectedPlan.name}!`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
@@ -1890,7 +1904,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               </div>
               
               <div className="space-y-4">
-                <h2 className="text-4xl font-black text-app-text tracking-tighter">PAYMENT CONFIRMED!</h2>
+                <h2 className="text-4xl font-black text-app-text tracking-tighter">SUBSCRIPTION ACTIVE!</h2>
                 <div className="space-y-2">
                   <p className="text-app-text-muted text-lg">Welcome to the Pro Ninja family.</p>
                   <div className="p-4 bg-app-bg/50 border border-app-primary/10 rounded-2xl inline-block">
@@ -1907,7 +1921,19 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </div>
                 <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
                   <p className="text-[10px] text-app-text-muted uppercase font-bold">Amount</p>
-                  <p className="text-sm font-bold text-app-text">{formatPrice(selectedPlan?.price)}</p>
+                  <p className="text-sm font-bold text-app-text">{formatPrice(appliedPromo ? PromoService.calculateDiscount(selectedPlan?.price, appliedPromo.discountPercent) : selectedPlan?.price)}</p>
+                </div>
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Next Renewal</p>
+                  <p className="text-sm font-bold text-app-text">
+                    {pendingPeriodEnd
+                      ? new Date(pendingPeriodEnd * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </p>
+                </div>
+                <div className="p-4 bg-app-surface border border-app-primary/5 rounded-2xl">
+                  <p className="text-[10px] text-app-text-muted uppercase font-bold">Billing</p>
+                  <p className="text-sm font-bold text-app-text capitalize">{selectedPlan?.interval}</p>
                 </div>
               </div>
 
@@ -1918,9 +1944,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 START TRAINING NOW
               </button>
               
-              <p className="text-xs text-app-text-muted/50">
-                Transaction ID: PTE-{Math.random().toString(36).substr(2, 9).toUpperCase()}
-              </p>
+              {pendingSubscriptionId && (
+                <p className="text-[10px] text-app-text-muted/40">
+                  Subscription ID: {pendingSubscriptionId}
+                </p>
+              )}
             </div>
           ) : showEmailPrompt ? (
             <div className="w-full max-w-md space-y-6 py-8">
@@ -2107,6 +2135,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     <CheckoutForm 
                       amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
                       clientSecret={clientSecret}
+                      isSubscription={true}
                       onCancel={() => {
                         setSelectedPlan(null);
                         setClientSecret(null);
@@ -2386,8 +2415,13 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
   const isActive = user?.subscriptionStatus === 'active';
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
   const getStatusColor = () => {
+    if (isActive && user?.cancelAtPeriodEnd) return 'text-orange-400 bg-orange-400/10 border-orange-400/20';
     if (isActive) return 'text-green-500 bg-green-500/10 border-green-500/20';
     if (isTrial) return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
     if (isGuest) return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
@@ -2409,7 +2443,120 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     return 0;
   };
 
+  const handleManageBilling = async () => {
+    if (!user?.stripeCustomerId) return;
+    setIsOpeningPortal(true);
+    try {
+      const res = await fetch('/api/customer-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: user.stripeCustomerId, returnUrl: window.location.href }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.error(data.error || 'Could not open billing portal');
+      }
+    } catch {
+      toast.error('Could not connect to billing portal');
+    } finally {
+      setIsOpeningPortal(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!user?.stripeSubscriptionId) return;
+    setIsCanceling(true);
+    try {
+      const res = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: true });
+        setShowCancelDialog(false);
+        toast.success('Subscription cancelled. You keep full access until the end of your billing period.');
+      } else {
+        toast.error(data.error || 'Failed to cancel subscription');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!user?.stripeSubscriptionId) return;
+    setIsReactivating(true);
+    try {
+      const res = await fetch('/api/reactivate-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: false });
+        toast.success('Subscription reactivated! Your plan will continue to renew automatically.');
+      } else {
+        toast.error(data.error || 'Failed to reactivate subscription');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
   return (
+    <>
+    {/* Cancel Confirmation Dialog */}
+    <AnimatePresence>
+      {showCancelDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="w-full max-w-md bg-app-surface border border-red-500/20 rounded-3xl p-8 shadow-2xl space-y-6"
+          >
+            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+              <AlertCircle className="text-red-500" size={28} />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-bold text-app-text">Cancel Subscription?</h3>
+              <p className="text-app-text-muted text-sm leading-relaxed">
+                Your subscription will remain active until{' '}
+                <span className="font-bold text-app-text">
+                  {user?.subscriptionEndsAt
+                    ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                    : 'the end of your billing period'}
+                </span>. No further charges will be made after that date.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelDialog(false)}
+                className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
+              >
+                Keep Subscription
+              </button>
+              <button
+                onClick={handleCancelSubscription}
+                disabled={isCanceling}
+                className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCanceling ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Cancel'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -2463,6 +2610,32 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </button>
             )}
           </div>
+
+          {/* Cancels-at-period-end warning */}
+          {isActive && user?.cancelAtPeriodEnd && (
+            <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-start gap-3">
+              <AlertCircle className="text-orange-400 shrink-0 mt-0.5" size={18} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-orange-400">Subscription Cancels Soon</p>
+                <p className="text-xs text-app-text-muted mt-0.5">
+                  Your access continues until{' '}
+                  <span className="font-bold text-app-text">
+                    {user.subscriptionEndsAt
+                      ? new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                      : 'the end of your billing period'}
+                  </span>. No further charges will be made.
+                </p>
+              </div>
+              <button
+                onClick={handleReactivate}
+                disabled={isReactivating}
+                className="shrink-0 px-3 py-1.5 bg-app-primary text-app-bg text-xs font-bold rounded-lg hover:bg-app-accent transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isReactivating ? <Loader2 className="animate-spin" size={12} /> : null}
+                Reactivate
+              </button>
+            </div>
+          )}
           
           <div className="space-y-3 md:space-y-4">
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
@@ -2472,15 +2645,48 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </p>
             </div>
             
-            {isActive && (
+            {isActive && user?.subscriptionEndsAt && (
               <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
-                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Next Billing Date</p>
+                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">
+                  {user?.cancelAtPeriodEnd ? 'Access Until' : 'Next Renewal'}
+                </p>
                 <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                  {new Date(user.subscriptionEndsAt).toLocaleDateString()}
+                  {new Date(user.subscriptionEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               </div>
             )}
           </div>
+
+          {/* Subscription management actions — only shown for Stripe-managed subscriptions */}
+          {isActive && user?.stripeSubscriptionId && (
+            <div className="space-y-3 pt-2">
+              <button
+                onClick={handleManageBilling}
+                disabled={isOpeningPortal}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-sm disabled:opacity-50"
+              >
+                {isOpeningPortal ? <Loader2 className="animate-spin" size={16} /> : <CreditCard size={16} />}
+                Manage Billing &amp; Invoices
+              </button>
+              {!user?.cancelAtPeriodEnd && (
+                <button
+                  onClick={() => setShowCancelDialog(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 text-red-500 font-bold rounded-xl hover:bg-red-500/20 transition-all text-sm"
+                >
+                  <X size={16} />
+                  Cancel Subscription
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Legal notice about card storage */}
+          {isActive && (
+            <p className="text-[10px] text-app-text-muted/40 leading-relaxed">
+              Payments and card details are managed securely by Stripe. PTENinja does not store your card number.{' '}
+              <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-app-text-muted">Stripe Privacy Policy</a>
+            </p>
+          )}
         </div>
 
         <div className="bg-app-surface p-8 rounded-3xl border border-app-primary/20 space-y-6">
@@ -2556,6 +2762,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
         </div>
       </div>
     </motion.div>
+    </>
   );
 }
 

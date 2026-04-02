@@ -93,6 +93,9 @@ export interface UserData {
   subscriptionStatus: 'active' | 'inactive' | 'trial' | 'guest' | 'expired';
   subscriptionEndsAt?: string;
   planId?: 'monthly' | 'quarterly' | 'annual';
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  cancelAtPeriodEnd?: boolean;
   activityLog?: string[];
   completedTasks?: string[];
   completedTasksDetailed?: TaskCompletion[];

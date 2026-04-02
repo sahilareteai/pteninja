@@ -7,7 +7,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { Loader2, ShieldCheck, AlertCircle, ExternalLink } from 'lucide-react';
 
-export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess }: { amount: number, clientSecret: string, onCancel: () => void, onSuccess: () => void }) {
+export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess, isSubscription = true }: { amount: number, clientSecret: string, onCancel: () => void, onSuccess: () => void, isSubscription?: boolean }) {
   const stripe = useStripe();
   const elements = useElements();
   const { formatPrice } = useSubscription();
@@ -122,7 +122,7 @@ export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess }: { am
             ) : (
               <>
                 <ShieldCheck size={20} />
-                Pay {formatPrice(amount)} Now
+                {isSubscription ? `Subscribe — ${formatPrice(amount)}` : `Pay ${formatPrice(amount)} Now`}
               </>
             )}
           </button>
@@ -135,6 +135,13 @@ export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess }: { am
           Cancel and go back
         </button>
       </div>
+
+      {isSubscription && (
+        <p className="text-[10px] text-[#C5C6C7]/40 text-center leading-relaxed">
+          Your subscription renews automatically. You can cancel anytime from your account.
+          Card details are stored securely by Stripe — PTENinja never sees your card number.
+        </p>
+      )}
       
       <p className="text-[10px] text-[#C5C6C7]/30 text-center uppercase tracking-widest">
         Secure encrypted payment powered by Stripe
