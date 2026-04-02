@@ -960,8 +960,52 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-app-bg flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-app-primary/20 border-t-app-primary rounded-full animate-spin" />
+      <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Background Glows */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-app-primary/10 blur-[120px] rounded-full animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-app-accent/5 blur-[120px] rounded-full animate-pulse delay-700" />
+        
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative z-10 flex flex-col items-center"
+        >
+          <motion.div
+            animate={{ 
+              y: [0, -10, 0],
+              scale: [1, 1.05, 1]
+            }}
+            transition={{ 
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="mb-8"
+          >
+            <Logo size={100} />
+          </motion.div>
+          
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ 
+                    scale: [1, 1.5, 1],
+                    opacity: [0.3, 1, 0.3]
+                  }}
+                  transition={{ 
+                    duration: 1,
+                    repeat: Infinity,
+                    delay: i * 0.2
+                  }}
+                  className="w-2 h-2 bg-app-primary rounded-full"
+                />
+              ))}
+            </div>
+            <span className="text-sm font-bold tracking-widest text-app-primary/60 uppercase">Entering the Dojo</span>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -3620,8 +3664,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
         { name: "Respond to a Situation", count: "1–2", description: "Listen to a situation and give a spoken response." },
         { name: "Summarize Group Discussion", count: "1–2", description: "Listen to a group discussion and summarize it orally." },
         { name: "Answer Short Question", count: "5–6", description: "Answer a simple question with a single word or short phrase." },
-        { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." },
-        { name: "Write Email", count: "1", description: "Write an email based on a given situation (about 100 words)." }
+        { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." }
       ]
     },
     {
@@ -3871,7 +3914,6 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
       
       // Writing
       'Summarize Written Text': 'bg-sky-400/10 text-sky-400 border-sky-400/20',
-      'Write Email': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
       'Write Essay': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
       
       // Reading

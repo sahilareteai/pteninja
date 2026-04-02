@@ -332,28 +332,6 @@ export const PTE_TASKS: PTETask[] = [
   },
   
   // Writing
-  {
-    id: 'email-1',
-    title: 'Question 1',
-    category: 'Write Email',
-    description: 'Write an email based on a given situation.',
-    section: 'writing',
-    type: 'writing',
-    prepTime: 0,
-    recordingTime: 540,
-    prompt: "You recently bought a new laptop from an online store, but it arrived with a cracked screen. Write an email to the customer service department. In your email, you should: \n- Explain when you bought the laptop and when it arrived. \n- Describe the problem with the laptop. \n- State what you would like the customer service department to do (e.g., refund or replacement). \nWrite about 100 words."
-  },
-  {
-    id: 'email-2',
-    title: 'Question 2',
-    category: 'Write Email',
-    description: 'Write an email based on a given situation.',
-    section: 'writing',
-    type: 'writing',
-    prepTime: 0,
-    recordingTime: 540,
-    prompt: "You are planning a surprise birthday party for a friend. Write an email to another friend to invite them and ask for their help. In your email, you should: \n- Tell them whose birthday it is and when the party will be. \n- Explain why you are keeping it a surprise. \n- Ask them to help with a specific task (e.g., bringing food or decorations). \nWrite about 100 words."
-  },
   { 
     id: 'swt-1', 
     title: 'Question 1', 
@@ -1142,16 +1120,6 @@ const promptTemplates: Record<string, (string | { prompt: string; example?: stri
     "You are at a hotel and you are checking in. Speak to the receptionist.",
     "You are at a post office and you want to send a package. Speak to the postal worker."
   ],
-  'Write Email': [
-    {
-      prompt: "You recently bought a new laptop from an online store, but it arrived with a cracked screen. Write an email to the customer service department. In your email, you should: \n- Explain when you bought the laptop and when it arrived. \n- Describe the problem with the laptop. \n- State what you would like the customer service department to do (e.g., refund or replacement). \nWrite about 100 words.",
-      example: "Subject: Damaged Laptop Received - Order #12345\n\nDear Customer Service,\n\nI am writing to report an issue with a laptop I purchased from your online store on March 15th. The package arrived yesterday, but upon opening it, I discovered that the screen is severely cracked.\n\nI am very disappointed as I need this laptop for my work. I would like to request an immediate replacement for this damaged item. Please let me know the process for returning the faulty unit and when I can expect the new one to arrive.\n\nThank you for your prompt attention to this matter.\n\nBest regards,\nJohn Doe"
-    },
-    {
-      prompt: "You are planning a surprise birthday party for a friend. Write an email to another friend to invite them and ask for their help. In your email, you should: \n- Tell them whose birthday it is and when the party will be. \n- Explain why you are keeping it a surprise. \n- Ask them to help with a specific task (e.g., bringing food or decorations). \nWrite about 100 words.",
-      example: "Subject: Surprise Party for Sarah!\n\nHi Mike,\n\nI'm planning a surprise birthday party for Sarah next Saturday at 7 PM at my place. It's her 30th, so I want to make it special! I'm keeping it a surprise because she's always the one planning things for others, and she deserves a treat.\n\nCould you please help me with the decorations? If you could bring some balloons and streamers, that would be amazing. Also, please remember to keep it a secret from her!\n\nLet me know if you can make it.\n\nBest,\nAlex"
-    }
-  ],
   'Fill in the Blanks': [
     "The ________ of the new library was a major milestone for the university community.",
     "Scientists are ________ new ways to harness solar energy more efficiently.",
@@ -1186,7 +1154,7 @@ taskGroups.forEach(groupKey => {
     };
 
     // Add specific properties for Reading tasks
-    if (category === 'Summarize Written Text' || category === 'Summarize Spoken Text' || category === 'Write Essay' || category === 'Write Email') {
+    if (category === 'Summarize Written Text' || category === 'Summarize Spoken Text' || category === 'Write Essay') {
       const selected = templates[(i - 1) % templates.length];
       if (selected && typeof selected === 'object') {
         newTask.prompt = selected.prompt;
@@ -1407,6 +1375,24 @@ taskGroups.forEach(groupKey => {
         newTask.transcript = selected.prompt;
         if (selected.answer) newTask.correctAnswers = [selected.answer];
         newTask.prompt = "You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.";
+      }
+    } else if (category === 'Describe Image') {
+      const di_images = [
+        "https://quickchart.io/chart?c={type:'bar',data:{labels:['1900','1925','1950','1975','2000','2025'],datasets:[{label:'Population (Billions)',data:[1.6,2.0,2.5,4.0,6.1,8.0]}]}}",
+        "https://picsum.photos/seed/photosynthesis/800/600",
+        "https://quickchart.io/chart?c={type:'pie',data:{labels:['Oil','Coal','Gas','Renewables','Nuclear'],datasets:[{data:[31,27,24,13,5]}]}}",
+        "https://quickchart.io/chart?c={type:'line',data:{labels:['0','20','40','60','80','100'],datasets:[{label:'Pressure',data:[1,1.2,1.5,1.8,2.2,2.7]}]}}",
+        "https://picsum.photos/seed/orgchart/800/600",
+        "https://picsum.photos/seed/migration/800/600",
+        "https://picsum.photos/seed/watercycle/800/600",
+        "https://picsum.photos/seed/foodpyramid/800/600",
+        "https://quickchart.io/chart?c={type:'bar',data:{labels:['US','China','EU','India','Japan'],datasets:[{label:'GDP Growth %',data:[2.1,5.2,1.5,7.0,1.0]}]}}",
+        "https://picsum.photos/seed/volcano/800/600"
+      ];
+      newTask.image = di_images[(i - 1) % di_images.length];
+      const selectedPrompt = templates[(i - 1) % templates.length];
+      if (typeof selectedPrompt === 'string') {
+        newTask.prompt = `Look at the image below. In 25 seconds, please speak into the microphone and describe in detail what the image is showing. You will have 40 seconds to give your response.\n\nContext: ${selectedPrompt}`;
       }
     } else if (category.includes('Multiple Choice') && template.section === 'listening') {
       newTask.transcript = "This is a recording about " + newTask.prompt; // Placeholder transcript

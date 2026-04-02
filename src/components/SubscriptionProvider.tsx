@@ -4,7 +4,8 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut } from 'lucide-react';
+import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut, Loader2 } from 'lucide-react';
+import { Logo } from './Logo';
 
 interface SubscriptionContextType {
   user: UserData | null;
@@ -252,6 +253,9 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
     if (!guestName.trim()) return;
 
     if (isAuthenticating) return;
+    
+    // Close modal immediately for a snappier feel
+    setShowGuestModal(false);
     setIsAuthenticating(true);
     setAuthError(null);
     setSessionError(null);
@@ -287,12 +291,13 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       await setDoc(userRef, newUser);
       setUser(newUser);
       
-      setShowGuestModal(false);
       setShowAuthModal(false);
       setIsAuthenticating(false);
     } catch (error: any) {
       console.error("Guest login failed:", error);
       setIsAuthenticating(false);
+      setShowGuestModal(true); // Re-open modal if it fails so user can see error
+      
       if (error.code === 'auth/admin-restricted-operation') {
         setAuthError("Guest access (Anonymous Authentication) is not enabled in the Firebase Console. Please enable it in Authentication > Sign-in method.");
       } else {
@@ -378,6 +383,52 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
     }}>
       {children}
       
+      {/* Global Auth Loading Overlay */}
+      <AnimatePresence>
+        {isAuthenticating && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-app-bg/95 backdrop-blur-xl flex flex-col items-center justify-center text-center p-6"
+          >
+            <motion.div
+              animate={{ 
+                y: [0, -10, 0],
+                scale: [1, 1.05, 1]
+              }}
+              transition={{ 
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              className="mb-8"
+            >
+              <Logo size={100} />
+            </motion.div>
+            
+            <div className="space-y-6">
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-2.5 h-2.5 bg-app-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-2.5 h-2.5 bg-app-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-2.5 h-2.5 bg-app-primary rounded-full animate-bounce" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-app-text tracking-tight uppercase">
+                  {guestName ? "Preparing Your Dojo" : "Authenticating"}
+                </h3>
+                <p className="text-app-text-muted text-sm max-w-[280px] mx-auto leading-relaxed">
+                  {guestName 
+                    ? "Sharpening your katanas and setting up your practice environment..." 
+                    : "Connecting to the Ninja network..."}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Session Error Modal */}
       <AnimatePresence>
         {sessionError && (
