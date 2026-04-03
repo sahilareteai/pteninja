@@ -697,6 +697,20 @@ function AppContent() {
   const sentNotifications = useRef<Set<string>>(new Set());
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency } = useSubscription();
 
+  // Remaining days in the current trial / guest period (recalculated whenever user changes)
+  const trialRemainingDays = React.useMemo(() => {
+    if (!user) return 0;
+    const now = new Date();
+    if (user.subscriptionStatus === 'trial' && user.trialEndsAt) {
+      return Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+    if (user.subscriptionStatus === 'guest') {
+      const expiresAt = new Date(user.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000;
+      return Math.max(0, Math.ceil((expiresAt - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+    return 0;
+  }, [user]);
+
   // Use bundled tasks directly — avoids reading the entire tasks collection from Firestore
   // on every page load for every user, which was burning through the 50k/day free-tier quota.
   // Admins can still push updated tasks to Firestore via the "Seed Tasks" button when needed.
@@ -1137,15 +1151,31 @@ function AppContent() {
             </button>
 
             {user && (
-              <div className={cn(
-                "hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
-                user.subscriptionStatus === 'active' ? "text-green-500 bg-green-500/10 border-green-500/20" :
-                user.subscriptionStatus === 'trial' ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-                "text-orange-500 bg-orange-500/10 border-orange-500/20"
-              )}>
-                <Shield size={12} className="fill-current" />
-                {user.subscriptionStatus === 'active' ? 'Premium' : 
-                 user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
+              <div className="hidden sm:flex items-center gap-2">
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
+                  user.subscriptionStatus === 'active' ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                  user.subscriptionStatus === 'trial' ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                  "text-orange-500 bg-orange-500/10 border-orange-500/20"
+                )}>
+                  <Shield size={12} className="fill-current" />
+                  {user.subscriptionStatus === 'active' ? 'Premium' : 
+                   user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
+                </div>
+                {(user.subscriptionStatus === 'trial' || user.subscriptionStatus === 'guest') && (
+                  <>
+                    <span className="text-[10px] text-app-text-muted/70 font-medium">
+                      {trialRemainingDays} day{trialRemainingDays !== 1 ? 's' : ''} remaining
+                    </span>
+                    <button
+                      onClick={() => setShowSubscriptionModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-app-primary text-app-bg text-[10px] font-black uppercase tracking-widest rounded-full hover:bg-app-accent transition-all shadow-sm shadow-app-primary/30"
+                    >
+                      <Zap size={10} className="fill-current" />
+                      Upgrade
+                    </button>
+                  </>
+                )}
               </div>
             )}
             
@@ -1209,6 +1239,7 @@ function AppContent() {
                 onSetTestDate={handleSetTestDate}
                 onSaveToSchedule={handleSaveToSchedule}
                 onResetTarget={handleResetTarget}
+                onUpgrade={() => setShowSubscriptionModal(true)}
               />
             ) : activeTab === 'mock-tests' ? (
               <MockTestView 
@@ -2552,13 +2583,13 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     const now = new Date();
     if (isTrial && user.trialEndsAt) {
       const diff = new Date(user.trialEndsAt).getTime() - now.getTime();
-      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     }
     if (isGuest) {
       const createdAt = new Date(user.createdAt);
       const expiresAt = new Date(createdAt.getTime() + 3 * 24 * 60 * 60 * 1000);
       const diff = expiresAt.getTime() - now.getTime();
-      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     }
     return 0;
   };
@@ -2873,9 +2904,18 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               {user?.subscriptionStatus}
             </span>
             {(isTrial || isGuest) && (
-              <span className="text-[10px] md:text-xs text-app-text-muted/50">
-                {getRemainingDays()} days remaining
-              </span>
+              <>
+                <span className="text-[10px] md:text-xs text-app-text-muted/70 font-medium">
+                  {getRemainingDays()} day{getRemainingDays() !== 1 ? 's' : ''} remaining
+                </span>
+                <button
+                  onClick={onUpgrade}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-app-primary text-app-bg text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full hover:bg-app-accent transition-all shadow-sm shadow-app-primary/20"
+                >
+                  <Zap size={10} className="fill-current" />
+                  Upgrade
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -3655,7 +3695,7 @@ function MockTestSession({
   );
 }
 
-function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
+function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget, onUpgrade }: { 
   progress: UserProgress, 
   user: any,
   allTasks: PTETask[],
@@ -3673,7 +3713,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onSetTargetScore: (score: number) => void | Promise<void>,
   onSetTestDate: (date: string) => void | Promise<void>,
   onSaveToSchedule: () => void | Promise<void>,
-  onResetTarget: () => void | Promise<void>
+  onResetTarget: () => void | Promise<void>,
+  onUpgrade: () => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const averageScore = calculateAverageScore();
@@ -3733,6 +3774,34 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
       exit={{ opacity: 0, y: -20 }}
       className="max-w-7xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
     >
+      {/* Trial / Guest Promo Banner */}
+      {(user?.subscriptionStatus === 'trial' || user?.subscriptionStatus === 'guest') && (
+        <motion.button
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={onUpgrade}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl border border-app-primary/30 bg-gradient-to-r from-app-primary/10 via-app-accent/10 to-app-primary/10 hover:from-app-primary/20 hover:via-app-accent/15 hover:to-app-primary/20 transition-all group cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-app-primary/20 flex items-center justify-center">
+              <Zap size={16} className="text-app-primary fill-current" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm font-bold text-app-text leading-snug">
+                🔥 <span className="text-app-primary">Limited-Time Offer</span> — Save up to 50% on Premium
+              </p>
+              <p className="text-[10px] md:text-xs text-app-text-muted/70 leading-snug mt-0.5">
+                Unlock all tasks, mock tests, AI feedback & more. Use code <span className="font-bold text-app-primary">NINJA-PTE-SPECIAL-50</span> at checkout.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-app-primary text-app-bg text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl group-hover:bg-app-accent transition-all whitespace-nowrap">
+            Upgrade Now
+            <ArrowRight size={12} />
+          </div>
+        </motion.button>
+      )}
+
       {/* Progress Overview */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative">
         <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative group z-20">
