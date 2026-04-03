@@ -398,7 +398,7 @@ app.post("/api/apply-retention-discount", async (req, res) => {
     }
 
     await stripeInstance.subscriptions.update(subscriptionId, {
-      coupon: COUPON_ID,
+      discounts: [{ coupon: COUPON_ID }],
     } as any);
 
     res.json({ success: true });
