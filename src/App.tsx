@@ -1861,6 +1861,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           currency: currency.code.toLowerCase(),
           email: receiptEmail,
           existingCustomerId: user?.stripeCustomerId || undefined,
+          promoCode: appliedPromo?.code || undefined,
         }),
       });
       
@@ -2148,27 +2149,41 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 ))}
               </div>
 
-              <div className="w-full max-w-md mx-auto bg-app-bg border border-app-primary/10 rounded-2xl p-4 flex items-center gap-3">
-                <div className="flex-1 relative">
-                  <input 
-                    type="text" 
-                    value={promoInput}
-                    onChange={(e) => setPromoInput(e.target.value)}
-                    placeholder="Referral or Gift Code"
-                    className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium"
-                  />
-                  {appliedPromo && (
-                    <div className="absolute -top-6 left-0 text-[10px] text-app-accent font-bold uppercase tracking-wider">
-                      Code Applied: {appliedPromo.code} ({appliedPromo.discountPercent}% OFF)
+              <div className="w-full max-w-md mx-auto space-y-2">
+                {appliedPromo && (
+                  <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <svg className="shrink-0 text-app-accent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate">{appliedPromo.code}</span>
+                      <span className="text-app-accent/70 text-xs font-medium shrink-0">— {appliedPromo.discountPercent}% off</span>
                     </div>
-                  )}
+                    <button
+                      onClick={() => { setAppliedPromo(null); setPromoInput(''); }}
+                      className="shrink-0 ml-3 text-app-text-muted/40 hover:text-app-text-muted transition-colors"
+                      aria-label="Remove promo code"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                )}
+                <div className="bg-app-bg border border-app-primary/10 rounded-2xl px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <input 
+                      type="text" 
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                      placeholder="Referral or Gift Code"
+                      className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleApplyPromo}
+                    className="shrink-0 bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Apply
+                  </button>
                 </div>
-                <button 
-                  onClick={handleApplyPromo}
-                  className="bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
-                >
-                  Apply
-                </button>
               </div>
             </>
           ) : (
