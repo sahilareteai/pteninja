@@ -2505,7 +2505,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       });
       const data = await res.json();
       if (data.url) {
-        window.open(data.url, '_blank', 'noopener,noreferrer');
+        window.location.href = data.url;
       } else {
         toast.error(data.error || 'Could not open billing portal');
       }
