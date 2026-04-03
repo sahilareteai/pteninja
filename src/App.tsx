@@ -5902,7 +5902,7 @@ function TaskModal({
                     </div>
                     <div className="flex items-center gap-6 pt-2">
                       {/* Control Button */}
-                      <button 
+                      {!isPreparingAudio && <button 
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
                           else if (phase === 'recording') handleFinish();
@@ -5936,7 +5936,7 @@ function TaskModal({
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
                           phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
                           (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
-                      </button>
+                      </button>}
 
                       <div className="flex-1 overflow-hidden">
                         {/* Wave Animation when active */}
