@@ -4160,7 +4160,7 @@ function WordDetailModal({ word, user, onClose, onToggleFavorite, onPlayPronunci
         >
           <X size={24} />
         </button>
-        <div className="pt-4">
+        <div className="pt-4 pr-14">
           <WordDetailContent 
             word={word}
             user={user}
