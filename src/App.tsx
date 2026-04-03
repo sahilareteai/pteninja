@@ -690,6 +690,7 @@ function AppContent() {
   const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [isSyncingPortal, setIsSyncingPortal] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
@@ -728,7 +729,9 @@ function AppContent() {
   // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has('fromPortal') || !user?.stripeSubscriptionId) return;
+    if (!params.has('fromPortal')) return;
+    // Need at least one Stripe identifier to sync
+    if (!user?.stripeSubscriptionId && !user?.stripeCustomerId) return;
 
     // Remove the param from the URL without triggering a navigation
     params.delete('fromPortal');
@@ -736,12 +739,16 @@ function AppContent() {
     const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
     window.history.replaceState(null, '', newUrl);
 
+    setIsSyncingPortal(true);
     (async () => {
       try {
         const res = await fetch('/api/sync-subscription', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+          body: JSON.stringify({
+            subscriptionId: user.stripeSubscriptionId || undefined,
+            customerId: user.stripeCustomerId || undefined,
+          }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -754,10 +761,17 @@ function AppContent() {
           } else if (data.status === 'canceled' || data.status === 'unpaid' || data.status === 'past_due') {
             updates.subscriptionStatus = 'inactive';
           }
+          // Persist subscriptionId if it wasn't already saved
+          if (data.subscriptionId && !user?.stripeSubscriptionId) {
+            updates.stripeSubscriptionId = data.subscriptionId;
+          }
           await updateDoc(doc(db, 'users', user.uid), updates);
         }
-      } catch {
-        // Non-critical: silent fail; Firestore will be updated by the webhook anyway
+      } catch (err) {
+        // Non-critical: Firestore will be updated by the webhook anyway
+        console.error("Portal return subscription sync failed:", err);
+      } finally {
+        setIsSyncingPortal(false);
       }
     })();
   }, [user]);
@@ -1251,6 +1265,7 @@ function AppContent() {
                 isDarkMode={isDarkMode}
                 onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
                 onNavigate={setActiveTab}
+                isSyncingPortal={isSyncingPortal}
               />
             ) : activeTab === 'help' ? (
               <HelpView 
@@ -1861,6 +1876,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           currency: currency.code.toLowerCase(),
           email: receiptEmail,
           existingCustomerId: user?.stripeCustomerId || undefined,
+          promoCode: appliedPromo?.code || undefined,
         }),
       });
       
@@ -2148,27 +2164,41 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 ))}
               </div>
 
-              <div className="w-full max-w-md mx-auto bg-app-bg border border-app-primary/10 rounded-2xl p-4 flex items-center gap-3">
-                <div className="flex-1 relative">
-                  <input 
-                    type="text" 
-                    value={promoInput}
-                    onChange={(e) => setPromoInput(e.target.value)}
-                    placeholder="Referral or Gift Code"
-                    className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium"
-                  />
-                  {appliedPromo && (
-                    <div className="absolute -top-6 left-0 text-[10px] text-app-accent font-bold uppercase tracking-wider">
-                      Code Applied: {appliedPromo.code} ({appliedPromo.discountPercent}% OFF)
+              <div className="w-full max-w-md mx-auto space-y-2">
+                {appliedPromo && (
+                  <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <svg className="shrink-0 text-app-accent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate" title={appliedPromo.code}>{appliedPromo.code}</span>
+                      <span className="text-app-accent/70 text-xs font-medium shrink-0">— {appliedPromo.discountPercent}% off</span>
                     </div>
-                  )}
+                    <button
+                      onClick={() => { setAppliedPromo(null); setPromoInput(''); }}
+                      className="shrink-0 ml-3 text-app-text-muted/40 hover:text-app-text-muted transition-colors"
+                      aria-label="Remove promo code"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                )}
+                <div className="bg-app-bg border border-app-primary/10 rounded-2xl px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <input 
+                      type="text" 
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
+                      placeholder="Referral or Gift Code"
+                      className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleApplyPromo}
+                    className="shrink-0 bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Apply
+                  </button>
                 </div>
-                <button 
-                  onClick={handleApplyPromo}
-                  className="bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
-                >
-                  Apply
-                </button>
               </div>
             </>
           ) : (
@@ -2487,14 +2517,15 @@ function FAQView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate }: { 
+function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate, isSyncingPortal = false }: { 
   user: any, 
   onLogout: () => void, 
   onLogin: () => void,
   onUpgrade: () => void, 
   isDarkMode: boolean, 
   onOpenAdminDashboard?: () => void,
-  onNavigate: (tab: any) => void
+  onNavigate: (tab: any) => void,
+  isSyncingPortal?: boolean
 }) {
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
@@ -2871,6 +2902,14 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </button>
             )}
           </div>
+
+          {/* Syncing banner — shown while refreshing state after returning from Stripe portal */}
+          {isSyncingPortal && (
+            <div className="p-4 bg-app-primary/10 border border-app-primary/20 rounded-2xl flex items-center gap-3">
+              <Loader2 className="text-app-primary shrink-0 animate-spin" size={16} />
+              <p className="text-sm font-medium text-app-primary">Refreshing subscription status…</p>
+            </div>
+          )}
 
           {/* Cancels-at-period-end warning */}
           {isActive && user?.cancelAtPeriodEnd && (

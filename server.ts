@@ -244,7 +244,7 @@ app.post("/api/create-subscription", async (req, res) => {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
-  const { planId, planName, amount, currency = "aud", email, existingCustomerId } = req.body;
+  const { planId, planName, amount, currency = "aud", email, existingCustomerId, promoCode } = req.body;
 
   if (!planId || !amount || amount <= 0) {
     return res.status(400).json({ error: "Invalid plan or amount" });
@@ -288,6 +288,7 @@ app.post("/api/create-subscription", async (req, res) => {
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       expand: ["latest_invoice.payment_intent", "latest_invoice.confirmation_secret"],
+      ...(promoCode ? { metadata: { promoCode } } : {}),
     }) as unknown as SubscriptionRuntime;
 
     // If the subscription is already active/trialing, the customer's saved
@@ -549,17 +550,34 @@ app.post("/api/sync-subscription", async (req, res) => {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
-  const { subscriptionId } = req.body;
-  if (!subscriptionId) {
-    return res.status(400).json({ error: "subscriptionId is required" });
-  }
+  const { subscriptionId, customerId } = req.body;
 
   try {
-    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as unknown as SubscriptionRuntime;
+    let resolvedSubscriptionId: string = subscriptionId ?? "";
+
+    // If no subscriptionId, look up the most recent subscription for the customer
+    // using status: 'all' to avoid multiple sequential API calls.
+    if (!resolvedSubscriptionId && customerId) {
+      const subs = await stripeInstance.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        resolvedSubscriptionId = subs.data[0].id;
+      }
+    }
+
+    if (!resolvedSubscriptionId) {
+      return res.status(400).json({ error: "No subscription found" });
+    }
+
+    const subscription = await stripeInstance.subscriptions.retrieve(resolvedSubscriptionId) as unknown as SubscriptionRuntime;
     res.json({
       status: subscription.status,
       currentPeriodEnd: subscription.current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      subscriptionId: resolvedSubscriptionId,
     });
   } catch (error: any) {
     console.error("Sync subscription error:", error);
