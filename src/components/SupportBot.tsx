@@ -195,15 +195,17 @@ export function SupportBot({ isOpen, setIsOpen, userName, userEmail }: SupportBo
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Failed to send ticket');
 
+      const ticketId: string = data.ticketId ?? 'N/A';
+      const ticketLine = ticketId !== 'N/A' ? `\n\n**Ticket ID: ${ticketId}**` : '';
       setBotState('submitted');
       setMessages(prev => [
         ...prev,
         {
           role: 'bot',
-          content: `✅ Your query has been sent to our support team! We'll get back to you at **${userDetails.email}** soon. Thank you for reaching out, ${userDetails.name}!`,
+          content: `✅ Your support ticket has been submitted!${ticketLine}\n\nA confirmation email has been sent to **${userDetails.email}**. Our team will get back to you within 1–2 business days. Thank you for reaching out, ${userDetails.name}!`,
         },
       ]);
-      toast.success('Support ticket submitted successfully!');
+      toast.success(ticketId !== 'N/A' ? `Support ticket submitted! Ticket ID: ${ticketId}` : 'Support ticket submitted successfully!');
     } catch {
       toast.error('Failed to send support ticket. Please try again.');
     } finally {
