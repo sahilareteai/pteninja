@@ -3856,10 +3856,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
               </p>
             </div>
           </div>
-          <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-app-primary text-app-bg text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl group-hover:bg-app-accent transition-all whitespace-nowrap">
-            Upgrade Now
-            <ArrowRight size={12} />
-          </div>
+
         </motion.button>
       )}
 
