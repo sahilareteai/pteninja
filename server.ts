@@ -14,6 +14,83 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const app = express();
+
+// ─── Stripe Webhook ───────────────────────────────────────────────────────────
+// IMPORTANT: This route must be registered BEFORE app.use(express.json()) so
+// that express.raw() can capture the raw body needed for signature verification.
+app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return res.status(500).json({ error: "Stripe webhook secret is not configured." });
+  }
+
+  const sig = req.headers["stripe-signature"] as string;
+  let event: Stripe.Event;
+  try {
+    event = stripeInstance.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error("Webhook signature verification failed:", err.message);
+    return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+  }
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    console.error("Firebase Admin not configured – cannot update Firestore from webhook.");
+    // Still acknowledge the event so Stripe doesn't retry indefinitely.
+    return res.json({ received: true });
+  }
+  const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+
+  const updateUserBySubscription = async (
+    subscriptionId: string,
+    updates: Record<string, unknown>,
+  ) => {
+    const snapshot = await db
+      .collection("users")
+      .where("stripeSubscriptionId", "==", subscriptionId)
+      .limit(1)
+      .get();
+    if (!snapshot.empty) {
+      await snapshot.docs[0].ref.update(updates);
+    }
+  };
+
+  switch (event.type) {
+    case "customer.subscription.updated": {
+      const sub = event.data.object as unknown as SubscriptionRuntime;
+      const updates: Record<string, unknown> = {
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        subscriptionEndsAt: new Date(sub.current_period_end * 1000).toISOString(),
+      };
+      if (sub.status === "active") {
+        updates.subscriptionStatus = "active";
+      } else if (sub.status === "canceled" || sub.status === "unpaid" || sub.status === "past_due") {
+        updates.subscriptionStatus = "inactive";
+      }
+      await updateUserBySubscription(sub.id, updates);
+      break;
+    }
+    case "customer.subscription.deleted": {
+      const sub = event.data.object as unknown as SubscriptionRuntime;
+      await updateUserBySubscription(sub.id, {
+        subscriptionStatus: "inactive",
+        cancelAtPeriodEnd: false,
+        subscriptionEndsAt: new Date(sub.current_period_end * 1000).toISOString(),
+      });
+      break;
+    }
+    default:
+      break;
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json());
 
 // Lazy Stripe initialization
