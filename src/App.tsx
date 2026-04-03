@@ -64,7 +64,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
-import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
+import { seedTasksToFirestore } from './services/taskService';
 
 // Module-level mic stream cache — shared across TaskModal instances so the browser
 // only asks for microphone permission once per practice session.
@@ -696,27 +696,12 @@ function AppContent() {
   const sentNotifications = useRef<Set<string>>(new Set());
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency } = useSubscription();
 
-  // Load tasks from Firestore
+  // Use bundled tasks directly — avoids reading the entire tasks collection from Firestore
+  // on every page load for every user, which was burning through the 50k/day free-tier quota.
+  // Admins can still push updated tasks to Firestore via the "Seed Tasks" button when needed.
   useEffect(() => {
-    const loadTasks = async () => {
-      setIsLoadingTasks(true);
-      const firestoreTasks = await fetchTasksFromFirestore();
-      
-      // If Firestore has fewer tasks than our static list, it means the static list is more up-to-date
-      // (e.g., we just added 100 questions per category).
-      // We prefer the larger set to ensure the user gets all the new content.
-      if (firestoreTasks.length > PTE_TASKS.length) {
-        setTasks(firestoreTasks);
-      } else {
-        setTasks(PTE_TASKS);
-        
-        // If Firestore was empty or had fewer tasks, we should seed the new tasks
-        // but we'll do it silently or let the user trigger it.
-        // For now, just using PTE_TASKS locally is enough to show them in the app.
-      }
-      setIsLoadingTasks(false);
-    };
-    loadTasks();
+    setTasks(PTE_TASKS);
+    setIsLoadingTasks(false);
   }, []);
 
   const handleRequestNotificationPermission = async () => {
