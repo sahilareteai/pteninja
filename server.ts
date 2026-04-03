@@ -27,7 +27,7 @@ const getStripe = () => {
 
 // Lazy Firebase Admin initialization
 // FIREBASE_DATABASE_ID defaults to the project's custom database (same value as in firebase-applet-config.json)
-const FIREBASE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID ?? "ai-studio-37d37134-5b01-4f97-94a8-1826017ba501";
+const FIREBASE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID ?? "pteninja-prod";
 // ADMIN_EMAILS: comma-separated list of emails that have admin access (same check as Firestore security rules)
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "sg.analyst93@gmail.com")
   .split(",")
