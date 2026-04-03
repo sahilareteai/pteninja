@@ -2235,7 +2235,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </p>
                 <p className="text-xs text-app-text-muted">
                   {isAccessRestricted 
-                    ? 'Sign up now to get a 14-day free trial!' 
+                    ? 'Sign up now to get a 7-day free trial!' 
                     : 'You have 3 days of free access. Sign up to save your progress!'}
                 </p>
               </div>
@@ -2760,7 +2760,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
               <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Current Plan</p>
               <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
+                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '7-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
@@ -2826,7 +2826,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                   onClick={onLogin}
                   className="px-4 py-2 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-xs"
                 >
-                  Verify Email & Get 14-Day Trial
+                  Verify Email & Get 7-Day Trial
                 </button>
               )}
             </div>

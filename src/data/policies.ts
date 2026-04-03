@@ -79,7 +79,7 @@ export const POLICIES = {
         <p>Due to the nature of digital services and instant access to practice materials, we generally do not offer refunds. However, if you experience technical issues, please contact our support team within 7 days of purchase.</p>
         
         <h3 class="text-app-text font-bold mt-4">4. Free Trial</h3>
-        <p>We offer a 14-day free trial for new users. No charges are made during the trial period, and you can cancel anytime before the trial ends.</p>
+        <p>We offer a 7-day free trial for new users. No charges are made during the trial period, and you can cancel anytime before the trial ends.</p>
       </div>
     `
   }

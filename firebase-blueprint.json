@@ -10,7 +10,7 @@
         "displayName": { "type": "string", "description": "User display name" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Account creation date" },
         "accessType": { "type": "string", "enum": ["guest", "user"], "description": "Type of access" },
-        "trialEndsAt": { "type": "string", "format": "date-time", "description": "End of 14-day trial" },
+        "trialEndsAt": { "type": "string", "format": "date-time", "description": "End of 7-day trial" },
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "trial", "guest", "expired"], "description": "Current subscription status" },
         "subscriptionEndsAt": { "type": "string", "format": "date-time", "description": "End of current subscription period" },
         "planId": { "type": "string", "enum": ["monthly", "quarterly", "annual"], "description": "Current subscription plan" },
