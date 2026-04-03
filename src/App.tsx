@@ -3405,14 +3405,22 @@ function MockTestSession({
           animate={{ opacity: 1, y: 0 }}
           className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
         >
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
-              <Info className="text-app-primary" size={32} />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
+                <Info className="text-app-primary" size={32} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Test Instructions</h2>
+                <p className="text-app-text-muted text-sm">PTE Academic Mock Test</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Test Instructions</h2>
-              <p className="text-app-text-muted text-sm">PTE Academic Mock Test</p>
-            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
+            >
+              <LogOut size={16} /> Exit
+            </button>
           </div>
 
           <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
@@ -3426,12 +3434,20 @@ function MockTestSession({
             <p>Please ensure your microphone and speakers are working correctly before starting.</p>
           </div>
 
-          <button 
-            onClick={() => setPhase('personal-intro')}
-            className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
-          >
-            Start Personal Intro <ArrowRight size={20} />
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-text hover:border-app-primary/40 transition-all"
+            >
+              <ChevronLeft size={20} /> Back
+            </button>
+            <button 
+              onClick={() => setPhase('personal-intro')}
+              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+            >
+              Start Personal Intro <ArrowRight size={20} />
+            </button>
+          </div>
         </motion.div>
       </div>
     );
@@ -3479,12 +3495,20 @@ function MockTestSession({
             </div>
           </div>
 
-          <button 
-            onClick={() => setPhase('testing')}
-            className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
-          >
-            Begin Section <Play size={20} />
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => { releaseGlobalMicStream(); onClose(); }}
+              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
+            >
+              <LogOut size={16} /> End Test
+            </button>
+            <button 
+              onClick={() => setPhase('testing')}
+              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+            >
+              Begin Section <Play size={20} />
+            </button>
+          </div>
         </motion.div>
       </div>
     );
