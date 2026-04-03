@@ -2773,58 +2773,6 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
         </div>
       )}
     </AnimatePresence>
-
-    {/* Change Plan Confirmation Dialog */}
-    <AnimatePresence>
-      {showChangePlanConfirm && changePlanTarget && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl space-y-6"
-          >
-            {(() => {
-              const currentIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === user?.planId);
-              const targetIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === changePlanTarget.id);
-              const isUpgrade = targetIndex > currentIndex;
-              return (
-                <>
-                  <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
-                    <span className="text-3xl">{isUpgrade ? '🚀' : '🔄'}</span>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <h3 className="text-xl font-bold text-app-text">
-                      {isUpgrade ? 'Upgrade' : 'Downgrade'} to {changePlanTarget.name}?
-                    </h3>
-                    <p className="text-app-text-muted text-sm leading-relaxed">
-                      {isUpgrade
-                        ? `You'll be charged a prorated amount for the remainder of your current billing period, then ${changePlanTarget.name} pricing going forward.`
-                        : `Your plan will switch to ${changePlanTarget.name} immediately. Any unused time will be credited toward your next invoice.`}
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => { setShowChangePlanConfirm(false); setChangePlanTarget(null); }}
-                      className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleChangePlan}
-                      disabled={isChangingPlan}
-                      className="flex-1 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isChangingPlan ? <Loader2 className="animate-spin" size={18} /> : `Confirm ${isUpgrade ? 'Upgrade' : 'Downgrade'}`}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
