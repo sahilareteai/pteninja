@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, 
@@ -15,7 +15,8 @@ import {
   Clock,
   Mail,
   User as UserIcon,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, query, where, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
@@ -37,6 +38,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const hasFetchedUsers = useRef(false);
+  const hasFetchedPromos = useRef(false);
   const [newPromo, setNewPromo] = useState<PromoCode>({
     code: '',
     discountPercent: 10,
@@ -45,7 +48,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   });
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
     seedInitialCodes();
   }, [activeTab]);
 
@@ -70,7 +73,9 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (force = false) => {
+    if (activeTab === 'users' && hasFetchedUsers.current && !force) return;
+    if (activeTab === 'promoCodes' && hasFetchedPromos.current && !force) return;
     setIsLoading(true);
     try {
       if (activeTab === 'users') {
@@ -80,6 +85,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           usersList.push({ uid: doc.id, ...doc.data() } as AdminUser);
         });
         setUsers(usersList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        hasFetchedUsers.current = true;
       } else {
         const querySnapshot = await getDocs(collection(db, 'promoCodes'));
         const promoList: PromoCode[] = [];
@@ -87,6 +93,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           promoList.push(doc.data() as PromoCode);
         });
         setPromoCodes(promoList);
+        hasFetchedPromos.current = true;
       }
     } catch (error) {
       console.error('Error fetching admin data:', error);
@@ -247,33 +254,43 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       />
                     </div>
 
-                    <div className="flex items-center gap-2 bg-app-bg p-1 rounded-xl border border-app-primary/10">
-                      <button 
-                        onClick={() => setUserFilter('all')}
-                        className={cn(
-                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
-                          userFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
-                        )}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 bg-app-bg p-1 rounded-xl border border-app-primary/10">
+                        <button 
+                          onClick={() => setUserFilter('all')}
+                          className={cn(
+                            "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                            userFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                          )}
+                        >
+                          All ({users.length})
+                        </button>
+                        <button 
+                          onClick={() => setUserFilter('paid')}
+                          className={cn(
+                            "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                            userFilter === 'paid' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                          )}
+                        >
+                          Paid ({paidCount})
+                        </button>
+                        <button 
+                          onClick={() => setUserFilter('guests')}
+                          className={cn(
+                            "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                            userFilter === 'guests' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
+                          )}
+                        >
+                          Guests ({guestCount})
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => fetchData(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all"
+                        title="Refresh user list"
                       >
-                        All ({users.length})
-                      </button>
-                      <button 
-                        onClick={() => setUserFilter('paid')}
-                        className={cn(
-                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
-                          userFilter === 'paid' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
-                        )}
-                      >
-                        Paid ({paidCount})
-                      </button>
-                      <button 
-                        onClick={() => setUserFilter('guests')}
-                        className={cn(
-                          "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
-                          userFilter === 'guests' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text"
-                        )}
-                      >
-                        Guests ({guestCount})
+                        <RefreshCw size={14} />
+                        Refresh
                       </button>
                     </div>
                   </div>
@@ -357,13 +374,23 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                 <>
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-app-text">Manage Promo Codes</h3>
-                    <button 
-                      onClick={() => setIsAddingPromo(true)}
-                      className="flex items-center gap-2 bg-app-primary text-app-bg px-4 py-2 rounded-xl text-sm font-bold hover:bg-app-accent transition-all"
-                    >
-                      <Plus size={18} />
-                      Add New Code
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => fetchData(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all"
+                        title="Refresh promo codes"
+                      >
+                        <RefreshCw size={14} />
+                        Refresh
+                      </button>
+                      <button 
+                        onClick={() => setIsAddingPromo(true)}
+                        className="flex items-center gap-2 bg-app-primary text-app-bg px-4 py-2 rounded-xl text-sm font-bold hover:bg-app-accent transition-all"
+                      >
+                        <Plus size={18} />
+                        Add New Code
+                      </button>
+                    </div>
                   </div>
 
                   {isAddingPromo && (
