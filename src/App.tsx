@@ -697,6 +697,20 @@ function AppContent() {
   const sentNotifications = useRef<Set<string>>(new Set());
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency } = useSubscription();
 
+  // Remaining days in the current trial / guest period (recalculated whenever user changes)
+  const trialRemainingDays = React.useMemo(() => {
+    if (!user) return 0;
+    const now = new Date();
+    if (user.subscriptionStatus === 'trial' && user.trialEndsAt) {
+      return Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+    if (user.subscriptionStatus === 'guest') {
+      const expiresAt = new Date(user.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000;
+      return Math.max(0, Math.ceil((expiresAt - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+    return 0;
+  }, [user]);
+
   // Use bundled tasks directly — avoids reading the entire tasks collection from Firestore
   // on every page load for every user, which was burning through the 50k/day free-tier quota.
   // Admins can still push updated tasks to Firestore via the "Seed Tasks" button when needed.
@@ -1137,15 +1151,31 @@ function AppContent() {
             </button>
 
             {user && (
-              <div className={cn(
-                "hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
-                user.subscriptionStatus === 'active' ? "text-green-500 bg-green-500/10 border-green-500/20" :
-                user.subscriptionStatus === 'trial' ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
-                "text-orange-500 bg-orange-500/10 border-orange-500/20"
-              )}>
-                <Shield size={12} className="fill-current" />
-                {user.subscriptionStatus === 'active' ? 'Premium' : 
-                 user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
+              <div className="hidden sm:flex items-center gap-2">
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest",
+                  user.subscriptionStatus === 'active' ? "text-green-500 bg-green-500/10 border-green-500/20" :
+                  user.subscriptionStatus === 'trial' ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                  "text-orange-500 bg-orange-500/10 border-orange-500/20"
+                )}>
+                  <Shield size={12} className="fill-current" />
+                  {user.subscriptionStatus === 'active' ? 'Premium' : 
+                   user.subscriptionStatus === 'trial' ? 'Trial' : 'Guest'}
+                </div>
+                {(user.subscriptionStatus === 'trial' || user.subscriptionStatus === 'guest') && (
+                  <>
+                    <span className="text-[10px] text-app-text-muted/70 font-medium">
+                      {trialRemainingDays} day{trialRemainingDays !== 1 ? 's' : ''} remaining
+                    </span>
+                    <button
+                      onClick={() => setShowSubscriptionModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-app-primary text-app-bg text-[10px] font-black uppercase tracking-widest rounded-full hover:bg-app-accent transition-all shadow-sm shadow-app-primary/30"
+                    >
+                      <Zap size={10} className="fill-current" />
+                      Upgrade
+                    </button>
+                  </>
+                )}
               </div>
             )}
             
@@ -1209,6 +1239,7 @@ function AppContent() {
                 onSetTestDate={handleSetTestDate}
                 onSaveToSchedule={handleSaveToSchedule}
                 onResetTarget={handleResetTarget}
+                onUpgrade={() => setShowSubscriptionModal(true)}
               />
             ) : activeTab === 'mock-tests' ? (
               <MockTestView 
@@ -2552,13 +2583,13 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     const now = new Date();
     if (isTrial && user.trialEndsAt) {
       const diff = new Date(user.trialEndsAt).getTime() - now.getTime();
-      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     }
     if (isGuest) {
       const createdAt = new Date(user.createdAt);
       const expiresAt = new Date(createdAt.getTime() + 3 * 24 * 60 * 60 * 1000);
       const diff = expiresAt.getTime() - now.getTime();
-      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     }
     return 0;
   };
@@ -2873,9 +2904,18 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               {user?.subscriptionStatus}
             </span>
             {(isTrial || isGuest) && (
-              <span className="text-[10px] md:text-xs text-app-text-muted/50">
-                {getRemainingDays()} days remaining
-              </span>
+              <>
+                <span className="text-[10px] md:text-xs text-app-text-muted/70 font-medium">
+                  {getRemainingDays()} day{getRemainingDays() !== 1 ? 's' : ''} remaining
+                </span>
+                <button
+                  onClick={onUpgrade}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-app-primary text-app-bg text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full hover:bg-app-accent transition-all shadow-sm shadow-app-primary/20"
+                >
+                  <Zap size={10} className="fill-current" />
+                  Upgrade
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -3250,6 +3290,7 @@ function MockTestSession({
   const [taskScores, setTaskScores] = useState<Record<string, number>>({});
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
@@ -3311,7 +3352,16 @@ function MockTestSession({
     }
   };
 
-  const handleCompleteTest = async () => {
+  const handleExitClick = () => {
+    // In instructions phase nothing has been attempted yet — just close
+    if (phase === 'instructions') {
+      onClose();
+      return;
+    }
+    setShowExitConfirm(true);
+  };
+
+  const handleCompleteTest = async (isPartial = false) => {
     setPhase('calculating');
     const sectionScores: Record<PTESection, number> = {
       speaking: 0,
@@ -3399,7 +3449,8 @@ function MockTestSession({
       completedAt: new Date().toISOString(),
       sectionScores,
       overallScore,
-      taskResponses
+      taskResponses,
+      ...(isPartial && { partial: true })
     };
 
     setFinalResult(result);
@@ -3420,8 +3471,14 @@ function MockTestSession({
           </div>
           
           <div>
-            <h2 className="text-3xl font-black text-app-text uppercase tracking-tight mb-2">Test Complete!</h2>
-            <p className="text-app-text-muted">You've completed {test.title}. Here is your performance summary.</p>
+            <h2 className="text-3xl font-black text-app-text uppercase tracking-tight mb-2">
+              {finalResult.partial ? 'Test Ended Early' : 'Test Complete!'}
+            </h2>
+            <p className="text-app-text-muted">
+              {finalResult.partial
+                ? `Here are your results for the attempted portion of ${test.title}. Unattempted tasks received the minimum score (10/90).`
+                : `You've completed ${test.title}. Here is your performance summary.`}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -3483,53 +3540,63 @@ function MockTestSession({
 
   if (phase === 'instructions') {
     return (
-      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+          className="bg-app-surface rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
-                <Info className="text-app-primary" size={32} />
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                <Info className="text-app-primary w-5 h-5 sm:w-8 sm:h-8" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Test Instructions</h2>
-                <p className="text-app-text-muted text-sm">PTE Academic Mock Test</p>
+                <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Test Instructions</h2>
+                <p className="text-app-text-muted text-xs sm:text-sm">PTE Academic Mock Test</p>
               </div>
             </div>
             <button
-              onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
+              onClick={handleExitClick}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
             >
-              <LogOut size={16} /> Exit
+              <LogOut size={14} /> Exit
             </button>
           </div>
 
-          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
+          {/* Scrollable body */}
+          <div className="overflow-y-auto flex-1 space-y-3 sm:space-y-4 text-app-text-muted text-sm leading-relaxed pr-1">
             <p>Welcome to the PTE Academic Mock Test. This test consists of three main parts:</p>
-            <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Part 1: Speaking & Writing (54–67 minutes)</li>
-              <li>Part 2: Reading (29–30 minutes)</li>
-              <li>Part 3: Listening (30–43 minutes)</li>
+            <ul className="space-y-2 ml-2">
+              {[
+                'Part 1: Speaking & Writing (54–67 minutes)',
+                'Part 2: Reading (29–30 minutes)',
+                'Part 3: Listening (30–43 minutes)',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-app-primary shrink-0" />
+                  {item}
+                </li>
+              ))}
             </ul>
             <p>Before Part 1, you will complete a non-scored Personal Introduction. This is your chance to introduce yourself to the institutions you are applying to.</p>
             <p>Please ensure your microphone and speakers are working correctly before starting.</p>
           </div>
 
-          <div className="flex gap-4">
+          {/* Action buttons */}
+          <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-text hover:border-app-primary/40 transition-all"
+              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-text hover:border-app-primary/40 transition-all"
             >
-              <ChevronLeft size={20} /> Back
+              <ChevronLeft size={16} /> Back
             </button>
             <button 
               onClick={() => setPhase('personal-intro')}
-              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Start Personal Intro <ArrowRight size={20} />
+              Start Personal Intro <ArrowRight size={18} />
             </button>
           </div>
         </motion.div>
@@ -3551,26 +3618,26 @@ function MockTestSession({
     };
 
     return (
-      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+          className="bg-app-surface rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         >
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
-              <Layout className="text-app-primary" size={32} />
+          <div className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6 shrink-0">
+            <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+              <Layout className="text-app-primary w-5 h-5 sm:w-8 sm:h-8" />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Section {currentSectionIndex + 1}</h2>
-              <p className="text-app-primary font-bold text-sm uppercase tracking-widest">{sectionNames[currentSection.section]}</p>
+              <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Section {currentSectionIndex + 1}</h2>
+              <p className="text-app-primary font-bold text-xs sm:text-sm uppercase tracking-widest">{sectionNames[currentSection.section]}</p>
             </div>
           </div>
 
-          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
-            <p className="text-lg font-bold text-app-text mb-2">Instructions:</p>
+          <div className="overflow-y-auto flex-1 space-y-3 sm:space-y-4 text-app-text-muted text-sm leading-relaxed pr-1">
+            <p className="text-base font-bold text-app-text mb-2">Instructions:</p>
             <p>{sectionDetails[currentSection.section]}</p>
-            <div className="bg-app-bg p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
+            <div className="bg-app-bg p-3 sm:p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock size={16} className="text-app-primary" />
                 <span className="font-bold uppercase tracking-widest text-[10px]">Duration</span>
@@ -3579,18 +3646,18 @@ function MockTestSession({
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
-              onClick={() => { releaseGlobalMicStream(); onClose(); }}
-              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
+              onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
+              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
             >
-              <LogOut size={16} /> End Test
+              <LogOut size={14} /> End Test
             </button>
             <button 
               onClick={() => setPhase('testing')}
-              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Begin Section <Play size={20} />
+              Begin Section <Play size={18} />
             </button>
           </div>
         </motion.div>
@@ -3600,6 +3667,40 @@ function MockTestSession({
 
   return (
     <div className="fixed inset-0 z-[100] bg-app-bg flex flex-col">
+      {/* Exit Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="absolute inset-0 z-[110] bg-app-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface rounded-3xl p-8 border border-app-primary/20 max-w-sm w-full text-center space-y-6 shadow-2xl"
+          >
+            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+              <LogOut className="text-red-400" size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">End Test?</h3>
+              <p className="text-app-text-muted text-sm leading-relaxed">
+                Your attempted tasks will be evaluated and results will be shown. Unattempted tasks receive the minimum score (10 out of 90 on the PTE scale).
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
+              >
+                Keep Going
+              </button>
+              <button
+                onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
+                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500 text-white hover:bg-red-400 transition-all"
+              >
+                Exit & Results
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between bg-app-bg">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-app-primary rounded-xl flex items-center justify-center">
@@ -3634,7 +3735,7 @@ function MockTestSession({
             </div>
           )}
           <button 
-            onClick={() => { releaseGlobalMicStream(); onClose(); }}
+            onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
           >
             <X size={24} />
@@ -3655,7 +3756,7 @@ function MockTestSession({
   );
 }
 
-function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget }: { 
+function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget, onUpgrade }: { 
   progress: UserProgress, 
   user: any,
   allTasks: PTETask[],
@@ -3673,7 +3774,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onSetTargetScore: (score: number) => void | Promise<void>,
   onSetTestDate: (date: string) => void | Promise<void>,
   onSaveToSchedule: () => void | Promise<void>,
-  onResetTarget: () => void | Promise<void>
+  onResetTarget: () => void | Promise<void>,
+  onUpgrade: () => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const averageScore = calculateAverageScore();
@@ -3733,6 +3835,34 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
       exit={{ opacity: 0, y: -20 }}
       className="max-w-7xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0"
     >
+      {/* Trial / Guest Promo Banner */}
+      {(user?.subscriptionStatus === 'trial' || user?.subscriptionStatus === 'guest') && (
+        <motion.button
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={onUpgrade}
+          className="w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl border border-app-primary/30 bg-gradient-to-r from-app-primary/10 via-app-accent/10 to-app-primary/10 hover:from-app-primary/20 hover:via-app-accent/15 hover:to-app-primary/20 transition-all group cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-app-primary/20 flex items-center justify-center">
+              <Zap size={16} className="text-app-primary fill-current" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm font-bold text-app-text leading-snug">
+                🔥 <span className="text-app-primary">Limited-Time Offer</span> — Save up to 50% on Premium
+              </p>
+              <p className="text-[10px] md:text-xs text-app-text-muted/70 leading-snug mt-0.5">
+                Unlock all tasks, mock tests, AI feedback & more. Use code <span className="font-bold text-app-primary">NINJA-PTE-SPECIAL-50</span> at checkout.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-app-primary text-app-bg text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl group-hover:bg-app-accent transition-all whitespace-nowrap">
+            Upgrade Now
+            <ArrowRight size={12} />
+          </div>
+        </motion.button>
+      )}
+
       {/* Progress Overview */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative">
         <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative group z-20">
@@ -5945,7 +6075,7 @@ function TaskModal({
           </div>
         </div>
 
-        <div className="p-8 space-y-6">
+        <div className="p-4 sm:p-6 md:p-8 space-y-6">
           {/* Status Bar */}
           {(phase === 'prep' || phase === 'recording' || phase === 'audio') && (
             <div className="flex items-center justify-between mb-4">
@@ -6077,8 +6207,8 @@ function TaskModal({
           ) : (
             <>
               {/* Prompt Area (Moved above recorder for Read Aloud) */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (
-                <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (task.category !== 'Retell Lecture' || hasAudioError) && (
+                <div className="bg-app-bg p-4 sm:p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-4 sm:mb-8">
                   {task.category !== 'Retell Lecture' && (
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
@@ -6125,7 +6255,7 @@ function TaskModal({
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-8 px-10"
+                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-4 sm:mb-8 px-4 sm:px-10"
                 >
                   <div className="w-full space-y-6">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-4">
@@ -6327,7 +6457,7 @@ function TaskModal({
               {task.section !== 'speaking' && (phase === 'recording' || (task.section === 'listening' && (phase === 'audio' || phase === 'prep'))) && (
                 <div className="space-y-6">
                   {task.section === 'reading' ? (
-                    <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20">
+                    <div className="bg-app-bg p-4 sm:p-8 rounded-2xl border border-app-primary/20">
                       {task.category === 'Reading & Writing: Fill in the Blanks' ? (
                         <div className="text-app-text leading-relaxed text-lg">
                           {task.prompt?.split('________').map((part, i, arr) => (
@@ -6484,8 +6614,8 @@ function TaskModal({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
-                        <div className="flex gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-y-1 bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
+                        <div className="flex gap-1.5">
                           <button 
                             onClick={async (e) => {
                               try {
@@ -6494,7 +6624,7 @@ function TaskModal({
                                 console.error("Failed to cut:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Cut
                           </button>
@@ -6506,7 +6636,7 @@ function TaskModal({
                                 console.error("Failed to copy:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Copy
                           </button>
@@ -6518,20 +6648,20 @@ function TaskModal({
                                 console.error("Failed to paste:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Paste
                           </button>
                           {task.summaryExample && (
                             <button 
                               onClick={() => setShowExample(!showExample)}
-                              className="px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-400/10 rounded transition-all border border-amber-400/30 ml-2"
+                              className="px-2 sm:px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-400/10 rounded transition-all border border-amber-400/30 ml-1 sm:ml-2"
                             >
                               {showExample ? 'Hide Example' : 'Show Example'}
                             </button>
                           )}
                         </div>
-                        <div className="text-app-text-muted text-xs font-mono px-2">
+                        <div className="text-app-text-muted text-xs font-mono px-1 sm:px-2 shrink-0">
                           {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
                         </div>
                       </div>

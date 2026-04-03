@@ -104,6 +104,23 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               updateDoc(userRef, { emailVerified: firebaseUser.emailVerified }).catch(() => {});
             }
 
+            // Fix trialEndsAt if it was previously stored with an incorrect duration
+            // (e.g. 14 days instead of the correct 7-day trial period).
+            if (
+              userData.subscriptionStatus === 'trial' &&
+              userData.trialEndsAt &&
+              userData.createdAt
+            ) {
+              const maxTrialEnd = new Date(
+                new Date(userData.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000
+              );
+              if (new Date(userData.trialEndsAt) > maxTrialEnd) {
+                const corrected = maxTrialEnd.toISOString();
+                updateDoc(userRef, { trialEndsAt: corrected }).catch(() => {});
+                userData.trialEndsAt = corrected;
+              }
+            }
+
             setUser(userData);
           } else {
             // New user or guest
