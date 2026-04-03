@@ -119,7 +119,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               createdAt,
               accessType: isGuest ? 'guest' : 'user',
               subscriptionStatus: isGuest ? 'guest' : 'trial',
-              trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+              trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
               activityLog: [now.toISOString().split('T')[0]],
               completedTasks: [],
               completedTasksDetailed: [],

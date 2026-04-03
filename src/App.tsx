@@ -2235,7 +2235,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </p>
                 <p className="text-xs text-app-text-muted">
                   {isAccessRestricted 
-                    ? 'Sign up now to get a 14-day free trial!' 
+                    ? 'Sign up now to get a 7-day free trial!' 
                     : 'You have 3 days of free access. Sign up to save your progress!'}
                 </p>
               </div>
@@ -2466,6 +2466,9 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const [isCanceling, setIsCanceling] = useState(false);
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
+  const [changePlanTarget, setChangePlanTarget] = useState<typeof SUBSCRIPTION_PLANS[number] | null>(null);
+  const [showChangePlanConfirm, setShowChangePlanConfirm] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
   const getStatusColor = () => {
@@ -2595,6 +2598,48 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     }
   };
 
+  const handleChangePlan = async () => {
+    if (!changePlanTarget || !user?.stripeSubscriptionId) return;
+    setIsChangingPlan(true);
+    try {
+      const basePrice = changePlanTarget.price;
+      const convertedAmount = CurrencyService.convert(basePrice);
+      const amountInCents = Math.round((convertedAmount ?? basePrice) * 100);
+      const currency = CurrencyService.getCurrentCurrency().code.toLowerCase();
+
+      const res = await fetch('/api/change-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionId: user.stripeSubscriptionId,
+          planId: changePlanTarget.id,
+          planName: changePlanTarget.name,
+          amount: amountInCents,
+          currency,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const periodEnd = data.currentPeriodEnd
+          ? new Date(data.currentPeriodEnd * 1000).toISOString()
+          : new Date(Date.now() + changePlanTarget.durationDays * 24 * 60 * 60 * 1000).toISOString();
+        await updateDoc(doc(db, 'users', user.uid), {
+          planId: changePlanTarget.id,
+          subscriptionEndsAt: periodEnd,
+        });
+        setShowChangePlanConfirm(false);
+        setChangePlanTarget(null);
+        toast.success(`Successfully switched to the ${changePlanTarget.name} plan!`);
+      } else {
+        toast.error(data.error || 'Failed to change plan');
+      }
+    } catch {
+      toast.error('Could not connect to server');
+    } finally {
+      setIsChangingPlan(false);
+    }
+  };
+
   return (
     <>
     {/* Cancel / Retention Dialog */}
@@ -2672,6 +2717,58 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                 </div>
               </>
             )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+    {/* Change Plan Confirmation Dialog */}
+    <AnimatePresence>
+      {showChangePlanConfirm && changePlanTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="w-full max-w-md bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl space-y-6"
+          >
+            {(() => {
+              const currentIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === user?.planId);
+              const targetIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === changePlanTarget.id);
+              const isUpgrade = targetIndex > currentIndex;
+              return (
+                <>
+                  <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                    <span className="text-3xl">{isUpgrade ? '🚀' : '🔄'}</span>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl font-bold text-app-text">
+                      {isUpgrade ? 'Upgrade' : 'Downgrade'} to {changePlanTarget.name}?
+                    </h3>
+                    <p className="text-app-text-muted text-sm leading-relaxed">
+                      {isUpgrade
+                        ? `You'll be charged a prorated amount for the remainder of your current billing period, then ${changePlanTarget.name} pricing going forward.`
+                        : `Your plan will switch to ${changePlanTarget.name} immediately. Any unused time will be credited toward your next invoice.`}
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setShowChangePlanConfirm(false); setChangePlanTarget(null); }}
+                      className="flex-1 py-3 bg-app-bg border border-app-primary/20 text-app-text font-bold rounded-xl hover:border-app-primary transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleChangePlan}
+                      disabled={isChangingPlan}
+                      className="flex-1 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isChangingPlan ? <Loader2 className="animate-spin" size={18} /> : `Confirm ${isUpgrade ? 'Upgrade' : 'Downgrade'}`}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </motion.div>
         </div>
       )}
@@ -2760,7 +2857,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10">
               <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Current Plan</p>
               <p className="text-base md:text-lg font-bold text-app-text mt-1">
-                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '14-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
+                {isActive ? `${SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name ?? user.planId} Plan` : isTrial ? '7-Day Free Trial' : isGuest ? '3-Day Guest Access' : 'No Active Plan'}
               </p>
             </div>
             
@@ -2775,6 +2872,36 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </div>
             )}
           </div>
+
+          {/* Change Plan – shown for active subscribers not in a cancellation state */}
+          {isActive && user?.stripeSubscriptionId && !user?.cancelAtPeriodEnd && (() => {
+            const currentIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === user.planId);
+            const otherPlans = SUBSCRIPTION_PLANS.filter((_, i) => i !== currentIndex);
+            if (!otherPlans.length) return null;
+            return (
+              <div className="space-y-2">
+                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold px-1">Change Plan</p>
+                <div className="space-y-2">
+                  {otherPlans.map((plan) => {
+                    const planIndex = SUBSCRIPTION_PLANS.findIndex(p => p.id === plan.id);
+                    const isUpgrade = planIndex > currentIndex;
+                    return (
+                      <button
+                        key={plan.id}
+                        onClick={() => { setChangePlanTarget(plan); setShowChangePlanConfirm(true); }}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-app-bg border border-app-primary/10 rounded-xl hover:border-app-primary/40 hover:bg-app-primary/5 transition-all text-sm"
+                      >
+                        <span className="font-bold text-app-text">{plan.name}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isUpgrade ? 'bg-green-500/10 text-green-500' : 'bg-app-primary/10 text-app-primary'}`}>
+                          {isUpgrade ? '↑ Upgrade' : '↓ Downgrade'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Subscription management actions */}
           {isActive && (
@@ -2826,7 +2953,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                   onClick={onLogin}
                   className="px-4 py-2 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-xs"
                 >
-                  Verify Email & Get 14-Day Trial
+                  Verify Email & Get 7-Day Trial
                 </button>
               )}
             </div>
