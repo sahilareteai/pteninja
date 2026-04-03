@@ -759,7 +759,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                   </div>
 
                   {/* Scrollable body */}
-                  <div className="overflow-y-auto flex-1 p-5 md:p-7 space-y-6">
+                  <div className="overflow-y-auto flex-1 min-h-0 p-5 md:p-7 space-y-6">
 
                     {/* Key Skills */}
                     <div>
