@@ -392,22 +392,31 @@
     }
 
     /* ── Print styles ── */
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
     @media print {
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
-      body {
-        background: #0B0C10;
+      html, body {
+        width: 210mm;
+        height: 297mm;
+        overflow: hidden;
         padding: 0;
         margin: 0;
+        background: #0B0C10;
       }
       .flyer {
-        width: 100%;
-        min-height: auto;
+        width: 210mm;
+        height: 297mm;
+        min-height: unset;
         border-radius: 0;
         border: none;
         page-break-inside: avoid;
+        break-inside: avoid;
       }
       .print-btn {
         display: none !important;
