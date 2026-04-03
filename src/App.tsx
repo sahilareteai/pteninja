@@ -767,8 +767,9 @@ function AppContent() {
           }
           await updateDoc(doc(db, 'users', user.uid), updates);
         }
-      } catch {
-        // Non-critical: silent fail; Firestore will be updated by the webhook anyway
+      } catch (err) {
+        // Non-critical: Firestore will be updated by the webhook anyway
+        console.error("Portal return subscription sync failed:", err);
       } finally {
         setIsSyncingPortal(false);
       }

@@ -555,19 +555,16 @@ app.post("/api/sync-subscription", async (req, res) => {
   try {
     let resolvedSubscriptionId: string = subscriptionId ?? "";
 
-    // If no subscriptionId, look up the most recent active (or canceled) subscription
-    // for the customer — mirrors the cancel-subscription fallback pattern.
+    // If no subscriptionId, look up the most recent subscription for the customer
+    // using status: 'all' to avoid multiple sequential API calls.
     if (!resolvedSubscriptionId && customerId) {
-      for (const status of ["active", "past_due", "unpaid", "canceled"] as const) {
-        const subs = await stripeInstance.subscriptions.list({
-          customer: customerId,
-          status,
-          limit: 1,
-        });
-        if (subs.data.length > 0) {
-          resolvedSubscriptionId = subs.data[0].id;
-          break;
-        }
+      const subs = await stripeInstance.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        resolvedSubscriptionId = subs.data[0].id;
       }
     }
 
