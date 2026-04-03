@@ -3523,53 +3523,63 @@ function MockTestSession({
 
   if (phase === 'instructions') {
     return (
-      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+          className="bg-app-surface rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
-                <Info className="text-app-primary" size={32} />
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                <Info className="text-app-primary" size={20} />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Test Instructions</h2>
-                <p className="text-app-text-muted text-sm">PTE Academic Mock Test</p>
+                <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Test Instructions</h2>
+                <p className="text-app-text-muted text-xs sm:text-sm">PTE Academic Mock Test</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
             >
-              <LogOut size={16} /> Exit
+              <LogOut size={14} /> Exit
             </button>
           </div>
 
-          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
+          {/* Scrollable body */}
+          <div className="overflow-y-auto flex-1 space-y-3 sm:space-y-4 text-app-text-muted text-sm leading-relaxed pr-1">
             <p>Welcome to the PTE Academic Mock Test. This test consists of three main parts:</p>
-            <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Part 1: Speaking & Writing (54–67 minutes)</li>
-              <li>Part 2: Reading (29–30 minutes)</li>
-              <li>Part 3: Listening (30–43 minutes)</li>
+            <ul className="space-y-2 ml-2">
+              {[
+                'Part 1: Speaking & Writing (54–67 minutes)',
+                'Part 2: Reading (29–30 minutes)',
+                'Part 3: Listening (30–43 minutes)',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-app-primary shrink-0" />
+                  {item}
+                </li>
+              ))}
             </ul>
             <p>Before Part 1, you will complete a non-scored Personal Introduction. This is your chance to introduce yourself to the institutions you are applying to.</p>
             <p>Please ensure your microphone and speakers are working correctly before starting.</p>
           </div>
 
-          <div className="flex gap-4">
+          {/* Action buttons */}
+          <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-text hover:border-app-primary/40 transition-all"
+              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-text hover:border-app-primary/40 transition-all"
             >
-              <ChevronLeft size={20} /> Back
+              <ChevronLeft size={16} /> Back
             </button>
             <button 
               onClick={() => setPhase('personal-intro')}
-              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Start Personal Intro <ArrowRight size={20} />
+              Start Personal Intro <ArrowRight size={18} />
             </button>
           </div>
         </motion.div>
@@ -3591,26 +3601,26 @@ function MockTestSession({
     };
 
     return (
-      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full space-y-8 shadow-2xl"
+          className="bg-app-surface rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         >
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-app-primary/10 rounded-2xl flex items-center justify-center">
-              <Layout className="text-app-primary" size={32} />
+          <div className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6 shrink-0">
+            <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+              <Layout className="text-app-primary" size={20} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-app-text uppercase tracking-tight">Section {currentSectionIndex + 1}</h2>
-              <p className="text-app-primary font-bold text-sm uppercase tracking-widest">{sectionNames[currentSection.section]}</p>
+              <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Section {currentSectionIndex + 1}</h2>
+              <p className="text-app-primary font-bold text-xs sm:text-sm uppercase tracking-widest">{sectionNames[currentSection.section]}</p>
             </div>
           </div>
 
-          <div className="space-y-4 text-app-text-muted text-sm leading-relaxed">
-            <p className="text-lg font-bold text-app-text mb-2">Instructions:</p>
+          <div className="overflow-y-auto flex-1 space-y-3 sm:space-y-4 text-app-text-muted text-sm leading-relaxed pr-1">
+            <p className="text-base font-bold text-app-text mb-2">Instructions:</p>
             <p>{sectionDetails[currentSection.section]}</p>
-            <div className="bg-app-bg p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
+            <div className="bg-app-bg p-3 sm:p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock size={16} className="text-app-primary" />
                 <span className="font-bold uppercase tracking-widest text-[10px]">Duration</span>
@@ -3619,18 +3629,18 @@ function MockTestSession({
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
               onClick={() => { releaseGlobalMicStream(); onClose(); }}
-              className="flex items-center gap-2 px-6 py-5 rounded-2xl font-black text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
+              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
             >
-              <LogOut size={16} /> End Test
+              <LogOut size={14} /> End Test
             </button>
             <button 
               onClick={() => setPhase('testing')}
-              className="flex-1 py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Begin Section <Play size={20} />
+              Begin Section <Play size={18} />
             </button>
           </div>
         </motion.div>
