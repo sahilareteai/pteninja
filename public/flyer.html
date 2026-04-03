@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PTE Ninja – Special Promotion</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #0B0C10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      padding: 24px;
+    }
+
+    /* ── Flyer card ── */
+    .flyer {
+      width: 794px;       /* ~A4 width at 96 dpi */
+      min-height: 1123px; /* ~A4 height at 96 dpi */
+      background: linear-gradient(160deg, #0B0C10 0%, #1F2833 100%);
+      border: 1px solid #1F2833;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Decorative top band ── */
+    .top-band {
+      width: 100%;
+      height: 6px;
+      background: linear-gradient(90deg, #45A29E 0%, #66FCF1 50%, #45A29E 100%);
+    }
+
+    /* ── Glow circles ── */
+    .glow {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .glow-1 {
+      width: 400px;
+      height: 400px;
+      top: -120px;
+      right: -100px;
+      background: radial-gradient(circle, rgba(102,252,241,0.10) 0%, transparent 70%);
+    }
+    .glow-2 {
+      width: 350px;
+      height: 350px;
+      bottom: 60px;
+      left: -80px;
+      background: radial-gradient(circle, rgba(69,162,158,0.12) 0%, transparent 70%);
+    }
+
+    /* ── Content ── */
+    .content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding: 52px 56px 48px;
+      flex: 1;
+    }
+
+    /* ── Logo / brand ── */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 40px;
+    }
+    .brand-icon {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, #45A29E, #66FCF1);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand-icon svg {
+      width: 30px;
+      height: 30px;
+    }
+    .brand-name {
+      font-size: 28px;
+      font-weight: 900;
+      color: #FFFFFF;
+      letter-spacing: -0.5px;
+    }
+    .brand-name span {
+      color: #66FCF1;
+    }
+
+    /* ── Headline ── */
+    .headline {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .headline h1 {
+      font-size: 42px;
+      font-weight: 900;
+      color: #FFFFFF;
+      line-height: 1.15;
+      letter-spacing: -1px;
+    }
+    .headline h1 em {
+      font-style: normal;
+      color: #66FCF1;
+    }
+    .headline .sub {
+      margin-top: 12px;
+      font-size: 17px;
+      color: #C5C6C7;
+      line-height: 1.55;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── Discount badge ── */
+    .badge-row {
+      margin: 28px 0 32px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(135deg, rgba(69,162,158,0.25), rgba(102,252,241,0.15));
+      border: 1.5px solid #66FCF1;
+      border-radius: 60px;
+      padding: 14px 28px;
+    }
+    .badge .pct {
+      font-size: 48px;
+      font-weight: 900;
+      color: #66FCF1;
+      line-height: 1;
+    }
+    .badge .badge-text {
+      display: flex;
+      flex-direction: column;
+    }
+    .badge .badge-text .main {
+      font-size: 19px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+    .badge .badge-text .note {
+      font-size: 13px;
+      color: #C5C6C7;
+    }
+
+    /* ── Features ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      width: 100%;
+      margin-bottom: 36px;
+    }
+    .feature-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(102,252,241,0.15);
+      border-radius: 14px;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .feature-card .icon {
+      font-size: 26px;
+      margin-bottom: 8px;
+    }
+    .feature-card .title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 4px;
+    }
+    .feature-card .desc {
+      font-size: 11.5px;
+      color: #C5C6C7;
+      line-height: 1.45;
+    }
+
+    /* ── QR + Promo section ── */
+    .qr-promo {
+      display: flex;
+      align-items: center;
+      gap: 44px;
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(102,252,241,0.18);
+      border-radius: 18px;
+      padding: 32px 36px;
+      margin-bottom: 32px;
+    }
+
+    /* QR code wrapper */
+    #qrcode {
+      flex-shrink: 0;
+      background: #FFFFFF;
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #qrcode canvas,
+    #qrcode img {
+      display: block;
+      border-radius: 4px;
+    }
+
+    .promo-info {
+      flex: 1;
+    }
+    .promo-info .scan-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #66FCF1;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+    }
+    .promo-info .scan-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+    .promo-info .scan-desc {
+      font-size: 13.5px;
+      color: #C5C6C7;
+      line-height: 1.55;
+      margin-bottom: 20px;
+    }
+
+    /* Promo code box */
+    .code-box {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      max-width: 380px;
+    }
+    .code-label {
+      background: #45A29E;
+      color: #0B0C10;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 10px 14px;
+      border-radius: 8px 0 0 8px;
+      white-space: nowrap;
+    }
+    .code-value {
+      background: rgba(102,252,241,0.1);
+      border: 1.5px solid #66FCF1;
+      border-left: none;
+      color: #66FCF1;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 9px 16px;
+      border-radius: 0 8px 8px 0;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    /* ── URL ── */
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .url-row .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #66FCF1;
+      flex-shrink: 0;
+    }
+    .url-row a {
+      font-size: 15px;
+      font-weight: 600;
+      color: #66FCF1;
+      text-decoration: none;
+    }
+
+    /* ── Steps ── */
+    .steps {
+      display: flex;
+      gap: 0;
+      width: 100%;
+      margin-bottom: 36px;
+    }
+    .step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 18px;
+      right: 0;
+      width: 50%;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(69,162,158,0.5), transparent);
+    }
+    .step:not(:first-child)::before {
+      content: '';
+      position: absolute;
+      top: 18px;
+      left: 0;
+      width: 50%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(69,162,158,0.5));
+    }
+    .step-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #45A29E, #66FCF1);
+      color: #0B0C10;
+      font-size: 15px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+    .step-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 3px;
+    }
+    .step-desc {
+      font-size: 11.5px;
+      color: #C5C6C7;
+      line-height: 1.4;
+      padding: 0 8px;
+    }
+
+    /* ── Bottom bar ── */
+    .bottom-bar {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border-top: 1px solid rgba(102,252,241,0.12);
+      padding: 18px 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .bottom-bar .left {
+      font-size: 12px;
+      color: #C5C6C7;
+    }
+    .bottom-bar .right {
+      font-size: 12px;
+      color: #C5C6C7;
+    }
+    .bottom-bar .expiry {
+      font-size: 11.5px;
+      color: #45A29E;
+      font-weight: 600;
+    }
+
+    /* ── Print styles ── */
+    @media print {
+      body {
+        background: #FFFFFF;
+        padding: 0;
+      }
+      .flyer {
+        width: 100%;
+        min-height: auto;
+        border-radius: 0;
+        border: none;
+        page-break-inside: avoid;
+      }
+      .print-btn {
+        display: none !important;
+      }
+    }
+
+    /* ── Print button (screen only) ── */
+    .print-btn {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: linear-gradient(135deg, #45A29E, #66FCF1);
+      color: #0B0C10;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 50px;
+      padding: 13px 26px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(102,252,241,0.3);
+      transition: transform 0.15s, box-shadow 0.15s;
+      z-index: 100;
+    }
+    .print-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(102,252,241,0.45);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="flyer">
+    <div class="top-band"></div>
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+
+    <div class="content">
+
+      <!-- Brand -->
+      <div class="brand">
+        <div class="brand-icon">
+          <!-- Ninja shuriken / star icon -->
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
+                  fill="#0B0C10" stroke="#0B0C10" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-name">PTE<span>Ninja</span></div>
+      </div>
+
+      <!-- Headline -->
+      <div class="headline">
+        <h1>Ace Your PTE Exam<br>with <em>AI-Powered</em> Training</h1>
+        <p class="sub">Real-time AI scoring &bull; Full mock exams &bull; Speaking &amp; Writing Dojo &bull; Gamified learning paths — everything you need to hit your target score.</p>
+      </div>
+
+      <!-- Discount Badge -->
+      <div class="badge-row">
+        <div class="badge">
+          <div class="pct">10%</div>
+          <div class="badge-text">
+            <span class="main">Extra Off Your Subscription</span>
+            <span class="note">Use promo code at checkout &bull; Limited time offer</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features -->
+      <div class="features">
+        <div class="feature-card">
+          <div class="icon">🎙️</div>
+          <div class="title">AI Speaking Scorer</div>
+          <div class="desc">Instant pronunciation &amp; fluency feedback powered by advanced AI</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📝</div>
+          <div class="title">Writing Dojo</div>
+          <div class="desc">Automated essay &amp; summarization scoring with detailed analysis</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🏆</div>
+          <div class="title">Full Mock Exams</div>
+          <div class="desc">Timed, exam-condition simulations with real score prediction</div>
+        </div>
+      </div>
+
+      <!-- QR + Promo -->
+      <div class="qr-promo">
+        <div id="qrcode"></div>
+        <div class="promo-info">
+          <div class="scan-label">📲 Scan &amp; Save</div>
+          <div class="scan-title">Scan the QR code to visit<br>PTE Ninja &amp; subscribe</div>
+          <div class="scan-desc">Scan the code or visit <strong style="color:#FFFFFF">pteninja.com</strong> — then enter the promo code below during checkout to unlock your exclusive 10% discount.</div>
+          <div class="code-box">
+            <div class="code-label">Promo Code</div>
+            <div class="code-value">Ninja-PTE-Special-10</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- How to redeem steps -->
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-title">Scan or Visit</div>
+          <div class="step-desc">Scan the QR code or go to pteninja.com</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-title">Create Account</div>
+          <div class="step-desc">Sign up for free in seconds</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-title">Choose a Plan</div>
+          <div class="step-desc">Pick the subscription that fits your goals</div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-title">Apply Code</div>
+          <div class="step-desc">Enter <strong style="color:#66FCF1">Ninja-PTE-Special-10</strong> at checkout</div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-title">Start Training</div>
+          <div class="step-desc">Begin your AI-powered PTE journey today!</div>
+        </div>
+      </div>
+
+      <!-- Website URL -->
+      <div class="url-row">
+        <div class="dot"></div>
+        <a href="https://pteninja.com/" target="_blank" rel="noopener noreferrer">pteninja.com</a>
+      </div>
+
+    </div><!-- /content -->
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+      <div class="left">© 2025 PTE Ninja &bull; AI-Powered PTE Preparation</div>
+      <div class="right expiry">10% off with code: Ninja-PTE-Special-10</div>
+    </div>
+  </div>
+
+  <!-- Print button -->
+  <button class="print-btn" onclick="window.print()">
+    🖨️ Print / Save PDF
+  </button>
+
+  <script>
+    // Generate QR code pointing to pteninja.com with promo param pre-filled
+    new QRCode(document.getElementById('qrcode'), {
+      text: 'https://pteninja.com/?promo=Ninja-PTE-Special-10',
+      width: 180,
+      height: 180,
+      colorDark: '#0B0C10',
+      colorLight: '#FFFFFF',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  </script>
+
+</body>
+</html>
