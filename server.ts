@@ -403,6 +403,66 @@ app.post("/api/reactivate-subscription", async (req, res) => {
   }
 });
 
+// ─── Change Subscription Plan ─────────────────────────────────────────────────
+// Switches an existing active Stripe subscription to a different plan
+// (upgrade or downgrade).  Prorations are created so the customer is
+// credited or charged fairly within the current billing period.
+app.post("/api/change-plan", async (req, res) => {
+  const stripeInstance = getStripe();
+  if (!stripeInstance) {
+    return res.status(500).json({ error: "Stripe is not configured on the server." });
+  }
+
+  const { subscriptionId, planId, planName, amount, currency = "aud" } = req.body;
+
+  if (!subscriptionId || !planId || !amount || amount <= 0) {
+    return res.status(400).json({ error: "subscriptionId, planId, and amount are required" });
+  }
+
+  const recurring = PLAN_INTERVALS[planId];
+  if (!recurring) {
+    return res.status(400).json({ error: "Unknown plan ID" });
+  }
+
+  try {
+    // Retrieve the current subscription to find the item ID
+    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as unknown as
+      SubscriptionRuntime & { items: { data: Array<{ id: string }> } };
+
+    if (!subscription.items?.data?.length) {
+      return res.status(400).json({ error: "No subscription items found" });
+    }
+
+    const itemId = subscription.items.data[0].id;
+
+    // Create a new inline price for the target plan
+    const newPrice = await stripeInstance.prices.create({
+      currency,
+      product_data: { name: `PTENinja ${planName ?? planId}` },
+      recurring,
+      unit_amount: amount, // already in cents
+    });
+
+    // Swap the subscription item to the new price.
+    // create_prorations credits unused time on the old plan and charges the
+    // remaining time on the new plan — no extra client-side action required.
+    const updated = await stripeInstance.subscriptions.update(subscriptionId, {
+      items: [{ id: itemId, price: newPrice.id }],
+      proration_behavior: "create_prorations",
+    }) as unknown as SubscriptionRuntime;
+
+    res.json({
+      subscriptionId: updated.id,
+      status: updated.status,
+      currentPeriodEnd: updated.current_period_end,
+      cancelAtPeriodEnd: updated.cancel_at_period_end,
+    });
+  } catch (error: any) {
+    console.error("Change plan error:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // ─── Sync Subscription Status ─────────────────────────────────────────────────
 // Returns the latest subscription state from Stripe so the client can keep
 // Firestore in sync (e.g. after returning from the Customer Portal).
