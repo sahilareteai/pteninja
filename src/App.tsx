@@ -66,6 +66,27 @@ import { TermsOfService } from './components/TermsOfService';
 import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
 import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
 
+// Module-level mic stream cache — shared across TaskModal instances so the browser
+// only asks for microphone permission once per practice session.
+let _globalMicStream: MediaStream | null = null;
+
+function getOrRequestMicStream(): Promise<MediaStream> {
+  if (_globalMicStream && _globalMicStream.getTracks().some(t => t.readyState === 'live')) {
+    return Promise.resolve(_globalMicStream);
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    _globalMicStream = stream;
+    return stream;
+  });
+}
+
+function releaseGlobalMicStream() {
+  if (_globalMicStream) {
+    _globalMicStream.getTracks().forEach(t => t.stop());
+    _globalMicStream = null;
+  }
+}
+
 // Mock Data for Initial State
 const INITIAL_PROGRESS: UserProgress = {
   targetScore: 0,
@@ -1311,7 +1332,7 @@ function AppContent() {
           <TaskModal 
             key={selectedTask.id} 
             task={selectedTask} 
-            onClose={() => setSelectedTask(null)} 
+            onClose={() => { releaseGlobalMicStream(); setSelectedTask(null); }} 
             onFinish={(score) => handleTaskFinish(selectedTask.id, score)}
             onPrev={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) > 0 ? () => {
               const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
@@ -3186,6 +3207,7 @@ function MockTestSession({
     };
 
     setFinalResult(result);
+    releaseGlobalMicStream();
     onFinish(result);
   };
 
@@ -3392,7 +3414,7 @@ function MockTestSession({
             </div>
           )}
           <button 
-            onClick={onClose}
+            onClick={() => { releaseGlobalMicStream(); onClose(); }}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
           >
             <X size={24} />
@@ -5197,7 +5219,8 @@ function TaskModal({
       recordingAudioContextRef.current = null;
     }
     if (recordingStreamRef.current) {
-      recordingStreamRef.current.getTracks().forEach(track => track.stop());
+      // Don't stop the global mic stream here — it's kept alive between questions
+      // and released only when the session ends (via releaseGlobalMicStream).
       recordingStreamRef.current = null;
     }
     setVolume(0);
@@ -5221,7 +5244,7 @@ function TaskModal({
       // Play beep before recording starts
       await playBeep();
       
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await getOrRequestMicStream();
       recordingStreamRef.current = stream;
       
       // Setup Audio Analysis
