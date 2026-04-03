@@ -27,8 +27,12 @@ const ISSUE_TYPES = [
   'Other',
 ];
 
-export function SupportBot() {
-  const [isOpen, setIsOpen] = useState(false);
+interface SupportBotProps {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+}
+
+export function SupportBot({ isOpen, setIsOpen }: SupportBotProps) {
   const [botState, setBotState] = useState<BotState>('collecting');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -207,10 +211,10 @@ export function SupportBot() {
 
   return (
     <>
-      {/* Floating toggle button */}
+      {/* Floating toggle button — desktop only */}
       <motion.button
-        onClick={() => setIsOpen(o => !o)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-app-primary text-app-bg rounded-full shadow-lg flex items-center justify-center hover:bg-app-accent transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-app-primary text-app-bg rounded-full shadow-lg hidden md:flex items-center justify-center hover:bg-app-accent transition-colors"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         aria-label={isOpen ? 'Close support chat' : 'Open support chat'}
