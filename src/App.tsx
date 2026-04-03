@@ -5836,6 +5836,7 @@ function TaskModal({
               {/* Prompt Area (Moved above recorder for Read Aloud) */}
               {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
                 <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
+                  {task.category !== 'Retell Lecture' && (
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
                     task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
@@ -5850,6 +5851,7 @@ function TaskModal({
                               : (task.prompt || "Complete the task based on the recording.")))
                       : (task.prompt || "No prompt available for this task.")}
                   </p>
+                  )}
                   {hasAudioError && (
                     <button 
                       onClick={() => {
