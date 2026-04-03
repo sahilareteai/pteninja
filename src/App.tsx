@@ -192,6 +192,280 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [newSchedule, setNewSchedule] = useState({ taskId: '', time: '09:00', duration: 30 });
   const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
+
+  const BELT_DETAILS: Record<string, {
+    color: string;
+    gradient: string;
+    scoreRange: string;
+    emoji: string;
+    sections: { name: string; icon: string; tasks: { label: string; category: string }[]; tip: string }[];
+    keySkills: string[];
+    tips: string[];
+  }> = {
+    white: {
+      color: '#e2e8f0',
+      gradient: 'from-slate-400 to-slate-300',
+      scoreRange: '0 → 30',
+      emoji: '🥋',
+      sections: [
+        {
+          name: 'Speaking',
+          icon: '🎙️',
+          tasks: [
+            { label: 'Read Aloud (Questions 1–5)', category: 'Read Aloud' },
+            { label: 'Repeat Sentence (Questions 1–3)', category: 'Repeat Sentence' },
+          ],
+          tip: 'Focus on clear pronunciation and steady pace.',
+        },
+        {
+          name: 'Reading',
+          icon: '📖',
+          tasks: [
+            { label: 'Multiple Choice, Single Answer (Questions 1–3)', category: 'Multiple Choice, Single Answer' },
+            { label: 'Reading: Fill in the Blanks (Questions 1–2)', category: 'Reading: Fill in the Blanks' },
+          ],
+          tip: 'Skim paragraphs for the main idea before answering.',
+        },
+        {
+          name: 'Writing',
+          icon: '✍️',
+          tasks: [
+            { label: 'Summarize Written Text (Question 1)', category: 'Summarize Written Text' },
+            { label: 'Write Essay (Question 1 — basic argument)', category: 'Write Essay' },
+          ],
+          tip: 'Keep summaries under 75 words and use simple connectors.',
+        },
+        {
+          name: 'Listening',
+          icon: '🎧',
+          tasks: [
+            { label: 'Multiple Choice, Single Answer – Listening (Questions 1–2)', category: 'Multiple Choice, Single Answer' },
+            { label: 'Fill in the Blanks – Listening (Question 1)', category: 'Fill in the Blanks' },
+          ],
+          tip: 'Listen for keywords and numbers; ignore filler words.',
+        },
+      ],
+      keySkills: ['PTE exam format & timing', 'Basic sentence structure', 'Core vocabulary (~500 words)', 'Active listening at normal pace'],
+      tips: [
+        'Attempt every question type at least once to get familiar.',
+        'Aim for a score of 30 by practising at least 2 tasks per day.',
+        'Use the "Practice Now" feature to start with easier questions.',
+      ],
+    },
+    yellow: {
+      color: '#fbbf24',
+      gradient: 'from-yellow-500 to-amber-400',
+      scoreRange: '30 → 50',
+      emoji: '🟡',
+      sections: [
+        {
+          name: 'Speaking',
+          icon: '🎙️',
+          tasks: [
+            { label: 'Describe Image (Questions 1–2)', category: 'Describe Image' },
+            { label: 'Answer Short Question (Question 1)', category: 'Answer Short Question' },
+            { label: 'Repeat Sentence (Questions 4–5)', category: 'Repeat Sentence' },
+          ],
+          tip: 'Use a structured template: Describe → Highlight → Conclude.',
+        },
+        {
+          name: 'Reading',
+          icon: '📖',
+          tasks: [
+            { label: 'Re-order Paragraphs (Questions 1–2)', category: 'Re-order Paragraphs' },
+            { label: 'Multiple Choice, Multiple Answer (Questions 1–2)', category: 'Multiple Choice, Multiple Answer' },
+            { label: 'Reading & Writing: Fill in the Blanks (Questions 1–2)', category: 'Reading & Writing: Fill in the Blanks' },
+          ],
+          tip: 'Look for cohesive devices (however, therefore) to order paragraphs.',
+        },
+        {
+          name: 'Writing',
+          icon: '✍️',
+          tasks: [
+            { label: 'Summarize Written Text (Questions 2–3)', category: 'Summarize Written Text' },
+            { label: 'Write Essay (Question 2 — discuss both views)', category: 'Write Essay' },
+          ],
+          tip: 'Aim for an essay with 3 clear paragraphs: intro, body, conclusion.',
+        },
+        {
+          name: 'Listening',
+          icon: '🎧',
+          tasks: [
+            { label: 'Summarize Spoken Text (Question 1)', category: 'Summarize Spoken Text' },
+            { label: 'Multiple Choice, Multiple Answer – Listening (Question 1)', category: 'Multiple Choice, Multiple Answer' },
+            { label: 'Fill in the Blanks – Listening (Questions 2–3)', category: 'Fill in the Blanks' },
+          ],
+          tip: 'Take shorthand notes on key points while listening.',
+        },
+      ],
+      keySkills: ['Descriptive speaking with templates', 'Essay structure (intro–body–conclusion)', 'Paragraph cohesion & connectors', 'Note-taking while listening'],
+      tips: [
+        'Learn and practise 3 speaking templates (describe image, short answer).',
+        'Expand vocabulary to ~1,000 words — focus on academic word lists.',
+        'Write one essay every two days and self-review using PTE criteria.',
+      ],
+    },
+    green: {
+      color: '#22c55e',
+      gradient: 'from-green-500 to-emerald-400',
+      scoreRange: '50 → 65',
+      emoji: '🟢',
+      sections: [
+        {
+          name: 'Speaking',
+          icon: '🎙️',
+          tasks: [
+            { label: 'Retell Lecture (Question 1)', category: 'Retell Lecture' },
+            { label: 'Respond to a Situation (Question 1)', category: 'Respond to a Situation' },
+            { label: 'Read Aloud — all 5 questions with fluency target', category: 'Read Aloud' },
+          ],
+          tip: 'Practice retelling with a 40-second spoken summary after each listen.',
+        },
+        {
+          name: 'Reading',
+          icon: '📖',
+          tasks: [
+            { label: 'Reading & Writing: Fill in the Blanks (Questions 3–4)', category: 'Reading & Writing: Fill in the Blanks' },
+            { label: 'Multiple Choice, Single Answer (Questions 4–6)', category: 'Multiple Choice, Single Answer' },
+            { label: 'Re-order Paragraphs (Questions 3–4)', category: 'Re-order Paragraphs' },
+          ],
+          tip: 'Eliminate wrong options first in Multiple Choice tasks.',
+        },
+        {
+          name: 'Writing',
+          icon: '✍️',
+          tasks: [
+            { label: 'Write Essay (Questions 3–4 — agree/disagree, solution essays)', category: 'Write Essay' },
+            { label: 'Summarize Written Text — all 3 with accuracy focus', category: 'Summarize Written Text' },
+          ],
+          tip: 'Check for grammar, spelling and word count (200–300 words for essays).',
+        },
+        {
+          name: 'Listening',
+          icon: '🎧',
+          tasks: [
+            { label: 'Summarize Spoken Text (Question 2)', category: 'Summarize Spoken Text' },
+            { label: 'Highlight Correct Summary (Question 1)', category: 'Highlight Correct Summary' },
+            { label: 'Multiple Choice, Multiple Answer – Listening (Questions 2–3)', category: 'Multiple Choice, Multiple Answer' },
+          ],
+          tip: "Aim to identify the speaker's main argument within 10 seconds.",
+        },
+      ],
+      keySkills: ['Consistent accuracy across all 4 sections', 'Academic vocabulary (~2,000 words)', 'Advanced grammar (conditionals, passive voice)', 'Speed-reading for reading tasks'],
+      tips: [
+        'Review all your incorrect answers to identify weak patterns.',
+        'Time yourself on every task — speed is as important as accuracy.',
+        'Focus on your weakest section and practise it daily for a week.',
+      ],
+    },
+    blue: {
+      color: '#3b82f6',
+      gradient: 'from-blue-500 to-indigo-400',
+      scoreRange: '65 → 79',
+      emoji: '🔵',
+      sections: [
+        {
+          name: 'Speaking',
+          icon: '🎙️',
+          tasks: [
+            { label: 'Summarize Group Discussion (Question 1)', category: 'Summarize Group Discussion' },
+            { label: 'Respond to a Situation — all tasks at 80%+ accuracy', category: 'Respond to a Situation' },
+            { label: 'Describe Image — both questions with advanced vocabulary', category: 'Describe Image' },
+          ],
+          tip: 'Vary sentence complexity and use a wide range of vocabulary.',
+        },
+        {
+          name: 'Reading',
+          icon: '📖',
+          tasks: [
+            { label: 'Reading & Writing: Fill in the Blanks — all 4 questions', category: 'Reading & Writing: Fill in the Blanks' },
+            { label: 'Multiple Choice, Multiple Answer (Questions 3–4)', category: 'Multiple Choice, Multiple Answer' },
+            { label: 'All Re-order Paragraphs tasks', category: 'Re-order Paragraphs' },
+          ],
+          tip: 'Master collocations and fixed phrases for fill-in-the-blanks.',
+        },
+        {
+          name: 'Writing',
+          icon: '✍️',
+          tasks: [
+            { label: 'Write Essay — both essays with advanced cohesion score', category: 'Write Essay' },
+            { label: 'Summarize Written Text — all 3 under 70 words with complex sentences', category: 'Summarize Written Text' },
+          ],
+          tip: 'Use a variety of sentence starters and linking adverbs.',
+        },
+        {
+          name: 'Listening',
+          icon: '🎧',
+          tasks: [
+            { label: 'Write from Dictation (Question 1)', category: 'Write from Dictation' },
+            { label: 'Highlight Correct Summary (Question 2)', category: 'Highlight Correct Summary' },
+            { label: 'Multiple Choice, Single Answer – Listening (all questions)', category: 'Multiple Choice, Single Answer' },
+          ],
+          tip: 'Write from Dictation is high-scoring — practise every day.',
+        },
+      ],
+      keySkills: ['High-level vocabulary & collocations', 'Advanced discourse markers', 'Complex sentence construction', 'Exam strategy & time management'],
+      tips: [
+        'Practice Write from Dictation daily — each correct word earns points.',
+        'Use AI feedback (the Analyze button) to refine your speaking and writing.',
+        'Simulate full timed sections twice a week to build exam stamina.',
+      ],
+    },
+    black: {
+      color: '#1e293b',
+      gradient: 'from-slate-800 to-slate-700',
+      scoreRange: '79 → 90',
+      emoji: '🏆',
+      sections: [
+        {
+          name: 'Speaking',
+          icon: '🎙️',
+          tasks: [
+            { label: 'All speaking tasks at 85%+ accuracy', category: 'Read Aloud' },
+            { label: 'Summarize Group Discussion — fluency & content score', category: 'Summarize Group Discussion' },
+            { label: 'Retell Lecture — all key points captured', category: 'Retell Lecture' },
+          ],
+          tip: 'Perfect your oral fluency by eliminating all hesitations and fillers.',
+        },
+        {
+          name: 'Reading',
+          icon: '📖',
+          tasks: [
+            { label: 'All reading tasks with < 2 errors each', category: 'Reading & Writing: Fill in the Blanks' },
+            { label: 'Re-order Paragraphs — all questions correct', category: 'Re-order Paragraphs' },
+            { label: 'Reading: Fill in the Blanks — all with zero errors', category: 'Reading: Fill in the Blanks' },
+          ],
+          tip: 'Develop a systematic elimination strategy for every question type.',
+        },
+        {
+          name: 'Writing',
+          icon: '✍️',
+          tasks: [
+            { label: 'Write Essay — both essays scoring 8/9 on all criteria', category: 'Write Essay' },
+            { label: 'Summarize Written Text — single accurate sentence, all 3 tasks', category: 'Summarize Written Text' },
+          ],
+          tip: 'Aim for a Band 8 essay structure with sophisticated vocabulary.',
+        },
+        {
+          name: 'Listening',
+          icon: '🎧',
+          tasks: [
+            { label: 'Write from Dictation — perfect or near-perfect transcription', category: 'Write from Dictation' },
+            { label: 'All listening tasks at 90%+ accuracy', category: 'Summarize Spoken Text' },
+            { label: 'Fill in the Blanks & Highlight Correct Summary — mastered', category: 'Fill in the Blanks' },
+          ],
+          tip: 'Transcription accuracy is critical — practise with diverse accents.',
+        },
+      ],
+      keySkills: ['Near-native fluency & accuracy', 'Mastery of all PTE task types', 'Strategic exam performance under pressure', 'Consistent 85%+ score across all sections'],
+      tips: [
+        'Take a full mock test every week and review every single answer.',
+        'Focus on eliminating careless errors — review your top mistake patterns.',
+        'You are exam-ready! Book your PTE exam and go achieve your target score.',
+      ],
+    },
+  };
 
   const milestones = [
     { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
@@ -395,7 +669,10 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                     >
                       Practice Now
                     </button>
-                    <button className="py-2 border border-app-border text-app-text-muted rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-text/5 transition-all">
+                    <button
+                      onClick={() => setSelectedMilestoneId(milestone.id)}
+                      className="py-2 border border-app-border text-app-text-muted rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-primary/10 hover:border-app-primary hover:text-app-primary transition-all"
+                    >
                       View Details
                     </button>
                   </div>
@@ -405,6 +682,182 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
           ))}
         </div>
       )}
+
+      {/* Belt Details Modal */}
+      <AnimatePresence>
+        {selectedMilestoneId && (() => {
+          const details = BELT_DETAILS[selectedMilestoneId];
+          const milestone = milestones.find(m => m.id === selectedMilestoneId);
+          if (!details || !milestone) return null;
+          const completedTasks = user?.completedTasks || [];
+          const completedCategories = new Set(
+            allTasks.filter(t => completedTasks.includes(t.id)).map(t => t.category)
+          );
+          const totalSectionTasks = details.sections.reduce((acc, s) => acc + s.tasks.length, 0);
+          const firstTask = allTasks.length > 0 ? allTasks[0] : null;
+
+          return (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                key="backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedMilestoneId(null)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+              />
+
+              {/* Modal Panel */}
+              <motion.div
+                key="modal"
+                initial={{ opacity: 0, y: 60, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.95 }}
+                transition={{ type: 'spring', damping: 28, stiffness: 350 }}
+                className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[90vh] flex flex-col"
+              >
+                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
+                  {/* Header gradient banner */}
+                  <div className={cn("relative p-6 md:p-8 bg-gradient-to-br", details.gradient, "shrink-0")}>
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_white_0%,_transparent_60%)]" />
+                    <div className="flex items-start justify-between relative z-10">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-3xl">{details.emoji}</span>
+                          <div>
+                            <h2 className="text-2xl font-black text-white tracking-tight">{milestone.title}</h2>
+                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest">Score Target: {details.scoreRange}</p>
+                          </div>
+                        </div>
+                        <p className="text-white/80 text-sm leading-relaxed max-w-sm">{milestone.description}</p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedMilestoneId(null)}
+                        className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white shrink-0 ml-4"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="mt-5 relative z-10">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-white/70 text-[11px] font-bold uppercase tracking-widest">Your Progress</span>
+                        <span className="text-white text-[11px] font-black">{user?.currentScore || 0} / {milestone.targetScore}</span>
+                      </div>
+                      <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, ((user?.currentScore || 0) / milestone.targetScore) * 100)}%` }}
+                          transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+                          className="h-full bg-white rounded-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scrollable body */}
+                  <div className="overflow-y-auto flex-1 p-5 md:p-7 space-y-6">
+
+                    {/* Key Skills */}
+                    <div>
+                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Star size={12} /> Key Skills to Develop
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {details.keySkills.map((skill, i) => (
+                          <div key={i} className="flex items-start gap-2 bg-app-surface rounded-xl p-3 border border-app-border">
+                            <CheckCircle size={14} className="text-app-primary shrink-0 mt-0.5" />
+                            <span className="text-sm text-app-text leading-snug">{skill}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Tasks by section */}
+                    <div>
+                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Target size={12} /> Tasks to Complete ({totalSectionTasks} total)
+                      </h3>
+                      <div className="space-y-3">
+                        {details.sections.map((sec, si) => (
+                          <div key={si} className="bg-app-surface rounded-2xl border border-app-border overflow-hidden">
+                            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-app-border bg-app-bg/50">
+                              <span className="text-base">{sec.icon}</span>
+                              <span className="font-bold text-sm text-app-text">{sec.name}</span>
+                            </div>
+                            <div className="p-4 space-y-2">
+                              {sec.tasks.map((task, ti) => {
+                                const isDone = completedCategories.has(task.category);
+                                return (
+                                  <div key={ti} className={cn(
+                                    "flex items-start gap-2.5 rounded-xl p-2.5 transition-colors",
+                                    isDone ? "bg-app-primary/10" : "bg-transparent"
+                                  )}>
+                                    <div className={cn(
+                                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
+                                      isDone ? "bg-app-primary border-app-primary" : "border-app-border"
+                                    )}>
+                                      {isDone && <Check size={10} className="text-app-bg" />}
+                                    </div>
+                                    <span className={cn(
+                                      "text-sm leading-snug",
+                                      isDone ? "text-app-text line-through opacity-60" : "text-app-text"
+                                    )}>{task.label}</span>
+                                  </div>
+                                );
+                              })}
+                              <div className="mt-3 pt-3 border-t border-app-border flex items-start gap-2">
+                                <Info size={13} className="text-app-primary shrink-0 mt-0.5" />
+                                <p className="text-xs text-app-text-muted italic leading-relaxed">{sec.tip}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pro tips */}
+                    <div>
+                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Zap size={12} /> Pro Tips
+                      </h3>
+                      <div className="space-y-2">
+                        {details.tips.map((tip, i) => (
+                          <div key={i} className="flex items-start gap-3 p-3 bg-app-primary/5 border border-app-primary/20 rounded-xl">
+                            <span className="text-app-primary font-black text-sm shrink-0">{i + 1}.</span>
+                            <p className="text-sm text-app-text leading-relaxed">{tip}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer CTA */}
+                  <div className="shrink-0 p-4 md:p-5 border-t border-app-border bg-app-bg/80 backdrop-blur-sm flex gap-3">
+                    {firstTask && (
+                      <button
+                        onClick={() => { setSelectedMilestoneId(null); onStartTask(firstTask); }}
+                        className="flex-1 py-3 bg-app-primary text-app-bg rounded-xl text-xs font-black uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg"
+                      >
+                        Practice Now
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedMilestoneId(null)}
+                      className="px-5 py-3 border border-app-border text-app-text-muted rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-app-surface transition-all"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          );
+        })()}
+      </AnimatePresence>
 
       {activeView === 'schedule' && (
         <div className="space-y-6">
