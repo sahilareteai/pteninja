@@ -847,28 +847,33 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
     return res.status(400).json({ error: "Invalid email address." });
   }
 
+  // Generate a short, human-friendly ticket ID (e.g. "TKT-A3F2B1C9")
+  const ticketId = `TKT-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+
   const supportEmail = process.env.SUPPORT_EMAIL;
   if (!supportEmail) {
     console.warn("SUPPORT_EMAIL not configured — ticket logged to console.");
     console.log("=== Support Ticket ===");
-    console.log(JSON.stringify({ userDetails, conversation }, null, 2));
-    return res.json({ success: true, message: "Ticket received." });
+    console.log(JSON.stringify({ ticketId, userDetails, conversation }, null, 2));
+    return res.json({ success: true, message: "Ticket received.", ticketId });
   }
 
   const transport = createMailTransport();
   if (!transport) {
     console.warn("No SMTP config found — ticket logged to console.");
     console.log("=== Support Ticket ===");
-    console.log(JSON.stringify({ userDetails, conversation }, null, 2));
-    return res.json({ success: true, message: "Ticket received." });
+    console.log(JSON.stringify({ ticketId, userDetails, conversation }, null, 2));
+    return res.json({ success: true, message: "Ticket received.", ticketId });
   }
 
   const submittedAt = new Date().toISOString();
   const safeSubmittedAt = escapeHtml(submittedAt);
-  const subject = `[PTE Ninja Support] ${userDetails.issueType} — ${userDetails.name}`;
+
+  const subject = `[PTE Ninja Support] [${ticketId}] ${userDetails.issueType} — ${userDetails.name}`;
   const textBody = [
     `PTE Ninja Support Ticket`,
     `========================`,
+    `Ticket ID: ${ticketId}`,
     `Submitted: ${submittedAt}`,
     `Name:      ${userDetails.name}`,
     `Email:     ${userDetails.email}`,
@@ -886,15 +891,17 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   const safeIssue = escapeHtml(userDetails.issueType);
   const safeDescription = escapeHtml(userDetails.description);
   const safeConversation = escapeHtml(conversation ?? "(no conversation recorded)");
+  const safeTicketId = escapeHtml(ticketId);
 
   const htmlBody = `
 <html><body style="font-family:sans-serif;max-width:700px;margin:auto;color:#333">
 <h2 style="color:#1a1a2e">PTE Ninja &#8212; Support Ticket</h2>
 <table style="border-collapse:collapse;width:100%">
-  <tr><td style="padding:6px 12px;font-weight:bold;width:130px">Submitted</td><td style="padding:6px 12px">${safeSubmittedAt}</td></tr>
-  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Name</td><td style="padding:6px 12px">${safeName}</td></tr>
-  <tr><td style="padding:6px 12px;font-weight:bold">Email</td><td style="padding:6px 12px"><a href="mailto:${safeEmail}">${safeEmail}</a></td></tr>
-  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Issue Type</td><td style="padding:6px 12px">${safeIssue}</td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold;width:130px">Ticket ID</td><td style="padding:6px 12px;font-family:monospace;font-size:15px;color:#6c63ff"><strong>${safeTicketId}</strong></td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Submitted</td><td style="padding:6px 12px">${safeSubmittedAt}</td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold">Name</td><td style="padding:6px 12px">${safeName}</td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Email</td><td style="padding:6px 12px"><a href="mailto:${safeEmail}">${safeEmail}</a></td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold">Issue Type</td><td style="padding:6px 12px">${safeIssue}</td></tr>
 </table>
 <h3>Initial Description</h3>
 <p style="background:#f9f9f9;padding:12px;border-left:4px solid #6c63ff;white-space:pre-wrap">${safeDescription}</p>
@@ -902,16 +909,68 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
 <pre style="background:#f9f9f9;padding:12px;white-space:pre-wrap;font-size:13px">${safeConversation}</pre>
 </body></html>`;
 
+  // Confirmation email sent back to the user
+  const confirmationSubject = `[PTE Ninja] Your support request has been received — ${ticketId}`;
+  const confirmationTextBody = [
+    `Hi ${userDetails.name},`,
+    ``,
+    `Thank you for reaching out to the PTE Ninja support team.`,
+    ``,
+    `Your support ticket has been successfully submitted.`,
+    ``,
+    `  Ticket ID:  ${ticketId}`,
+    `  Issue Type: ${userDetails.issueType}`,
+    `  Submitted:  ${submittedAt}`,
+    ``,
+    `Our team typically responds within 1–2 business days. Please keep your ticket ID handy when following up.`,
+    ``,
+    `If you have additional information to share, simply reply to this email.`,
+    ``,
+    `Best regards,`,
+    `The PTE Ninja Support Team`,
+  ].join("\n");
+
+  const confirmationHtmlBody = `
+<html><body style="font-family:sans-serif;max-width:600px;margin:auto;color:#333">
+<h2 style="color:#1a1a2e">PTE Ninja &#8212; Support Request Received</h2>
+<p>Hi <strong>${safeName}</strong>,</p>
+<p>Thank you for reaching out to the PTE Ninja support team. Your ticket has been successfully submitted.</p>
+<table style="border-collapse:collapse;width:100%;margin:16px 0">
+  <tr><td style="padding:8px 12px;font-weight:bold;width:130px;background:#f5f5f5">Ticket ID</td><td style="padding:8px 12px;font-family:monospace;font-size:15px;color:#6c63ff;background:#f5f5f5"><strong>${safeTicketId}</strong></td></tr>
+  <tr><td style="padding:8px 12px;font-weight:bold">Issue Type</td><td style="padding:8px 12px">${safeIssue}</td></tr>
+  <tr><td style="padding:8px 12px;font-weight:bold;background:#f5f5f5">Submitted</td><td style="padding:8px 12px;background:#f5f5f5">${safeSubmittedAt}</td></tr>
+</table>
+<p>Our team typically responds within <strong>1&#8211;2 business days</strong>. Please keep your ticket ID (<strong>${safeTicketId}</strong>) handy when following up.</p>
+<p>If you have additional information to share, simply reply to this email.</p>
+<p>Best regards,<br><strong>The PTE Ninja Support Team</strong></p>
+</body></html>`;
+
+  const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+
   try {
     await transport.sendMail({
-      from: process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com",
+      from: fromAddress,
       to: supportEmail,
       replyTo: userDetails.email,
       subject,
       text: textBody,
       html: htmlBody,
     });
-    res.json({ success: true, message: "Support ticket sent successfully." });
+
+    // Best-effort confirmation to the user — don't fail the whole request if this step errors
+    try {
+      await transport.sendMail({
+        from: fromAddress,
+        to: userDetails.email,
+        subject: confirmationSubject,
+        text: confirmationTextBody,
+        html: confirmationHtmlBody,
+      });
+    } catch (confirmError) {
+      console.warn("Could not send confirmation email to user:", confirmError);
+    }
+
+    res.json({ success: true, message: "Support ticket sent successfully.", ticketId });
   } catch (error) {
     console.error("Failed to send support ticket email:", error);
     res.status(500).json({ error: "Failed to send ticket. Please try again." });
