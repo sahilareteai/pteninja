@@ -47,7 +47,8 @@ import {
   Sun,
   Moon,
   Database,
-  Menu
+  Menu,
+  MessageCircle
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -667,6 +668,7 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>('dashboard');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [supportBotOpen, setSupportBotOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1190,6 +1192,14 @@ function AppContent() {
               </button>
             )}
             
+            <button
+              onClick={() => setActiveTab('help')}
+              className="hidden md:flex p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
+              title="Help & Settings"
+            >
+              <Settings size={20} />
+            </button>
+
             <button 
               onClick={() => setActiveTab('profile')}
               className="w-10 h-10 rounded-full bg-gradient-to-br from-app-primary to-app-accent p-[2px]"
@@ -1304,6 +1314,7 @@ function AppContent() {
                 key="help"
                 onBack={() => setActiveTab('dashboard')}
                 onNavigate={(tab) => setActiveTab(tab as any)}
+                onOpenSupportChat={() => setSupportBotOpen(true)}
               />
             ) : activeTab === 'pattern' ? (
               <PatternView 
@@ -1435,6 +1446,7 @@ function AppContent() {
           <AdminDashboard onClose={() => setIsAdminDashboardOpen(false)} />
         )}
       </AnimatePresence>
+      <SupportBot isOpen={supportBotOpen} setIsOpen={setSupportBotOpen} />
     </div>
   );
 }
@@ -2369,13 +2381,12 @@ export default function App() {
   return (
     <SubscriptionProvider>
       <AppContent />
-      <SupportBot />
       <Toaster position="top-center" richColors />
     </SubscriptionProvider>
   );
 }
 
-function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab: string) => void }) {
+function HelpView({ onBack, onNavigate, onOpenSupportChat }: { onBack: () => void, onNavigate: (tab: string) => void, onOpenSupportChat: () => void }) {
   const helpOptions = [
     { 
       title: 'Getting Started', 
@@ -2405,10 +2416,10 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
       action: () => onNavigate('faq')
     },
     { 
-      title: 'Contact Support', 
-      description: 'Need help? Our team is here to assist you 24/7.',
-      icon: Bell,
-      action: () => toast.info("Support team notified. We'll get back to you soon!")
+      title: 'Customer Support', 
+      description: 'Need help? Chat with our support team directly.',
+      icon: MessageCircle,
+      action: onOpenSupportChat
     }
   ];
 
@@ -2463,7 +2474,10 @@ function HelpView({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab
           >
             View FAQ
           </button>
-          <button className="px-8 py-3 bg-transparent border border-app-primary/30 text-app-primary font-bold rounded-xl hover:bg-app-primary/10 transition-all">
+          <button 
+            onClick={() => window.open('https://discord.gg/pteninja', '_blank', 'noopener,noreferrer')}
+            className="px-8 py-3 bg-transparent border border-app-primary/30 text-app-primary font-bold rounded-xl hover:bg-app-primary/10 transition-all"
+          >
             Join Discord
           </button>
         </div>
