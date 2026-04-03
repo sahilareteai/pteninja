@@ -194,6 +194,18 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
   const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
+  const currentScore = (() => {
+    if (!user?.taskScores || Object.keys(user.taskScores).length === 0) return 0;
+    let totalScore = 0;
+    let totalAttempts = 0;
+    Object.values(user.taskScores).forEach((scores: any) => {
+      if (Array.isArray(scores)) {
+        scores.forEach((score: number) => { totalScore += score; totalAttempts++; });
+      }
+    });
+    return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
+  })();
+
   const BELT_DETAILS: Record<string, {
     color: string;
     gradient: string;
@@ -469,10 +481,10 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
 
   const milestones = [
     { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
-    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: (user?.currentScore || 0) >= 30 },
-    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: (user?.currentScore || 0) >= 50 },
-    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: (user?.currentScore || 0) >= 65 },
-    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: (user?.currentScore || 0) >= 79 },
+    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 },
+    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 },
+    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 },
+    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 },
   ];
 
   const currentMilestone = milestones.find(m => !m.isUnlocked) || milestones[milestones.length - 1];
@@ -745,12 +757,12 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                     <div className="mt-5 relative z-10">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-white/70 text-[11px] font-bold uppercase tracking-widest">Your Progress</span>
-                        <span className="text-white text-[11px] font-black">{user?.currentScore || 0} / {milestone.targetScore}</span>
+                        <span className="text-white text-[11px] font-black">{currentScore} / {milestone.targetScore}</span>
                       </div>
                       <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, ((user?.currentScore || 0) / milestone.targetScore) * 100)}%` }}
+                          animate={{ width: `${Math.min(100, (currentScore / milestone.targetScore) * 100)}%` }}
                           transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
                           className="h-full bg-white rounded-full"
                         />
@@ -759,7 +771,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                   </div>
 
                   {/* Scrollable body */}
-                  <div className="overflow-y-auto flex-1 p-5 md:p-7 space-y-6">
+                  <div className="overflow-y-auto flex-1 min-h-0 p-5 md:p-7 space-y-6">
 
                     {/* Key Skills */}
                     <div>
