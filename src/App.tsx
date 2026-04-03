@@ -6024,7 +6024,7 @@ function TaskModal({
           </div>
         </div>
 
-        <div className="p-8 space-y-6">
+        <div className="p-4 sm:p-6 md:p-8 space-y-6">
           {/* Status Bar */}
           {(phase === 'prep' || phase === 'recording' || phase === 'audio') && (
             <div className="flex items-center justify-between mb-4">
@@ -6156,8 +6156,8 @@ function TaskModal({
           ) : (
             <>
               {/* Prompt Area (Moved above recorder for Read Aloud) */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (
-                <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (task.category !== 'Retell Lecture' || hasAudioError) && (
+                <div className="bg-app-bg p-4 sm:p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-4 sm:mb-8">
                   {task.category !== 'Retell Lecture' && (
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
@@ -6204,7 +6204,7 @@ function TaskModal({
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-8 px-10"
+                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-4 sm:mb-8 px-4 sm:px-10"
                 >
                   <div className="w-full space-y-6">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-4">
@@ -6406,7 +6406,7 @@ function TaskModal({
               {task.section !== 'speaking' && (phase === 'recording' || (task.section === 'listening' && (phase === 'audio' || phase === 'prep'))) && (
                 <div className="space-y-6">
                   {task.section === 'reading' ? (
-                    <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20">
+                    <div className="bg-app-bg p-4 sm:p-8 rounded-2xl border border-app-primary/20">
                       {task.category === 'Reading & Writing: Fill in the Blanks' ? (
                         <div className="text-app-text leading-relaxed text-lg">
                           {task.prompt?.split('________').map((part, i, arr) => (
@@ -6563,8 +6563,8 @@ function TaskModal({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
-                        <div className="flex gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-y-1 bg-app-surface p-2 rounded-t-xl border-x border-t border-app-primary/20">
+                        <div className="flex gap-1.5">
                           <button 
                             onClick={async (e) => {
                               try {
@@ -6573,7 +6573,7 @@ function TaskModal({
                                 console.error("Failed to cut:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Cut
                           </button>
@@ -6585,7 +6585,7 @@ function TaskModal({
                                 console.error("Failed to copy:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Copy
                           </button>
@@ -6597,20 +6597,20 @@ function TaskModal({
                                 console.error("Failed to paste:", err);
                               }
                             }}
-                            className="px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
+                            className="px-2 sm:px-3 py-1 text-xs font-bold text-app-accent hover:bg-app-primary/20 rounded transition-all border border-app-primary/30"
                           >
                             Paste
                           </button>
                           {task.summaryExample && (
                             <button 
                               onClick={() => setShowExample(!showExample)}
-                              className="px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-400/10 rounded transition-all border border-amber-400/30 ml-2"
+                              className="px-2 sm:px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-400/10 rounded transition-all border border-amber-400/30 ml-1 sm:ml-2"
                             >
                               {showExample ? 'Hide Example' : 'Show Example'}
                             </button>
                           )}
                         </div>
-                        <div className="text-app-text-muted text-xs font-mono px-2">
+                        <div className="text-app-text-muted text-xs font-mono px-1 sm:px-2 shrink-0">
                           {userInput.trim() ? userInput.trim().split(/\s+/).length : 0} {userInput.trim().split(/\s+/).length === 1 ? 'word' : 'words'}
                         </div>
                       </div>
