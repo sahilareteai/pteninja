@@ -5864,7 +5864,7 @@ function TaskModal({
                       Retry Audio
                     </button>
                   )}
-                  {task.image && task.category !== 'Summarize Group Discussion' && (
+                  {task.image && task.category !== 'Summarize Group Discussion' && task.category !== 'Retell Lecture' && (
                     <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
                       <img 
                         src={task.image} 
