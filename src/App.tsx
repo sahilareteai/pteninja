@@ -63,6 +63,7 @@ import { PromoService, PromoCode } from './services/promoService';
 import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
+import { SupportBot } from './components/SupportBot';
 import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
 import { seedTasksToFirestore } from './services/taskService';
 
@@ -2368,6 +2369,7 @@ export default function App() {
   return (
     <SubscriptionProvider>
       <AppContent />
+      <SupportBot />
       <Toaster position="top-center" richColors />
     </SubscriptionProvider>
   );

@@ -7,6 +7,8 @@ import { cert, getApps, initializeApp as initAdminApp } from "firebase-admin/app
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { rateLimit } from "express-rate-limit";
+import nodemailer from "nodemailer";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -673,6 +675,186 @@ app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
   } catch (error) {
     console.error("Delete user error:", error);
     res.status(400).json({ error: "Failed to delete user" });
+  }
+});
+
+// ─── Support Bot: PTE-restricted Gemini chat ─────────────────────────────────
+const SUPPORT_BOT_SYSTEM_PROMPT = `You are a helpful customer support assistant for PTE Ninja, an AI-powered PTE Academic exam preparation platform.
+
+Your responsibilities:
+- Answer questions about PTE Academic (exam format, scoring, sections, tips, strategies)
+- Help users understand their scores and feedback from PTE Ninja
+- Assist with questions about the PTE Ninja platform, its features, and subscriptions
+- Provide study advice and practice strategies for PTE Speaking, Writing, Reading, and Listening
+- Troubleshoot common issues users face on the platform
+
+IMPORTANT RULES:
+1. ONLY discuss topics related to PTE Academic, English language skills for PTE, or the PTE Ninja platform.
+2. If asked about unrelated topics (sports, politics, cooking, other exams like IELTS/TOEFL unless comparing to PTE, etc.), politely decline and redirect the user back to PTE-related help.
+3. Be empathetic, encouraging, and professional at all times.
+4. Keep responses concise — aim for 2–4 short paragraphs maximum.
+5. If you cannot resolve an issue (e.g., account-specific billing problems, technical bugs), advise the user to click "Send to Support Team" so a human agent can follow up.
+6. Never make up Stripe, Firebase, or account-specific details you do not know.`;
+
+const supportChatLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
+  const { message, history, userDetails } = req.body as {
+    message: string;
+    history: Array<{ role: string; parts: Array<{ text: string }> }>;
+    userDetails: { name: string; email: string; issueType: string };
+  };
+
+  if (!message || typeof message !== "string" || message.trim().length === 0) {
+    return res.status(400).json({ error: "Message is required." });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "AI service is currently unavailable." });
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const model = ai.chats.create({
+      model: "gemini-2.5-flash",
+      config: {
+        systemInstruction: `${SUPPORT_BOT_SYSTEM_PROMPT}\n\nUser name: ${userDetails?.name ?? "User"}\nIssue type: ${userDetails?.issueType ?? "General"}`,
+      },
+      history: (history ?? []).map((h) => ({
+        role: h.role as "user" | "model",
+        parts: h.parts,
+      })),
+    });
+
+    const response = await model.sendMessage({ message: message.trim() });
+    const text = response.text ?? "";
+    res.json({ response: text });
+  } catch (error) {
+    console.error("Support chat error:", error);
+    res.status(500).json({ error: "Failed to generate response. Please try again." });
+  }
+});
+
+// ─── Support Ticket: collect details and email to Google Groups ───────────────
+const supportTicketLimiter = rateLimit({
+  windowMs: 60_000 * 10,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many ticket submissions. Please try again later." },
+});
+
+function createMailTransport() {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (host && user && pass) {
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
+
+  // Fallback: Gmail with app password (GMAIL_USER / GMAIL_APP_PASSWORD)
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  if (gmailUser && gmailPass) {
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: gmailUser, pass: gmailPass },
+    });
+  }
+
+  return null;
+}
+
+app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
+  const { userDetails, conversation } = req.body as {
+    userDetails: { name: string; email: string; issueType: string; description: string };
+    conversation: string;
+  };
+
+  if (!userDetails?.name || !userDetails?.email || !userDetails?.description) {
+    return res.status(400).json({ error: "Incomplete ticket details." });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(userDetails.email)) {
+    return res.status(400).json({ error: "Invalid email address." });
+  }
+
+  const supportEmail = process.env.SUPPORT_EMAIL;
+  if (!supportEmail) {
+    console.warn("SUPPORT_EMAIL not configured — ticket logged to console.");
+    console.log("=== Support Ticket ===");
+    console.log(JSON.stringify({ userDetails, conversation }, null, 2));
+    return res.json({ success: true, message: "Ticket received." });
+  }
+
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn("No SMTP config found — ticket logged to console.");
+    console.log("=== Support Ticket ===");
+    console.log(JSON.stringify({ userDetails, conversation }, null, 2));
+    return res.json({ success: true, message: "Ticket received." });
+  }
+
+  const submittedAt = new Date().toISOString();
+  const subject = `[PTE Ninja Support] ${userDetails.issueType} — ${userDetails.name}`;
+  const textBody = [
+    `PTE Ninja Support Ticket`,
+    `========================`,
+    `Submitted: ${submittedAt}`,
+    `Name:      ${userDetails.name}`,
+    `Email:     ${userDetails.email}`,
+    `Issue:     ${userDetails.issueType}`,
+    ``,
+    `--- Initial Description ---`,
+    userDetails.description,
+    ``,
+    `--- Chat Conversation ---`,
+    conversation ?? "(no conversation recorded)",
+  ].join("\n");
+
+  const htmlBody = `
+<html><body style="font-family:sans-serif;max-width:700px;margin:auto;color:#333">
+<h2 style="color:#1a1a2e">PTE Ninja — Support Ticket</h2>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:6px 12px;font-weight:bold;width:130px">Submitted</td><td style="padding:6px 12px">${submittedAt}</td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Name</td><td style="padding:6px 12px">${userDetails.name}</td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold">Email</td><td style="padding:6px 12px"><a href="mailto:${userDetails.email}">${userDetails.email}</a></td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Issue Type</td><td style="padding:6px 12px">${userDetails.issueType}</td></tr>
+</table>
+<h3>Initial Description</h3>
+<p style="background:#f9f9f9;padding:12px;border-left:4px solid #6c63ff;white-space:pre-wrap">${userDetails.description}</p>
+<h3>Chat Conversation</h3>
+<pre style="background:#f9f9f9;padding:12px;white-space:pre-wrap;font-size:13px">${conversation ?? "(no conversation recorded)"}</pre>
+</body></html>`;
+
+  try {
+    await transport.sendMail({
+      from: process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com",
+      to: supportEmail,
+      replyTo: userDetails.email,
+      subject,
+      text: textBody,
+      html: htmlBody,
+    });
+    res.json({ success: true, message: "Support ticket sent successfully." });
+  } catch (error) {
+    console.error("Failed to send support ticket email:", error);
+    res.status(500).json({ error: "Failed to send ticket. Please try again." });
   }
 });
 
