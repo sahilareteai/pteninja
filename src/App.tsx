@@ -3533,7 +3533,7 @@ function MockTestSession({
           <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
-                <Info className="text-app-primary" size={20} />
+                <Info className="text-app-primary w-5 h-5 sm:w-8 sm:h-8" />
               </div>
               <div>
                 <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Test Instructions</h2>
@@ -3609,7 +3609,7 @@ function MockTestSession({
         >
           <div className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6 shrink-0">
             <div className="w-10 h-10 sm:w-16 sm:h-16 bg-app-primary/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
-              <Layout className="text-app-primary" size={20} />
+              <Layout className="text-app-primary w-5 h-5 sm:w-8 sm:h-8" />
             </div>
             <div>
               <h2 className="text-base sm:text-2xl font-black text-app-text uppercase tracking-tight leading-tight">Section {currentSectionIndex + 1}</h2>
