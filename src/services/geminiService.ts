@@ -149,7 +149,7 @@ export async function generateTTS(text: string, retries: number = 1) {
 }
 
 export async function analyzeSpeaking(audioData: string, taskType: string, mimeType: string = "audio/webm", correctAnswer?: string) {
-  const model = "gemini-2.0-flash";
+  const model = "gemini-2.0-flash-lite";
   
   try {
     // Sanitize mimeType (remove parameters like ;codecs=opus)
@@ -206,7 +206,7 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
 }
 
 export async function analyzeWriting(text: string, taskType: string) {
-  const model = "gemini-2.0-flash";
+  const model = "gemini-2.0-flash-lite";
   
   try {
     const response = await callGemini({
