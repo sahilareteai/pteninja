@@ -66,6 +66,27 @@ import { TermsOfService } from './components/TermsOfService';
 import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
 import { fetchTasksFromFirestore, seedTasksToFirestore } from './services/taskService';
 
+// Module-level mic stream cache — shared across TaskModal instances so the browser
+// only asks for microphone permission once per practice session.
+let _globalMicStream: MediaStream | null = null;
+
+function getOrRequestMicStream(): Promise<MediaStream> {
+  if (_globalMicStream && _globalMicStream.getTracks().some(t => t.readyState === 'live')) {
+    return Promise.resolve(_globalMicStream);
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    _globalMicStream = stream;
+    return stream;
+  });
+}
+
+function releaseGlobalMicStream() {
+  if (_globalMicStream) {
+    _globalMicStream.getTracks().forEach(t => t.stop());
+    _globalMicStream = null;
+  }
+}
+
 // Mock Data for Initial State
 const INITIAL_PROGRESS: UserProgress = {
   targetScore: 0,
@@ -1311,7 +1332,7 @@ function AppContent() {
           <TaskModal 
             key={selectedTask.id} 
             task={selectedTask} 
-            onClose={() => setSelectedTask(null)} 
+            onClose={() => { releaseGlobalMicStream(); setSelectedTask(null); }} 
             onFinish={(score) => handleTaskFinish(selectedTask.id, score)}
             onPrev={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) > 0 ? () => {
               const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
@@ -3186,6 +3207,7 @@ function MockTestSession({
     };
 
     setFinalResult(result);
+    releaseGlobalMicStream();
     onFinish(result);
   };
 
@@ -3392,7 +3414,7 @@ function MockTestSession({
             </div>
           )}
           <button 
-            onClick={onClose}
+            onClick={() => { releaseGlobalMicStream(); onClose(); }}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
           >
             <X size={24} />
@@ -5197,7 +5219,8 @@ function TaskModal({
       recordingAudioContextRef.current = null;
     }
     if (recordingStreamRef.current) {
-      recordingStreamRef.current.getTracks().forEach(track => track.stop());
+      // Don't stop the global mic stream here — it's kept alive between questions
+      // and released only when the session ends (via releaseGlobalMicStream).
       recordingStreamRef.current = null;
     }
     setVolume(0);
@@ -5221,7 +5244,7 @@ function TaskModal({
       // Play beep before recording starts
       await playBeep();
       
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await getOrRequestMicStream();
       recordingStreamRef.current = stream;
       
       // Setup Audio Analysis
@@ -5834,8 +5857,9 @@ function TaskModal({
           ) : (
             <>
               {/* Prompt Area (Moved above recorder for Read Aloud) */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (
                 <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
+                  {task.category !== 'Retell Lecture' && (
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
                     task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
@@ -5850,6 +5874,7 @@ function TaskModal({
                               : (task.prompt || "Complete the task based on the recording.")))
                       : (task.prompt || "No prompt available for this task.")}
                   </p>
+                  )}
                   {hasAudioError && (
                     <button 
                       onClick={() => {
@@ -5862,7 +5887,7 @@ function TaskModal({
                       Retry Audio
                     </button>
                   )}
-                  {task.image && task.category !== 'Summarize Group Discussion' && (
+                  {task.image && task.category !== 'Summarize Group Discussion' && task.category !== 'Retell Lecture' && (
                     <div className="mt-6 rounded-xl overflow-hidden border border-app-primary/20">
                       <img 
                         src={task.image} 
@@ -5902,7 +5927,7 @@ function TaskModal({
                     </div>
                     <div className="flex items-center gap-6 pt-2">
                       {/* Control Button */}
-                      <button 
+                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && <button 
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
                           else if (phase === 'recording') handleFinish();
@@ -5930,17 +5955,17 @@ function TaskModal({
                           "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           isPreparingAudio && "cursor-wait"
                         )}
-                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Start' : phase === 'recording' ? 'Stop' : 'Play')}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : phase === 'recording' ? 'Stop' : 'Play')}
                       >
                         {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
                           phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
                           (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
-                      </button>
+                      </button>}
 
                       <div className="flex-1 overflow-hidden">
                         {/* Wave Animation when active */}
-                        {(isAudioPlaying || phase === 'recording') ? (
+                        {(isAudioPlaying || phase === 'recording' || isPreparingAudio) ? (
                           <div className="w-full h-12 flex items-center justify-center gap-1">
                             {[...Array(20)].map((_, i) => (
                               <motion.div 
