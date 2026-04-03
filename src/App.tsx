@@ -724,6 +724,44 @@ function AppContent() {
     }
   }, [user]);
 
+  // Auto-sync subscription state when returning from the Stripe Customer Portal.
+  // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('fromPortal') || !user?.stripeSubscriptionId) return;
+
+    // Remove the param from the URL without triggering a navigation
+    params.delete('fromPortal');
+    const newSearch = params.toString();
+    const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+    window.history.replaceState(null, '', newUrl);
+
+    (async () => {
+      try {
+        const res = await fetch('/api/sync-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const updates: Record<string, unknown> = {
+            cancelAtPeriodEnd: data.cancelAtPeriodEnd,
+            subscriptionEndsAt: new Date(data.currentPeriodEnd * 1000).toISOString(),
+          };
+          if (data.status === 'active') {
+            updates.subscriptionStatus = 'active';
+          } else if (data.status === 'canceled' || data.status === 'unpaid' || data.status === 'past_due') {
+            updates.subscriptionStatus = 'inactive';
+          }
+          await updateDoc(doc(db, 'users', user.uid), updates);
+        }
+      } catch {
+        // Non-critical: silent fail; Firestore will be updated by the webhook anyway
+      }
+    })();
+  }, [user]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (user?.schedule && notificationPermission !== 'unsupported') {
@@ -2501,7 +2539,14 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       const res = await fetch('/api/customer-portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: user.stripeCustomerId, returnUrl: window.location.href }),
+        body: JSON.stringify({
+          customerId: user.stripeCustomerId,
+          returnUrl: (() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('fromPortal', '1');
+            return url.toString();
+          })(),
+        }),
       });
       const data = await res.json();
       if (data.url) {
