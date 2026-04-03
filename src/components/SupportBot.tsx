@@ -30,20 +30,30 @@ const ISSUE_TYPES = [
 interface SupportBotProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  userName?: string | null;
+  userEmail?: string | null;
 }
 
-export function SupportBot({ isOpen, setIsOpen }: SupportBotProps) {
+export function SupportBot({ isOpen, setIsOpen, userName, userEmail }: SupportBotProps) {
   const [botState, setBotState] = useState<BotState>('collecting');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userDetails, setUserDetails] = useState<UserDetails>({
-    name: '',
-    email: '',
+    name: userName || '',
+    email: userEmail || '',
     issueType: ISSUE_TYPES[0],
     description: '',
   });
+
+  useEffect(() => {
+    setUserDetails(d => ({
+      ...d,
+      name: d.name ?? userName ?? '',
+      email: d.email ?? userEmail ?? '',
+    }));
+  }, [userName, userEmail]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const historyRef = useRef<Array<{ role: string; parts: Array<{ text: string }> }>>([]);
@@ -205,7 +215,7 @@ export function SupportBot({ isOpen, setIsOpen }: SupportBotProps) {
     setBotState('collecting');
     setMessages([]);
     setInputValue('');
-    setUserDetails({ name: '', email: '', issueType: ISSUE_TYPES[0], description: '' });
+    setUserDetails({ name: userName || '', email: userEmail || '', issueType: ISSUE_TYPES[0], description: '' });
     historyRef.current = [];
   }
 
@@ -252,8 +262,8 @@ export function SupportBot({ isOpen, setIsOpen }: SupportBotProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="fixed bottom-24 right-6 z-50 w-96 max-w-[calc(100vw-1.5rem)] bg-app-bg border border-app-surface rounded-2xl shadow-2xl flex flex-col"
-            style={{ maxHeight: '72vh' }}
+            className="fixed bottom-20 right-3 z-50 w-96 max-w-[calc(100vw-1.5rem)] bg-app-bg border border-app-surface rounded-2xl shadow-2xl flex flex-col md:bottom-24 md:right-6"
+            style={{ maxHeight: '80vh' }}
           >
             {/* Header */}
             <div className="bg-app-primary text-app-bg px-4 py-3 flex items-center gap-3 rounded-t-2xl flex-shrink-0">
@@ -275,72 +285,76 @@ export function SupportBot({ isOpen, setIsOpen }: SupportBotProps) {
 
             {botState === 'collecting' ? (
               /* ── Details form ─────────────────────────────────────── */
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                <p className="text-sm text-app-text-muted leading-relaxed">
-                  👋 Hi! I'm your <strong className="text-app-text">PTE Support Bot</strong>. I'm here to
-                  help you with PTE Academic questions and platform issues. Please tell me a little about yourself
-                  first.
-                </p>
+              <>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                  <p className="text-sm text-app-text-muted leading-relaxed">
+                    👋 Hi! I'm your <strong className="text-app-text">PTE Support Bot</strong>. I'm here to
+                    help you with PTE Academic questions and platform issues.{!(userName || userEmail) ? ' Please tell me a little about yourself first.' : ''}
+                  </p>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app-text-muted mb-1">Name *</label>
-                  <input
-                    type="text"
-                    value={userDetails.name}
-                    onChange={e => setUserDetails(d => ({ ...d, name: e.target.value }))}
-                    placeholder="Your full name"
-                    className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50"
-                  />
+                  <div>
+                    <label className="block text-xs font-semibold text-app-text-muted mb-1">Name *</label>
+                    <input
+                      type="text"
+                      value={userDetails.name}
+                      onChange={e => setUserDetails(d => ({ ...d, name: e.target.value }))}
+                      placeholder="Your full name"
+                      className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-app-text-muted mb-1">Email *</label>
+                    <input
+                      type="email"
+                      value={userDetails.email}
+                      onChange={e => setUserDetails(d => ({ ...d, email: e.target.value }))}
+                      placeholder="your@email.com"
+                      className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-app-text-muted mb-1">Issue Type *</label>
+                    <select
+                      value={userDetails.issueType}
+                      onChange={e => setUserDetails(d => ({ ...d, issueType: e.target.value }))}
+                      className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text focus:outline-none focus:ring-2 focus:ring-app-primary/50"
+                    >
+                      {ISSUE_TYPES.map(t => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-app-text-muted mb-1">
+                      Describe your issue or question *
+                    </label>
+                    <textarea
+                      value={userDetails.description}
+                      onChange={e => setUserDetails(d => ({ ...d, description: e.target.value }))}
+                      placeholder="Please describe your question or issue in detail…"
+                      rows={4}
+                      className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50 resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app-text-muted mb-1">Email *</label>
-                  <input
-                    type="email"
-                    value={userDetails.email}
-                    onChange={e => setUserDetails(d => ({ ...d, email: e.target.value }))}
-                    placeholder="your@email.com"
-                    className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-app-text-muted mb-1">Issue Type *</label>
-                  <select
-                    value={userDetails.issueType}
-                    onChange={e => setUserDetails(d => ({ ...d, issueType: e.target.value }))}
-                    className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text focus:outline-none focus:ring-2 focus:ring-app-primary/50"
+                {/* Pinned footer — always visible */}
+                <div className="p-4 pt-2 border-t border-app-surface flex-shrink-0">
+                  <button
+                    onClick={startChat}
+                    disabled={isLoading}
+                    className="w-full py-2.5 bg-app-primary text-app-bg rounded-lg font-bold text-sm hover:bg-app-accent transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {ISSUE_TYPES.map(t => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    {isLoading && <Loader2 size={15} className="animate-spin" />}
+                    Get Help
+                  </button>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-app-text-muted mb-1">
-                    Describe your issue or question *
-                  </label>
-                  <textarea
-                    value={userDetails.description}
-                    onChange={e => setUserDetails(d => ({ ...d, description: e.target.value }))}
-                    placeholder="Please describe your question or issue in detail…"
-                    rows={3}
-                    className="w-full px-3 py-2 bg-app-surface border border-app-surface rounded-lg text-sm text-app-text placeholder-app-text-muted focus:outline-none focus:ring-2 focus:ring-app-primary/50 resize-none"
-                  />
-                </div>
-
-                <button
-                  onClick={startChat}
-                  disabled={isLoading}
-                  className="w-full py-2.5 bg-app-primary text-app-bg rounded-lg font-bold text-sm hover:bg-app-accent transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading && <Loader2 size={15} className="animate-spin" />}
-                  Get Help
-                </button>
-              </div>
+              </>
             ) : (
               /* ── Chat view ────────────────────────────────────────── */
               <>

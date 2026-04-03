@@ -1446,7 +1446,7 @@ function AppContent() {
           <AdminDashboard onClose={() => setIsAdminDashboardOpen(false)} />
         )}
       </AnimatePresence>
-      <SupportBot isOpen={supportBotOpen} setIsOpen={setSupportBotOpen} />
+      <SupportBot isOpen={supportBotOpen} setIsOpen={setSupportBotOpen} userName={user?.displayName} userEmail={user?.email} />
     </div>
   );
 }
