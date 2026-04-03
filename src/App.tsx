@@ -5930,7 +5930,7 @@ function TaskModal({
                           "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           isPreparingAudio && "cursor-wait"
                         )}
-                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Start' : phase === 'recording' ? 'Stop' : 'Play')}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : phase === 'recording' ? 'Stop' : 'Play')}
                       >
                         {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
