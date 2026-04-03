@@ -53,8 +53,13 @@ export function SupportBot() {
       toast.error('Please enter your name.');
       return false;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(userDetails.email)) {
+    // Use a simple, ReDoS-safe check (same logic as server-side isValidEmail)
+    const atIndex = userDetails.email.indexOf('@');
+    const isEmailValid =
+      atIndex > 0 &&
+      atIndex === userDetails.email.lastIndexOf('@') &&
+      userDetails.email.slice(atIndex + 1).includes('.');
+    if (!isEmailValid) {
       toast.error('Please enter a valid email address.');
       return false;
     }
@@ -253,7 +258,7 @@ export function SupportBot() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm">PTE Support Bot</p>
-                <p className="text-xs opacity-80 truncate">PTE Academic Help &amp; Support</p>
+                <p className="text-xs opacity-80 truncate">PTE Academic Help & Support</p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -268,7 +273,7 @@ export function SupportBot() {
               /* ── Details form ─────────────────────────────────────── */
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 <p className="text-sm text-app-text-muted leading-relaxed">
-                  👋 Hi! I&apos;m your <strong className="text-app-text">PTE Support Bot</strong>. I&apos;m here to
+                  👋 Hi! I'm your <strong className="text-app-text">PTE Support Bot</strong>. I'm here to
                   help you with PTE Academic questions and platform issues. Please tell me a little about yourself
                   first.
                 </p>

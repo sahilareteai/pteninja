@@ -696,9 +696,50 @@ IMPORTANT RULES:
 5. If you cannot resolve an issue (e.g., account-specific billing problems, technical bugs), advise the user to click "Send to Support Team" so a human agent can follow up.
 6. Never make up Stripe, Firebase, or account-specific details you do not know.`;
 
+/** Strip control characters / newlines from user-supplied strings used in prompts.
+ * NOTE: Non-ASCII characters (e.g. accented letters in international names) are
+ * preserved; only ASCII control characters (0x00–0x1F, 0x7F) and other C1 controls
+ * are stripped to prevent prompt injection while supporting global users.
+ */
+function sanitizePromptValue(value: string, maxLen = 100): string {
+  return (value ?? "")
+    .replace(/[\r\n\t]/g, " ")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, "")
+    .slice(0, maxLen)
+    .trim();
+}
+
+/** Escape HTML special characters to prevent XSS in email bodies. */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Simple, ReDoS-safe email format check. */
+function isValidEmail(email: string): boolean {
+  const atIndex = email.indexOf("@");
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf("@")) return false;
+  const domain = email.slice(atIndex + 1);
+  return domain.length > 0 && domain.includes(".");
+}
+
+/** Validate a single history entry has the expected shape. */
+function isValidHistoryEntry(h: unknown): h is { role: "user" | "model"; parts: Array<{ text: string }> } {
+  if (!h || typeof h !== "object") return false;
+  const entry = h as Record<string, unknown>;
+  if (entry.role !== "user" && entry.role !== "model") return false;
+  if (!Array.isArray(entry.parts)) return false;
+  return entry.parts.every((p) => typeof p === "object" && p !== null && typeof (p as Record<string, unknown>).text === "string");
+}
+
 const supportChatLimiter = rateLimit({
   windowMs: 60_000,
-  max: 30,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
@@ -707,7 +748,7 @@ const supportChatLimiter = rateLimit({
 app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
   const { message, history, userDetails } = req.body as {
     message: string;
-    history: Array<{ role: string; parts: Array<{ text: string }> }>;
+    history: unknown[];
     userDetails: { name: string; email: string; issueType: string };
   };
 
@@ -720,20 +761,33 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
+  // Keep last 20 turns (10 user + 10 model) to respect the model's context window
+  // while still maintaining enough context for multi-turn support conversations.
+  const safeHistory: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = (
+    Array.isArray(history) ? history : []
+  )
+    .filter(isValidHistoryEntry)
+    .slice(-20);
+
+  const safeUserName = sanitizePromptValue(userDetails?.name ?? "User");
+  const safeIssueType = sanitizePromptValue(userDetails?.issueType ?? "General");
+
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const model = ai.chats.create({
+    const systemInstruction = `${SUPPORT_BOT_SYSTEM_PROMPT}\n\nUser name: ${safeUserName}\nIssue type: ${safeIssueType}`;
+
+    // Build the full contents array: history + new user message
+    const contents = [
+      ...safeHistory.map((h) => ({ role: h.role, parts: h.parts })),
+      { role: "user" as const, parts: [{ text: message.trim() }] },
+    ];
+
+    const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      config: {
-        systemInstruction: `${SUPPORT_BOT_SYSTEM_PROMPT}\n\nUser name: ${userDetails?.name ?? "User"}\nIssue type: ${userDetails?.issueType ?? "General"}`,
-      },
-      history: (history ?? []).map((h) => ({
-        role: h.role as "user" | "model",
-        parts: h.parts,
-      })),
+      contents,
+      config: { systemInstruction },
     });
 
-    const response = await model.sendMessage({ message: message.trim() });
     const text = response.text ?? "";
     res.json({ response: text });
   } catch (error) {
@@ -789,8 +843,7 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
     return res.status(400).json({ error: "Incomplete ticket details." });
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(userDetails.email)) {
+  if (!isValidEmail(userDetails.email)) {
     return res.status(400).json({ error: "Invalid email address." });
   }
 
@@ -811,6 +864,7 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   }
 
   const submittedAt = new Date().toISOString();
+  const safeSubmittedAt = escapeHtml(submittedAt);
   const subject = `[PTE Ninja Support] ${userDetails.issueType} — ${userDetails.name}`;
   const textBody = [
     `PTE Ninja Support Ticket`,
@@ -827,19 +881,25 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
     conversation ?? "(no conversation recorded)",
   ].join("\n");
 
+  const safeName = escapeHtml(userDetails.name);
+  const safeEmail = escapeHtml(userDetails.email);
+  const safeIssue = escapeHtml(userDetails.issueType);
+  const safeDescription = escapeHtml(userDetails.description);
+  const safeConversation = escapeHtml(conversation ?? "(no conversation recorded)");
+
   const htmlBody = `
 <html><body style="font-family:sans-serif;max-width:700px;margin:auto;color:#333">
-<h2 style="color:#1a1a2e">PTE Ninja — Support Ticket</h2>
+<h2 style="color:#1a1a2e">PTE Ninja &#8212; Support Ticket</h2>
 <table style="border-collapse:collapse;width:100%">
-  <tr><td style="padding:6px 12px;font-weight:bold;width:130px">Submitted</td><td style="padding:6px 12px">${submittedAt}</td></tr>
-  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Name</td><td style="padding:6px 12px">${userDetails.name}</td></tr>
-  <tr><td style="padding:6px 12px;font-weight:bold">Email</td><td style="padding:6px 12px"><a href="mailto:${userDetails.email}">${userDetails.email}</a></td></tr>
-  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Issue Type</td><td style="padding:6px 12px">${userDetails.issueType}</td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold;width:130px">Submitted</td><td style="padding:6px 12px">${safeSubmittedAt}</td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Name</td><td style="padding:6px 12px">${safeName}</td></tr>
+  <tr><td style="padding:6px 12px;font-weight:bold">Email</td><td style="padding:6px 12px"><a href="mailto:${safeEmail}">${safeEmail}</a></td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:6px 12px;font-weight:bold">Issue Type</td><td style="padding:6px 12px">${safeIssue}</td></tr>
 </table>
 <h3>Initial Description</h3>
-<p style="background:#f9f9f9;padding:12px;border-left:4px solid #6c63ff;white-space:pre-wrap">${userDetails.description}</p>
+<p style="background:#f9f9f9;padding:12px;border-left:4px solid #6c63ff;white-space:pre-wrap">${safeDescription}</p>
 <h3>Chat Conversation</h3>
-<pre style="background:#f9f9f9;padding:12px;white-space:pre-wrap;font-size:13px">${conversation ?? "(no conversation recorded)"}</pre>
+<pre style="background:#f9f9f9;padding:12px;white-space:pre-wrap;font-size:13px">${safeConversation}</pre>
 </body></html>`;
 
   try {
