@@ -5857,7 +5857,7 @@ function TaskModal({
           ) : (
             <>
               {/* Prompt Area (Moved above recorder for Read Aloud) */}
-              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && (
+              {!(task.category.includes('Fill in the Blanks') && task.section === 'reading') && task.category !== 'Repeat Sentence' && task.category !== 'Summarize Group Discussion' && (
                 <div className="bg-app-bg p-6 md:p-8 rounded-2xl border border-app-primary/20 relative group mb-8">
                   {task.category !== 'Retell Lecture' && (
                   <p className={cn(
