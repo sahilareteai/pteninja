@@ -88,15 +88,17 @@
     .brand-icon {
       width: 52px;
       height: 52px;
-      background: linear-gradient(135deg, #45A29E, #66FCF1);
+      background: #1F2833;
       border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
     }
     .brand-icon svg {
-      width: 30px;
-      height: 30px;
+      width: 52px;
+      height: 52px;
     }
     .brand-name {
       font-size: 28px;
@@ -391,9 +393,14 @@
 
     /* ── Print styles ── */
     @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
       body {
-        background: #FFFFFF;
+        background: #0B0C10;
         padding: 0;
+        margin: 0;
       }
       .flyer {
         width: 100%;
@@ -445,10 +452,28 @@
       <!-- Brand -->
       <div class="brand">
         <div class="brand-icon">
-          <!-- Ninja shuriken / star icon -->
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-                  fill="#0B0C10" stroke="#0B0C10" stroke-width="1.5" stroke-linejoin="round"/>
+          <!-- Ninja logo -->
+          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Outer Mastery Hexagon -->
+            <path d="M50 5L89 27.5V72.5L50 95L11 72.5V27.5L50 5Z" stroke="#45A29E" stroke-width="1" opacity="0.3"/>
+            <!-- Crossed Katanas -->
+            <path d="M22 78L78 22" stroke="#45A29E" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
+            <rect x="18" y="74" width="8" height="3" transform="rotate(-45 18 74)" fill="#45A29E"/>
+            <path d="M14 86L22 78" stroke="#45A29E" stroke-width="5" stroke-linecap="round"/>
+            <path d="M78 78L22 22" stroke="#45A29E" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
+            <rect x="74" y="74" width="8" height="3" transform="rotate(45 74 74)" fill="#45A29E"/>
+            <path d="M86 86L78 78" stroke="#45A29E" stroke-width="5" stroke-linecap="round"/>
+            <!-- Ninja Hood -->
+            <path d="M50 18C38 18 28 28 28 45C28 62 38 82 50 82C62 82 72 62 72 45C72 28 62 18 50 18Z" fill="#45A29E" stroke="#45A29E" stroke-width="2.5"/>
+            <!-- Mask Opening -->
+            <path d="M34 42C34 42 42 38 50 38C58 38 66 42 66 42V52C66 52 58 48 50 48C42 48 34 52 34 52V42Z" fill="#1F2833" stroke="#45A29E" stroke-width="1"/>
+            <!-- Cyber Glow Eyes -->
+            <path d="M40 44H46" stroke="#66FCF1" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M54 44H60" stroke="#66FCF1" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="43" cy="44" r="4" fill="#66FCF1" opacity="0.2"/>
+            <circle cx="57" cy="44" r="4" fill="#66FCF1" opacity="0.2"/>
+            <!-- Rank Star (Shuriken) -->
+            <path d="M50 25L52 30H57L53 33L55 38L50 35L45 38L47 33L43 30H48L50 25Z" fill="#66FCF1"/>
           </svg>
         </div>
         <div class="brand-name">PTE<span>Ninja</span></div>
