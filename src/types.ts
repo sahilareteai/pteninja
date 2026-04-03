@@ -80,6 +80,7 @@ export interface MockTestResult {
   sectionScores: Record<PTESection, number>;
   overallScore: number;
   taskResponses?: Record<string, string>;
+  partial?: boolean;
 }
 
 export interface UserData {

@@ -3290,6 +3290,7 @@ function MockTestSession({
   const [taskScores, setTaskScores] = useState<Record<string, number>>({});
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
@@ -3351,7 +3352,16 @@ function MockTestSession({
     }
   };
 
-  const handleCompleteTest = async () => {
+  const handleExitClick = () => {
+    // In instructions phase nothing has been attempted yet — just close
+    if (phase === 'instructions') {
+      onClose();
+      return;
+    }
+    setShowExitConfirm(true);
+  };
+
+  const handleCompleteTest = async (isPartial = false) => {
     setPhase('calculating');
     const sectionScores: Record<PTESection, number> = {
       speaking: 0,
@@ -3439,7 +3449,8 @@ function MockTestSession({
       completedAt: new Date().toISOString(),
       sectionScores,
       overallScore,
-      taskResponses
+      taskResponses,
+      ...(isPartial && { partial: true })
     };
 
     setFinalResult(result);
@@ -3460,8 +3471,14 @@ function MockTestSession({
           </div>
           
           <div>
-            <h2 className="text-3xl font-black text-app-text uppercase tracking-tight mb-2">Test Complete!</h2>
-            <p className="text-app-text-muted">You've completed {test.title}. Here is your performance summary.</p>
+            <h2 className="text-3xl font-black text-app-text uppercase tracking-tight mb-2">
+              {finalResult.partial ? 'Test Ended Early' : 'Test Complete!'}
+            </h2>
+            <p className="text-app-text-muted">
+              {finalResult.partial
+                ? `Here are your results for the attempted portion of ${test.title}. Unattempted tasks received the minimum score (10/90).`
+                : `You've completed ${test.title}. Here is your performance summary.`}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -3541,7 +3558,7 @@ function MockTestSession({
               </div>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleExitClick}
               className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-app-text-muted hover:text-red-400 hover:bg-red-400/10 border border-app-border hover:border-red-400/30 transition-all uppercase tracking-widest"
             >
               <LogOut size={14} /> Exit
@@ -3631,7 +3648,7 @@ function MockTestSession({
 
           <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
-              onClick={() => { releaseGlobalMicStream(); onClose(); }}
+              onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
               className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
             >
               <LogOut size={14} /> End Test
@@ -3650,6 +3667,40 @@ function MockTestSession({
 
   return (
     <div className="fixed inset-0 z-[100] bg-app-bg flex flex-col">
+      {/* Exit Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="absolute inset-0 z-[110] bg-app-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface rounded-3xl p-8 border border-app-primary/20 max-w-sm w-full text-center space-y-6 shadow-2xl"
+          >
+            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+              <LogOut className="text-red-400" size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">End Test?</h3>
+              <p className="text-app-text-muted text-sm leading-relaxed">
+                Your attempted tasks will be evaluated and results will be shown. Unattempted tasks receive the minimum score (10 out of 90 on the PTE scale).
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
+              >
+                Keep Going
+              </button>
+              <button
+                onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
+                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500 text-white hover:bg-red-400 transition-all"
+              >
+                Exit & Results
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between bg-app-bg">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-app-primary rounded-xl flex items-center justify-center">
@@ -3684,7 +3735,7 @@ function MockTestSession({
             </div>
           )}
           <button 
-            onClick={() => { releaseGlobalMicStream(); onClose(); }}
+            onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
           >
             <X size={24} />
