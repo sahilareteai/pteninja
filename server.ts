@@ -550,17 +550,37 @@ app.post("/api/sync-subscription", async (req, res) => {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
-  const { subscriptionId } = req.body;
-  if (!subscriptionId) {
-    return res.status(400).json({ error: "subscriptionId is required" });
-  }
+  const { subscriptionId, customerId } = req.body;
 
   try {
-    const subscription = await stripeInstance.subscriptions.retrieve(subscriptionId) as unknown as SubscriptionRuntime;
+    let resolvedSubscriptionId: string = subscriptionId ?? "";
+
+    // If no subscriptionId, look up the most recent active (or canceled) subscription
+    // for the customer — mirrors the cancel-subscription fallback pattern.
+    if (!resolvedSubscriptionId && customerId) {
+      for (const status of ["active", "past_due", "unpaid", "canceled"] as const) {
+        const subs = await stripeInstance.subscriptions.list({
+          customer: customerId,
+          status,
+          limit: 1,
+        });
+        if (subs.data.length > 0) {
+          resolvedSubscriptionId = subs.data[0].id;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedSubscriptionId) {
+      return res.status(400).json({ error: "No subscription found" });
+    }
+
+    const subscription = await stripeInstance.subscriptions.retrieve(resolvedSubscriptionId) as unknown as SubscriptionRuntime;
     res.json({
       status: subscription.status,
       currentPeriodEnd: subscription.current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      subscriptionId: resolvedSubscriptionId,
     });
   } catch (error: any) {
     console.error("Sync subscription error:", error);

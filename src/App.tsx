@@ -690,6 +690,7 @@ function AppContent() {
   const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [isSyncingPortal, setIsSyncingPortal] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
@@ -728,7 +729,9 @@ function AppContent() {
   // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has('fromPortal') || !user?.stripeSubscriptionId) return;
+    if (!params.has('fromPortal')) return;
+    // Need at least one Stripe identifier to sync
+    if (!user?.stripeSubscriptionId && !user?.stripeCustomerId) return;
 
     // Remove the param from the URL without triggering a navigation
     params.delete('fromPortal');
@@ -736,12 +739,16 @@ function AppContent() {
     const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
     window.history.replaceState(null, '', newUrl);
 
+    setIsSyncingPortal(true);
     (async () => {
       try {
         const res = await fetch('/api/sync-subscription', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
+          body: JSON.stringify({
+            subscriptionId: user.stripeSubscriptionId || undefined,
+            customerId: user.stripeCustomerId || undefined,
+          }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -754,10 +761,16 @@ function AppContent() {
           } else if (data.status === 'canceled' || data.status === 'unpaid' || data.status === 'past_due') {
             updates.subscriptionStatus = 'inactive';
           }
+          // Persist subscriptionId if it wasn't already saved
+          if (data.subscriptionId && !user?.stripeSubscriptionId) {
+            updates.stripeSubscriptionId = data.subscriptionId;
+          }
           await updateDoc(doc(db, 'users', user.uid), updates);
         }
       } catch {
         // Non-critical: silent fail; Firestore will be updated by the webhook anyway
+      } finally {
+        setIsSyncingPortal(false);
       }
     })();
   }, [user]);
@@ -1251,6 +1264,7 @@ function AppContent() {
                 isDarkMode={isDarkMode}
                 onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
                 onNavigate={setActiveTab}
+                isSyncingPortal={isSyncingPortal}
               />
             ) : activeTab === 'help' ? (
               <HelpView 
@@ -2502,14 +2516,15 @@ function FAQView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate }: { 
+function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdminDashboard, onNavigate, isSyncingPortal = false }: { 
   user: any, 
   onLogout: () => void, 
   onLogin: () => void,
   onUpgrade: () => void, 
   isDarkMode: boolean, 
   onOpenAdminDashboard?: () => void,
-  onNavigate: (tab: any) => void
+  onNavigate: (tab: any) => void,
+  isSyncingPortal?: boolean
 }) {
   const isTrial = user?.subscriptionStatus === 'trial';
   const isGuest = user?.subscriptionStatus === 'guest';
@@ -2886,6 +2901,14 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               </button>
             )}
           </div>
+
+          {/* Syncing banner — shown while refreshing state after returning from Stripe portal */}
+          {isSyncingPortal && (
+            <div className="p-4 bg-app-primary/10 border border-app-primary/20 rounded-2xl flex items-center gap-3">
+              <Loader2 className="text-app-primary shrink-0 animate-spin" size={16} />
+              <p className="text-sm font-medium text-app-primary">Refreshing subscription status…</p>
+            </div>
+          )}
 
           {/* Cancels-at-period-end warning */}
           {isActive && user?.cancelAtPeriodEnd && (
