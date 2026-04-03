@@ -926,11 +926,12 @@ function AppContent() {
       [taskId]: [...taskScoresForId, score]
     };
 
+    const smallResponse = response?.length && response.length < 5000 ? response : undefined;
     const newTaskCompletion: TaskCompletion = {
       taskId,
       score,
       completedAt: new Date().toISOString(),
-      response: response?.length && response.length < 5000 ? response : undefined // Only store small responses in user doc
+      ...(smallResponse !== undefined && { response: smallResponse }) // Only store small responses in user doc
     };
 
     try {
@@ -4754,39 +4755,41 @@ function TaskModal({
   // Helper to play a beep sound using a persistent AudioContext
   const playBeep = () => {
     return new Promise<void>((resolve) => {
-      try {
-        const ctx = getAudioContext();
-        if (!ctx) {
+      (async () => {
+        try {
+          const ctx = getAudioContext();
+          if (!ctx) {
+            resolve();
+            return;
+          }
+
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+          gainNode.gain.setValueAtTime(0, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+          oscillator.onended = () => {
+            resolve();
+          };
+
+          oscillator.start(ctx.currentTime);
+          oscillator.stop(ctx.currentTime + 0.3);
+        } catch (e) {
+          console.error("Beep failed", e);
           resolve();
-          return;
         }
-
-        if (ctx.state === 'suspended') {
-          ctx.resume();
-        }
-
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
-
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
-        gainNode.gain.setValueAtTime(0, ctx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.01);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-
-        oscillator.onended = () => {
-          resolve();
-        };
-
-        oscillator.start(ctx.currentTime);
-        oscillator.stop(ctx.currentTime + 0.1);
-      } catch (e) {
-        console.error("Beep failed", e);
-        resolve();
-      }
+      })();
     });
   };
 

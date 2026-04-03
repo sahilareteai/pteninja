@@ -154,8 +154,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'speaking', 
     type: 'speaking', 
     prepTime: 35, 
-    recordingTime: 40,
-    prompt: "The development of sustainable energy sources is one of the most pressing challenges facing modern society, requiring both technological innovation and significant policy shifts."
+    recordingTime: 60,
+    prompt: "The development of sustainable energy sources is one of the most pressing challenges facing modern society, requiring both technological innovation and significant policy shifts. Governments and private organisations worldwide are investing heavily in solar, wind, and hydroelectric power to reduce dependence on fossil fuels and curb the harmful effects of carbon emissions on the planet's climate."
   },
   { 
     id: 'ra-2', 
@@ -165,8 +165,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'speaking', 
     type: 'speaking', 
     prepTime: 35, 
-    recordingTime: 40,
-    prompt: "The impact of climate change on global biodiversity is profound, with many species facing extinction due to habitat loss and changing environmental conditions."
+    recordingTime: 60,
+    prompt: "The impact of climate change on global biodiversity is profound, with many species facing extinction due to habitat loss, rising temperatures, and changing environmental conditions. Conservation biologists argue that urgent international cooperation is essential to protect remaining ecosystems and to develop effective strategies for restoring damaged habitats before irreversible losses occur."
   },
   { 
     id: 'ra-3', 
@@ -176,8 +176,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'speaking', 
     type: 'speaking', 
     prepTime: 35, 
-    recordingTime: 40,
-    prompt: "Scientific research has shown that regular physical activity can significantly reduce the risk of chronic diseases and improve overall mental health and well-being."
+    recordingTime: 60,
+    prompt: "Scientific research has shown that regular physical activity can significantly reduce the risk of chronic diseases such as heart disease, diabetes, and obesity, while also improving overall mental health and well-being. Health professionals recommend that adults engage in at least one hundred and fifty minutes of moderate-intensity exercise per week, combining aerobic activity with strength training for maximum benefit."
   },
   { 
     id: 'ra-4', 
@@ -187,8 +187,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'speaking', 
     type: 'speaking', 
     prepTime: 35, 
-    recordingTime: 40,
-    prompt: "The rapid growth of urban areas has led to increased demand for infrastructure, housing, and public services, posing significant challenges for city planners."
+    recordingTime: 60,
+    prompt: "The rapid growth of urban areas has led to increased demand for infrastructure, housing, and public services, posing significant challenges for city planners and local governments. Without careful long-term planning and substantial investment in sustainable transport networks, affordable housing, and green spaces, densely populated cities risk serious social and environmental consequences in the coming decades."
   },
   { 
     id: 'ra-5', 
@@ -198,8 +198,8 @@ export const PTE_TASKS: PTETask[] = [
     section: 'speaking', 
     type: 'speaking', 
     prepTime: 35, 
-    recordingTime: 40,
-    prompt: "Education plays a crucial role in empowering individuals and fostering social economic development, providing the skills and knowledge necessary for success in the modern world."
+    recordingTime: 60,
+    prompt: "Education plays a crucial role in empowering individuals and fostering social and economic development, providing the skills and knowledge necessary for success in the modern world. Access to high-quality education remains unequal across many regions, and bridging this gap requires sustained commitment from policymakers, communities, and international organisations dedicated to lifelong learning opportunities for all."
   },
   { 
     id: 'rs-1', 
