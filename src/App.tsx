@@ -484,18 +484,18 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
   // of unique task types (from that belt's own section list) have been met,
   // ensuring the learner has practised across all sections before progressing.
   const beltMinTasks = Object.fromEntries(
-    Object.entries(BELT_DETAILS).map(([id, d]) => [id, d.sections.reduce((sum, s) => sum + s.tasks.length, 0)])
+    Object.entries(BELT_DETAILS).map(([id, beltDetails]) => [id, beltDetails.sections.reduce((sum, section) => sum + section.tasks.length, 0)])
   );
 
   // Count how many unique task IDs the user has scored that belong to the
   // categories listed in a specific belt's sections.  This is belt-specific
   // so that tasks done for other belts do not count towards this threshold.
   const getBeltTasksAttempted = (beltId: string): number => {
-    const detail = BELT_DETAILS[beltId];
-    if (!detail) return 0;
-    const beltCategories = new Set(detail.sections.flatMap(s => s.tasks.map(t => t.category)));
+    const beltDetail = BELT_DETAILS[beltId];
+    if (!beltDetail) return 0;
+    const beltCategories = new Set(beltDetail.sections.flatMap(section => section.tasks.map(task => task.category)));
     const scores = user?.taskScores || {};
-    return allTasks.filter(t => beltCategories.has(t.category) && Array.isArray(scores[t.id]) && scores[t.id].length > 0).length;
+    return allTasks.filter(task => beltCategories.has(task.category) && Array.isArray(scores[task.id]) && scores[task.id].length > 0).length;
   };
 
   const milestones = [
