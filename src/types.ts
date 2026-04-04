@@ -41,9 +41,11 @@ export interface RoadmapMilestone {
 
 export interface ScheduledTask {
   id: string;
-  taskId: string;
-  scheduledAt: string; // ISO string
-  duration: number; // minutes
+  taskId: string;       // specific resolved PTETask id (auto-assigned, may be re-resolved at play time)
+  category: string;     // task category chosen by the user, e.g. "Read Aloud"
+  section: string;      // PTE section, e.g. "speaking"
+  scheduledAt: string;  // ISO string
+  duration: number;     // minutes
   isCompleted: boolean;
   reminderSet?: boolean;
 }
