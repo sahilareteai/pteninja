@@ -206,6 +206,9 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
   })();
 
+  // Number of unique task types the user has scored at least once
+  const uniqueTasksAttempted = Object.keys(user?.taskScores || {}).length;
+
   const BELT_DETAILS: Record<string, {
     color: string;
     gradient: string;
@@ -479,12 +482,20 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
     },
   };
 
+  // Minimum unique tasks required to unlock each belt.
+  // A belt is earned only when BOTH the score threshold AND the minimum number
+  // of unique task types (from that belt's own section list) have been met,
+  // ensuring the learner has practised across all sections before progressing.
+  const beltMinTasks = Object.fromEntries(
+    Object.entries(BELT_DETAILS).map(([id, d]) => [id, d.sections.reduce((sum, s) => sum + s.tasks.length, 0)])
+  );
+
   const milestones = [
     { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
-    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 },
-    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 },
-    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 },
-    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 },
+    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 && uniqueTasksAttempted >= beltMinTasks.yellow },
+    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 && uniqueTasksAttempted >= beltMinTasks.green },
+    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 && uniqueTasksAttempted >= beltMinTasks.blue },
+    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 && uniqueTasksAttempted >= beltMinTasks.black },
   ];
 
   const currentMilestone = milestones.find(m => !m.isUnlocked) || milestones[milestones.length - 1];
@@ -727,9 +738,9 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[90vh] flex flex-col"
+                className="fixed inset-x-0 bottom-16 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[calc(100vh-5rem)] md:max-h-[90vh] flex flex-col"
               >
-                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
 
                   {/* Header gradient banner */}
                   <div className={cn("relative p-6 md:p-8 bg-gradient-to-br", details.gradient, "shrink-0")}>
@@ -992,7 +1003,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                               console.error("Failed to delete schedule:", e);
                             }
                           }}
-                          className="p-2 text-app-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          className="p-2 text-app-text-muted hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                         >
                           <Trash2 size={18} />
                         </button>
