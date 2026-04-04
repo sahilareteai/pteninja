@@ -2332,7 +2332,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             <div className="col-span-2 md:col-span-1 md:row-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[260px] md:min-h-[420px]">
               <div className="absolute inset-0 bg-gradient-to-br from-[#0d1f2d] via-[#0a2e2a] to-[#061a18] group-hover:scale-105 transition-transform duration-700" />
               {/* Mock dashboard UI */}
-              <div className="absolute inset-0 p-5 pt-8 flex flex-col gap-3 pointer-events-none select-none">
+              <div className="absolute inset-0 p-5 pt-8 pb-16 flex flex-col gap-3 pointer-events-none select-none overflow-hidden">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-8 h-8 rounded-full bg-app-primary/20 flex items-center justify-center">
                     <svg className="w-4 h-4 text-app-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
@@ -2366,7 +2366,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
                   <svg className="w-8 h-8 text-app-primary/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
                 </div>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Smart Dashboard</p>
                 <p className="text-white font-bold text-base leading-tight">Track your progress, study streak & plan</p>
@@ -2378,7 +2378,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <div className="absolute inset-0 bg-gradient-to-br from-[#0d1a2d] via-[#0a2040] to-[#071830] group-hover:scale-105 transition-transform duration-700" />
               {/* Mock vocab UI */}
-              <div className="absolute inset-0 p-4 pt-5 flex flex-col gap-2 pointer-events-none select-none">
+              <div className="absolute inset-0 p-4 pt-5 pb-14 flex flex-col gap-2 pointer-events-none select-none overflow-hidden">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded-full bg-teal-500/20 flex items-center justify-center">
                     <svg className="w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
@@ -2399,7 +2399,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
                   ))}
                 </div>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Vocabulary Builder</p>
                 <p className="text-white font-bold text-sm leading-tight">2000+ academic words with audio</p>
@@ -2411,7 +2411,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a0d] via-[#1a2a10] to-[#0a1a10] group-hover:scale-105 transition-transform duration-700" />
               {/* Mock pricing UI */}
-              <div className="absolute inset-0 p-4 pt-5 flex flex-col gap-2 pointer-events-none select-none">
+              <div className="absolute inset-0 p-4 pt-5 pb-14 flex flex-col gap-2 pointer-events-none select-none overflow-hidden">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded-full bg-yellow-500/20 flex items-center justify-center">
                     <svg className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -2429,7 +2429,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
                   </div>
                 </div>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Premium Plans</p>
                 <p className="text-white font-bold text-sm leading-tight">Affordable pricing, exceptional results</p>
@@ -2441,7 +2441,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             <div className="col-span-2 md:col-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <div className="absolute inset-0 bg-gradient-to-br from-[#071a20] via-[#0a1f2a] to-[#061520] group-hover:scale-105 transition-transform duration-700" />
               {/* Mock chat UI */}
-              <div className="absolute inset-0 p-5 pt-6 flex flex-col gap-2 pointer-events-none select-none">
+              <div className="absolute inset-0 p-5 pt-6 pb-16 flex flex-col gap-2 pointer-events-none select-none overflow-hidden">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-7 h-7 rounded-full bg-cyan-500/20 flex items-center justify-center">
                     <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
@@ -2461,7 +2461,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
                   <p className="text-white/70 text-[10px] leading-relaxed">Absolutely! I'll analyze your responses and give personalized tips. Let's start with Read Aloud. ✨</p>
                 </div>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Help & Support</p>
                 <p className="text-white font-bold text-base leading-tight">AI-powered support bot, always ready to help</p>
