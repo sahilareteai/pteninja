@@ -179,6 +179,8 @@ const NotificationService = {
   }
 };
 
+const DEFAULT_SCHEDULE_TIME = '09:00';
+const DEFAULT_SCHEDULE_DURATION = 30;
 
 function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
   user: any, 
@@ -190,7 +192,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
 }) {
   const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
   const [showAddSchedule, setShowAddSchedule] = useState(false);
-  const [newSchedule, setNewSchedule] = useState({ category: '', time: '09:00', duration: 30 });
+  const [newSchedule, setNewSchedule] = useState({ category: '', time: DEFAULT_SCHEDULE_TIME, duration: DEFAULT_SCHEDULE_DURATION });
   const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
@@ -538,7 +540,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
       await updateDoc(doc(db, 'users', user.uid), {
         schedule: [...(user.schedule || []), scheduleItem]
       });
-      setNewSchedule({ category: '', time: '09:00', duration: 30 });
+      setNewSchedule({ category: '', time: DEFAULT_SCHEDULE_TIME, duration: DEFAULT_SCHEDULE_DURATION });
       setShowAddSchedule(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
@@ -759,7 +761,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                className="fixed inset-x-0 bottom-16 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[calc(100vh-5rem)] md:max-h-[90vh] flex flex-col"
+                className="fixed inset-x-0 bottom-16 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[calc(100vh-4rem)] md:max-h-[90vh] flex flex-col"
               >
                 <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
 
@@ -944,14 +946,18 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                     className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   >
                     <option value="">Select Task Type</option>
-                    {allTasks
-                      .filter((t, idx, arr) => arr.findIndex(x => x.category === t.category) === idx)
-                      .map(t => (
-                        <option key={t.category} value={t.category}>
-                          {t.section.charAt(0).toUpperCase() + t.section.slice(1)} — {t.category}
-                        </option>
-                      ))
-                    }
+                    {(() => {
+                      const seen = new Set<string>();
+                      return allTasks.filter(t => {
+                        if (seen.has(t.category)) return false;
+                        seen.add(t.category);
+                        return true;
+                      });
+                    })().map(t => (
+                      <option key={t.category} value={t.category}>
+                        {t.section.charAt(0).toUpperCase() + t.section.slice(1)} — {t.category}
+                      </option>
+                    ))}
                   </select>
                   <input 
                     type="time"
@@ -1034,7 +1040,11 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                               // Re-resolve best unattempted task at play time
                               const taskToStart = resolveTaskForCategory(displayCategory)
                                 || allTasks.find(t => t.id === item.taskId);
-                              if (taskToStart) onStartTask(taskToStart);
+                              if (taskToStart) {
+                                onStartTask(taskToStart);
+                              } else {
+                                toast.error('No task found for this category.');
+                              }
                             }}
                             className="p-2 text-app-primary hover:bg-app-primary/10 rounded-lg transition-all"
                           >
