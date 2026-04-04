@@ -4302,9 +4302,9 @@ function MockTestSession({
           )}
           <button 
             onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
-            className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
           >
-            <X size={24} />
+            <LogOut size={14} /> Exit Test
           </button>
         </div>
       </div>
@@ -4775,6 +4775,76 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
         </div>
       </section>
 
+      {/* Platform Feature Showcase Collage */}
+      <section>
+        <div className="text-center mb-6">
+          <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-2">Platform Preview</p>
+          <h2 className="text-2xl md:text-3xl font-black text-app-text tracking-tight">Everything You Need to Master PTE</h2>
+          <p className="text-sm text-app-text-muted mt-2 max-w-xl mx-auto leading-relaxed">
+            AI-powered practice tools, vocabulary mastery, full mock tests, and real-time support — all in one place.
+          </p>
+        </div>
+
+        {/* Bento grid collage */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4" style={{ gridTemplateRows: 'auto auto' }}>
+          {/* Dashboard screenshot — tall, spans 2 rows on md */}
+          <div className="col-span-2 md:col-span-1 md:row-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/40 transition-all duration-300 shadow-md hover:shadow-xl hover:shadow-app-primary/10 min-h-[220px] md:min-h-0">
+            <img
+              src="https://github.com/user-attachments/assets/11c8bf33-08d1-4f67-8f8e-6a1128399abc"
+              alt="Smart Dashboard"
+              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/20 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-4">
+              <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Smart Dashboard</p>
+              <p className="text-app-text font-bold text-sm leading-tight">Track your progress, study streak & plan</p>
+            </div>
+          </div>
+
+          {/* Vocabulary Builder */}
+          <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/40 transition-all duration-300 shadow-md hover:shadow-xl hover:shadow-app-primary/10 min-h-[160px]">
+            <img
+              src="https://github.com/user-attachments/assets/4a61c249-710b-4abc-a976-ec41335c4415"
+              alt="Vocabulary Builder"
+              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-3">
+              <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Vocabulary Builder</p>
+              <p className="text-app-text font-bold text-xs leading-tight">2000+ academic words with audio</p>
+            </div>
+          </div>
+
+          {/* Pricing / Plans */}
+          <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/40 transition-all duration-300 shadow-md hover:shadow-xl hover:shadow-app-primary/10 min-h-[160px]">
+            <img
+              src="https://github.com/user-attachments/assets/fcba71a4-7556-4dc3-a49e-93f50fdd3f8c"
+              alt="Premium Plans"
+              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-3">
+              <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Premium Plans</p>
+              <p className="text-app-text font-bold text-xs leading-tight">Affordable pricing, exceptional results</p>
+            </div>
+          </div>
+
+          {/* Help & Support — spans full width on mobile, 2 cols on md */}
+          <div className="col-span-2 md:col-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/40 transition-all duration-300 shadow-md hover:shadow-xl hover:shadow-app-primary/10 min-h-[160px]">
+            <img
+              src="https://github.com/user-attachments/assets/fe4b889e-bf3f-4bc6-9120-7450a4695a5b"
+              alt="Help & Support"
+              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-4">
+              <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Help & Support</p>
+              <p className="text-app-text font-bold text-sm leading-tight">AI-powered support bot, always ready to help</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Mock Tests Section */}
       <section className="bg-app-surface rounded-3xl p-8 border border-app-primary/10 relative overflow-hidden group">
         <div className="absolute -top-10 -right-10 p-10 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -4787,12 +4857,12 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
               <h2 className="text-3xl font-black text-app-text tracking-tight uppercase">Full Mock Tests</h2>
             </div>
             <p className="text-app-text-muted max-w-xl leading-relaxed">
-              Experience the real PTE exam environment with our 100 full-length mock tests. 
+              Experience the real PTE exam environment with our 500 full-length mock tests. 
               Timed sections, AI scoring, and detailed performance analysis.
             </p>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-[10px] font-bold text-app-primary uppercase tracking-widest">
               <div className="flex items-center gap-2">
-                <CheckCircle size={14} /> 100 Real Exam Papers
+                <CheckCircle size={14} /> 500 Real Exam Papers
               </div>
               <div className="flex items-center gap-2">
                 <Clock size={14} /> 2-Hour Simulation
