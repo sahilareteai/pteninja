@@ -14,17 +14,39 @@ export const generateMockTests = (): MockTest[] => {
     return shuffled;
   };
 
-  // Build task ID pool grouped by category + section (computed once, reused across all tests)
-  const tasksByCatSection: Record<string, string[]> = {};
-  PTE_TASKS.forEach(t => {
-    const key = `${t.category}|${t.section}`;
-    if (!tasksByCatSection[key]) tasksByCatSection[key] = [];
-    tasksByCatSection[key].push(t.id);
-  });
+  // Build content-deduplicated task ID pools per category+section.
+  // The programmatic expansion in types.ts cycles through a limited number of templates,
+  // so many tasks share identical content. We only keep the first occurrence of each
+  // unique content fingerprint to avoid presenting the same question twice in a test.
+  const deduplicatedPools: Record<string, string[]> = {};
+  {
+    const seenFingerprints = new Map<string, Set<string>>();
+    for (const task of PTE_TASKS) {
+      const key = `${task.category}|${task.section}`;
+      if (!seenFingerprints.has(key)) seenFingerprints.set(key, new Set());
+      if (!deduplicatedPools[key]) deduplicatedPools[key] = [];
+
+      // Fingerprint covers every field that makes a question feel distinct to the user
+      const fp = [
+        task.prompt ?? '',
+        task.transcript ?? '',
+        task.passage ?? '',
+        JSON.stringify(task.paragraphs ?? []),
+        JSON.stringify(task.options ?? []),
+        task.image ?? '',
+      ].join('|||');
+
+      const seen = seenFingerprints.get(key)!;
+      if (!seen.has(fp)) {
+        seen.add(fp);
+        deduplicatedPools[key].push(task.id);
+      }
+    }
+  }
 
   const pick = (category: string, section: PTESection, n: number, seed: number): string[] => {
     const key = `${category}|${section}`;
-    const tasks = tasksByCatSection[key] || [];
+    const tasks = deduplicatedPools[key] || [];
     if (tasks.length === 0) return [];
     return shuffle(tasks, seed).slice(0, Math.min(n, tasks.length));
   };
