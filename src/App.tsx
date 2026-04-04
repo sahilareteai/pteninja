@@ -206,9 +206,6 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
   })();
 
-  // Number of unique task types the user has scored at least once
-  const uniqueTasksAttempted = Object.keys(user?.taskScores || {}).length;
-
   const BELT_DETAILS: Record<string, {
     color: string;
     gradient: string;
@@ -490,12 +487,23 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
     Object.entries(BELT_DETAILS).map(([id, d]) => [id, d.sections.reduce((sum, s) => sum + s.tasks.length, 0)])
   );
 
+  // Count how many unique task IDs the user has scored that belong to the
+  // categories listed in a specific belt's sections.  This is belt-specific
+  // so that tasks done for other belts do not count towards this threshold.
+  const getBeltTasksAttempted = (beltId: string): number => {
+    const detail = BELT_DETAILS[beltId];
+    if (!detail) return 0;
+    const beltCategories = new Set(detail.sections.flatMap(s => s.tasks.map(t => t.category)));
+    const scores = user?.taskScores || {};
+    return allTasks.filter(t => beltCategories.has(t.category) && Array.isArray(scores[t.id]) && scores[t.id].length > 0).length;
+  };
+
   const milestones = [
     { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
-    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 && uniqueTasksAttempted >= beltMinTasks.yellow },
-    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 && uniqueTasksAttempted >= beltMinTasks.green },
-    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 && uniqueTasksAttempted >= beltMinTasks.blue },
-    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 && uniqueTasksAttempted >= beltMinTasks.black },
+    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 && getBeltTasksAttempted('yellow') >= beltMinTasks.yellow },
+    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 && getBeltTasksAttempted('green') >= beltMinTasks.green },
+    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 && getBeltTasksAttempted('blue') >= beltMinTasks.blue },
+    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 && getBeltTasksAttempted('black') >= beltMinTasks.black },
   ];
 
   const currentMilestone = milestones.find(m => !m.isUnlocked) || milestones[milestones.length - 1];
