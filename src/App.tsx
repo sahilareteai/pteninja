@@ -2331,7 +2331,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             {/* Smart Dashboard — tall, spans 2 rows on md */}
             <div className="col-span-2 md:col-span-1 md:row-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[260px] md:min-h-[420px]">
               <img
-                src="https://github.com/user-attachments/assets/11c8bf33-08d1-4f67-8f8e-6a1128399abc"
+                src="https://github.com/user-attachments/assets/54c7904a-4580-4493-86f7-2bc994d13214"
                 alt="Smart Dashboard"
                 referrerPolicy="no-referrer"
                 loading="eager"
@@ -2349,7 +2349,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             {/* Vocabulary Builder */}
             <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <img
-                src="https://github.com/user-attachments/assets/4a61c249-710b-4abc-a976-ec41335c4415"
+                src="https://github.com/user-attachments/assets/652f799d-7539-46e2-af8b-80c7a21d72cb"
                 alt="Vocabulary Builder"
                 referrerPolicy="no-referrer"
                 loading="eager"
@@ -2367,7 +2367,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             {/* Premium Plans */}
             <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <img
-                src="https://github.com/user-attachments/assets/fcba71a4-7556-4dc3-a49e-93f50fdd3f8c"
+                src="https://github.com/user-attachments/assets/a9bff2ec-05de-4f61-9798-2689fd67c2f7"
                 alt="Premium Plans"
                 referrerPolicy="no-referrer"
                 loading="eager"
@@ -2385,7 +2385,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
             {/* Help & Support — spans full width on mobile, 2 cols on md */}
             <div className="col-span-2 md:col-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
               <img
-                src="https://github.com/user-attachments/assets/fe4b889e-bf3f-4bc6-9120-7450a4695a5b"
+                src="https://github.com/user-attachments/assets/61292f90-8173-4fa1-8fef-f28e50445bb1"
                 alt="Help & Support"
                 referrerPolicy="no-referrer"
                 loading="eager"
