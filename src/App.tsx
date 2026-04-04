@@ -761,9 +761,9 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                className="fixed inset-x-0 bottom-16 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[calc(100vh-4rem)] md:max-h-[90vh] flex flex-col"
+                className="fixed inset-x-0 bottom-0 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] h-[90vh] md:h-auto md:max-h-[90vh] flex flex-col"
               >
-                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
+                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col flex-1 min-h-0">
 
                   {/* Header gradient banner */}
                   <div className={cn("relative p-6 md:p-8 bg-gradient-to-br", details.gradient, "shrink-0")}>
@@ -4427,7 +4427,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
       )}
 
       {/* Progress Overview */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative items-start">
         <div className="md:col-span-2 bg-app-surface rounded-3xl p-6 md:p-8 border border-app-primary/10 relative group z-20">
           <div className="absolute top-0 right-0 w-full h-full overflow-hidden pointer-events-none rounded-3xl">
             <div className="absolute -top-4 -right-4 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -4677,29 +4677,36 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
 
           <div className="space-y-4">
             <h4 className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest">Section Performance</h4>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[...sectionAverages]
                 .sort((a, b) => a.average - b.average)
                 .map((s) => (
-                  <div key={s.section} className="space-y-1.5">
-                    <div className="flex justify-between items-end">
-                      <span className="text-xs font-bold text-app-text capitalize">{s.section}</span>
-                      <span className="text-[10px] font-mono text-app-text-muted">
-                        {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
-                      </span>
+                  <button
+                    key={s.section}
+                    onClick={() => onSelectSection(s.section)}
+                    className="w-full text-left group p-3 bg-app-bg hover:bg-app-primary/10 border border-app-primary/5 hover:border-app-primary/30 rounded-2xl transition-all duration-200 cursor-pointer"
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-app-text capitalize group-hover:text-app-primary transition-colors">{s.section}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-app-text-muted">
+                          {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
+                        </span>
+                        <ChevronRight size={12} className="text-app-text-muted/40 group-hover:text-app-primary transition-colors" />
+                      </div>
                     </div>
-                    <div className="h-1.5 w-full bg-app-bg rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-app-surface rounded-full overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${s.attempts > 0 ? Math.max((s.average / 90) * 100, 5) : 0}%` }}
                         transition={{ duration: 1, ease: "easeOut" }}
                         className={cn(
                           "h-full rounded-full",
-                          s.average === 0 ? "bg-gray-800" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-app-accent"
+                          s.average === 0 ? "bg-gray-700" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-app-accent"
                         )}
                       />
                     </div>
-                  </div>
+                  </button>
                 ))}
             </div>
           </div>
@@ -5177,7 +5184,8 @@ function PatternView({ onBack }: { onBack: () => void }) {
         { name: "Respond to a Situation", count: "1–2", description: "Listen to a situation and give a spoken response." },
         { name: "Summarize Group Discussion", count: "1–2", description: "Listen to a group discussion and summarize it orally." },
         { name: "Answer Short Question", count: "5–6", description: "Answer a simple question with a single word or short phrase." },
-        { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." }
+        { name: "Summarize Written Text", count: "1–2", description: "Summarize a passage in one sentence (up to 75 words)." },
+        { name: "Write Essay", count: "1–2", description: "Write a 200–300 word essay on a given topic in 20 minutes." }
       ]
     },
     {
