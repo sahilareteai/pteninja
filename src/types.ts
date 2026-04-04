@@ -85,6 +85,15 @@ export interface MockTestResult {
   partial?: boolean;
 }
 
+export interface MockTestSavedSession {
+  testId: string;
+  sectionIndex: number;
+  taskIndex: number;
+  taskResponses: Record<string, string>;
+  sectionTimeLeft: number;
+  savedAt: string;
+}
+
 export interface UserData {
   uid: string;
   email?: string | null;
@@ -110,6 +119,7 @@ export interface UserData {
   goals?: DailyGoal[];
   favoriteWords?: string[];
   mockTestResults?: MockTestResult[];
+  savedMockSession?: MockTestSavedSession | null;
   currentSessionId?: string;
   role?: 'admin' | 'user';
 }
