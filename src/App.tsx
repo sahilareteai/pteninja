@@ -179,6 +179,8 @@ const NotificationService = {
   }
 };
 
+const DEFAULT_SCHEDULE_TIME = '09:00';
+const DEFAULT_SCHEDULE_DURATION = 30;
 
 function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
   user: any, 
@@ -190,7 +192,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
 }) {
   const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
   const [showAddSchedule, setShowAddSchedule] = useState(false);
-  const [newSchedule, setNewSchedule] = useState({ taskId: '', time: '09:00', duration: 30 });
+  const [newSchedule, setNewSchedule] = useState({ category: '', time: DEFAULT_SCHEDULE_TIME, duration: DEFAULT_SCHEDULE_DURATION });
   const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
@@ -479,24 +481,55 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
     },
   };
 
+  // Minimum unique tasks required to unlock each belt.
+  // A belt is earned only when BOTH the score threshold AND the minimum number
+  // of unique task types (from that belt's own section list) have been met,
+  // ensuring the learner has practised across all sections before progressing.
+  const beltMinTasks = Object.fromEntries(
+    Object.entries(BELT_DETAILS).map(([id, beltDetails]) => [id, beltDetails.sections.reduce((sum, section) => sum + section.tasks.length, 0)])
+  );
+
+  // Count how many unique task IDs the user has scored that belong to the
+  // categories listed in a specific belt's sections.  This is belt-specific
+  // so that tasks done for other belts do not count towards this threshold.
+  const getBeltTasksAttempted = (beltId: string): number => {
+    const beltDetail = BELT_DETAILS[beltId];
+    if (!beltDetail) return 0;
+    const beltCategories = new Set(beltDetail.sections.flatMap(section => section.tasks.map(task => task.category)));
+    const scores = user?.taskScores || {};
+    return allTasks.filter(task => beltCategories.has(task.category) && Array.isArray(scores[task.id]) && scores[task.id].length > 0).length;
+  };
+
   const milestones = [
     { id: 'white', title: 'White Belt', targetScore: 30, description: 'Master the basics of PTE structure.', isUnlocked: true },
-    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 },
-    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 },
-    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 },
-    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 },
+    { id: 'yellow', title: 'Yellow Belt', targetScore: 50, description: 'Build fluency and basic vocabulary.', isUnlocked: currentScore >= 30 && getBeltTasksAttempted('yellow') >= beltMinTasks.yellow },
+    { id: 'green', title: 'Green Belt', targetScore: 65, description: 'Achieve consistent accuracy in all sections.', isUnlocked: currentScore >= 50 && getBeltTasksAttempted('green') >= beltMinTasks.green },
+    { id: 'blue', title: 'Blue Belt', targetScore: 79, description: 'Advanced techniques and high-level vocabulary.', isUnlocked: currentScore >= 65 && getBeltTasksAttempted('blue') >= beltMinTasks.blue },
+    { id: 'black', title: 'Black Belt', targetScore: 90, description: 'PTE Mastery. Ready for the exam.', isUnlocked: currentScore >= 79 && getBeltTasksAttempted('black') >= beltMinTasks.black },
   ];
 
   const currentMilestone = milestones.find(m => !m.isUnlocked) || milestones[milestones.length - 1];
 
+  // Returns the best unattempted (or least-recently-attempted) task for a given category.
+  const resolveTaskForCategory = (category: string): PTETask | null => {
+    const tasksInCategory = allTasks.filter(t => t.category === category);
+    if (tasksInCategory.length === 0) return null;
+    const completedIds = new Set(user?.completedTasks || []);
+    const unattempted = tasksInCategory.filter(t => !completedIds.has(t.id));
+    // Prefer unattempted; fall back to first in category
+    return unattempted.length > 0 ? unattempted[0] : tasksInCategory[0];
+  };
+
   const handleAddSchedule = async () => {
-    if (!user?.uid || !newSchedule.taskId) return;
-    const task = allTasks.find(t => t.id === newSchedule.taskId);
-    if (!task) return;
+    if (!user?.uid || !newSchedule.category) return;
+    const resolvedTask = resolveTaskForCategory(newSchedule.category);
+    if (!resolvedTask) return;
 
     const scheduleItem: ScheduledTask = {
       id: Math.random().toString(36).substr(2, 9),
-      taskId: newSchedule.taskId,
+      taskId: resolvedTask.id,
+      category: newSchedule.category,
+      section: resolvedTask.section,
       scheduledAt: new Date().toISOString().split('T')[0] + 'T' + newSchedule.time + ':00.000Z',
       duration: newSchedule.duration,
       isCompleted: false,
@@ -507,6 +540,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
       await updateDoc(doc(db, 'users', user.uid), {
         schedule: [...(user.schedule || []), scheduleItem]
       });
+      setNewSchedule({ category: '', time: DEFAULT_SCHEDULE_TIME, duration: DEFAULT_SCHEDULE_DURATION });
       setShowAddSchedule(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
@@ -727,9 +761,9 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.95 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[90vh] flex flex-col"
+                className="fixed inset-x-0 bottom-16 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] max-h-[calc(100vh-4rem)] md:max-h-[90vh] flex flex-col"
               >
-                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
 
                   {/* Header gradient banner */}
                   <div className={cn("relative p-6 md:p-8 bg-gradient-to-br", details.gradient, "shrink-0")}>
@@ -905,14 +939,24 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 className="mb-8 p-6 bg-app-bg rounded-3xl border border-app-primary/30 space-y-4"
               >
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Show unique task categories only, not individual questions */}
                   <select 
-                    value={newSchedule.taskId}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, taskId: e.target.value })}
+                    value={newSchedule.category}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, category: e.target.value })}
                     className="bg-app-surface text-app-text border border-app-border rounded-xl p-3 outline-none focus:border-app-primary"
                   >
-                    <option value="">Select Task</option>
-                    {allTasks.map(t => (
-                      <option key={t.id} value={t.id}>{t.category}: {t.title}</option>
+                    <option value="">Select Task Type</option>
+                    {(() => {
+                      const seen = new Set<string>();
+                      return allTasks.filter(t => {
+                        if (seen.has(t.category)) return false;
+                        seen.add(t.category);
+                        return true;
+                      });
+                    })().map(t => (
+                      <option key={t.category} value={t.category}>
+                        {t.section.charAt(0).toUpperCase() + t.section.slice(1)} — {t.category}
+                      </option>
                     ))}
                   </select>
                   <input 
@@ -952,14 +996,21 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                 </div>
               ) : (
                 user.schedule.sort((a: ScheduledTask, b: ScheduledTask) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((item: ScheduledTask) => {
-                  const task = allTasks.find(t => t.id === item.taskId);
+                  // Support both new (category field) and legacy (taskId = specific task ID) schedule items
+                  const displayCategory = item.category || allTasks.find(t => t.id === item.taskId)?.category || 'Unknown Task';
+                  const displaySection = item.section || allTasks.find(t => t.id === item.taskId)?.section || 'N/A';
                   const scheduledDate = new Date(item.scheduledAt);
                   const isToday = scheduledDate.toDateString() === new Date().toDateString();
                   const timeStr = scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   const dateStr = scheduledDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
                   return (
-                    <div key={item.id} className="flex items-center gap-3 md:gap-6 p-4 bg-app-bg rounded-2xl border border-app-border group hover:border-app-primary/30 transition-all">
+                    <div key={item.id} className={cn(
+                      "flex items-center gap-3 md:gap-6 p-4 rounded-2xl border group transition-all",
+                      item.isCompleted
+                        ? "bg-app-primary/5 border-app-primary/20 opacity-60"
+                        : "bg-app-bg border-app-border hover:border-app-primary/30"
+                    )}>
                       <div className="text-center min-w-[70px] md:min-w-[80px]">
                         <p className="text-sm font-bold text-app-text">{timeStr}</p>
                         {!isToday && <p className="text-[10px] text-app-text-muted/50 font-bold uppercase">{dateStr}</p>}
@@ -967,23 +1018,39 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-app-text">{task?.category || 'Unknown Task'}</h4>
-                          {item.reminderSet && (
+                          <h4 className={cn("font-bold text-app-text", item.isCompleted && "line-through")}>{displayCategory}</h4>
+                          {item.isCompleted ? (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-app-primary/10 text-app-primary rounded text-[8px] font-black uppercase tracking-widest">
+                              <Check size={8} />
+                              Done
+                            </div>
+                          ) : item.reminderSet && (
                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/10 text-orange-500 rounded text-[8px] font-black uppercase tracking-widest">
                               <Bell size={8} fill="currentColor" />
                               Alert
                             </div>
                           )}
                         </div>
-                        <p className="text-xs text-app-text-muted uppercase tracking-widest">{task?.section || 'N/A'}</p>
+                        <p className="text-xs text-app-text-muted uppercase tracking-widest">{displaySection}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => task && onStartTask(task)}
-                          className="p-2 text-app-primary hover:bg-app-primary/10 rounded-lg transition-all"
-                        >
-                          <Play size={18} />
-                        </button>
+                        {!item.isCompleted && (
+                          <button 
+                            onClick={() => {
+                              // Re-resolve best unattempted task at play time
+                              const taskToStart = resolveTaskForCategory(displayCategory)
+                                || allTasks.find(t => t.id === item.taskId);
+                              if (taskToStart) {
+                                onStartTask(taskToStart);
+                              } else {
+                                toast.error('No task found for this category.');
+                              }
+                            }}
+                            className="p-2 text-app-primary hover:bg-app-primary/10 rounded-lg transition-all"
+                          >
+                            <Play size={18} />
+                          </button>
+                        )}
                         <button 
                           onClick={async () => {
                             try {
@@ -992,7 +1059,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                               console.error("Failed to delete schedule:", e);
                             }
                           }}
-                          className="p-2 text-app-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          className="p-2 text-app-text-muted hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -1269,8 +1336,8 @@ function AppContent() {
           // If within 1 minute of scheduled time (up to 1 minute after) and not completed
           // AND we haven't sent a notification for this specific schedule ID yet
           if (!item.isCompleted && timeDiff >= 0 && timeDiff < 60000 && !sentNotifications.current.has(item.id)) {
-            NotificationService.send(`Study Time: ${item.taskId}`, {
-              body: `It's time for your scheduled ${item.taskId} session!`,
+            NotificationService.send(`Study Time: ${item.category || item.taskId}`, {
+              body: `It's time for your scheduled ${item.category || item.taskId} session!`,
               icon: '/favicon.ico'
             });
             sentNotifications.current.add(item.id);
@@ -1348,6 +1415,8 @@ function AppContent() {
           newScheduledTasks.push({
             id: Math.random().toString(36).substr(2, 9),
             taskId: task.id,
+            category: task.category,
+            section: task.section,
             scheduledAt: scheduledTime.toISOString(),
             duration: 15, // Default duration
             isCompleted: false,
@@ -1474,6 +1543,21 @@ function AppContent() {
       ...(smallResponse !== undefined && { response: smallResponse }) // Only store small responses in user doc
     };
 
+    // Auto-mark any schedule items for the same category as done.
+    // Handles both new items (item.category) and legacy items (item.taskId = specific task ID).
+    const completedTask = tasks.find(t => t.id === taskId);
+    let updatedSchedule = user.schedule;
+    if (completedTask && user.schedule?.length) {
+      updatedSchedule = user.schedule.map((item: ScheduledTask) => {
+        if (item.isCompleted) return item;
+        const itemCategory = item.category || tasks.find((t: PTETask) => t.id === item.taskId)?.category;
+        if (itemCategory === completedTask.category) {
+          return { ...item, isCompleted: true };
+        }
+        return item;
+      });
+    }
+
     try {
       // Save detailed attempt to a separate collection for large responses
       if (response) {
@@ -1489,7 +1573,8 @@ function AppContent() {
       await updateDoc(userRef, { 
         taskScores: newTaskScores,
         completedTasks: Array.from(new Set([...(user.completedTasks || []), taskId])),
-        completedTasksDetailed: [...(user.completedTasksDetailed || []), newTaskCompletion]
+        completedTasksDetailed: [...(user.completedTasksDetailed || []), newTaskCompletion],
+        ...(updatedSchedule !== user.schedule && { schedule: updatedSchedule })
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
@@ -4333,7 +4418,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                 🔥 <span className="text-app-primary">Limited-Time Offer</span> — Save up to 50% on Premium
               </p>
               <p className="text-[10px] md:text-xs text-app-text-muted/70 leading-snug mt-0.5">
-                Unlock all tasks, mock tests, AI feedback & more. Use code <span className="font-bold text-app-primary">NINJA-PTE-SPECIAL-50</span> at checkout.
+                Unlock all tasks, mock tests, AI feedback & more. Tap to claim your exclusive discount.
               </p>
             </div>
           </div>

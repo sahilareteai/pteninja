@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
@@ -36,6 +36,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
+  // Tracks when a fresh guest write is in-flight so stale Firestore snapshots
+  // (from a previous anonymous session) don't trigger the subscription modal.
+  const pendingGuestWriteRef = useRef(false);
 
   useEffect(() => {
     const initCurrency = async () => {
@@ -293,6 +296,10 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       localStorage.setItem('pte_session_id', newSessionId);
       
+      // Block stale Firestore snapshots from showing the payment modal while we
+      // write the fresh guest document. The ref is synchronous so it is set
+      // before signInAnonymously triggers onAuthStateChanged / onSnapshot.
+      pendingGuestWriteRef.current = true;
       const cred = await signInAnonymously(auth);
       const firebaseUser = cred.user;
       
@@ -319,11 +326,15 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       };
 
       await setDoc(userRef, newUser);
+      // Fresh data is written – clear the guard before updating React state so
+      // the access check runs against the correct, unexpired guest record.
+      pendingGuestWriteRef.current = false;
       setUser(newUser);
       
       setShowAuthModal(false);
       setIsAuthenticating(false);
     } catch (error: any) {
+      pendingGuestWriteRef.current = false;
       console.error("Guest login failed:", error);
       setIsAuthenticating(false);
       setShowGuestModal(true); // Re-open modal if it fails so user can see error
@@ -391,7 +402,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
   }, [user?.uid, user?.activityLog?.length]);
 
   useEffect(() => {
-    if (isAccessRestricted && !loading) {
+    if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
       setShowSubscriptionModal(true);
     }
   }, [isAccessRestricted, loading]);
