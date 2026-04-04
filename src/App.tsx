@@ -1016,8 +1016,8 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
                         {!isToday && <p className="text-[10px] text-app-text-muted/50 font-bold uppercase">{dateStr}</p>}
                         <p className="text-[10px] text-app-primary font-bold uppercase">{item.duration}m</p>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h4 className={cn("font-bold text-app-text", item.isCompleted && "line-through")}>{displayCategory}</h4>
                           {item.isCompleted ? (
                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-app-primary/10 text-app-primary rounded text-[8px] font-black uppercase tracking-widest">
