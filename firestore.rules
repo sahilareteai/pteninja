@@ -38,11 +38,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin') ||
-          request.auth.token.email == "sg.analyst93@gmail.com"
-        );
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin';
     }
     function isValidTask(data) {
       return data.id is string &&
@@ -82,12 +79,12 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow read: if true; // Tasks are publicly readable
+      allow read: if isAuthenticated(); // Authenticated users only
       allow write: if isAdmin(); // Only admins can modify tasks
     }
 
     match /promoCodes/{codeId} {
-      allow read: if true; // Promo codes are publicly readable for validation
+      allow read: if isAuthenticated(); // Authenticated users only
       allow write: if isAdmin(); // Only admins can modify promo codes
     }
 
