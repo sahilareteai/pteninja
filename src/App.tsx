@@ -4418,7 +4418,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                 🔥 <span className="text-app-primary">Limited-Time Offer</span> — Save up to 50% on Premium
               </p>
               <p className="text-[10px] md:text-xs text-app-text-muted/70 leading-snug mt-0.5">
-                Unlock all tasks, mock tests, AI feedback & more. Use code <span className="font-bold text-app-primary">NINJA-PTE-SPECIAL-50</span> at checkout.
+                Unlock all tasks, mock tests, AI feedback & more. Tap to claim your exclusive discount.
               </p>
             </div>
           </div>
