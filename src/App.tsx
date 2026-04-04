@@ -1604,8 +1604,9 @@ function AppContent() {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
-    setActiveMockTest(null);
-    setActiveTab('mock-tests');
+    // Do NOT close the session here. The scorecard inside MockTestSession is still
+    // visible. The user will dismiss it via the "Back to Dojo" button, which calls
+    // onClose() and sets activeMockTest to null.
   };
 
   if (loading) {
@@ -1956,7 +1957,7 @@ function AppContent() {
             test={activeMockTest}
             allTasks={tasks}
             onFinish={handleMockTestFinish}
-            onClose={() => setActiveMockTest(null)}
+            onClose={() => { setActiveMockTest(null); setActiveTab('mock-tests'); }}
           />
         )}
         {selectedTask && (
@@ -4042,10 +4043,16 @@ function MockTestSession({
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [sectionTimeLeft, setSectionTimeLeft] = useState(test.sections[0].duration * 60);
   const [taskResponses, setTaskResponses] = useState<Record<string, string>>({});
+  // Ref mirrors taskResponses so handleCompleteTest always reads the latest value,
+  // avoiding a stale-closure bug when the last task's setState hasn't flushed yet.
+  const taskResponsesRef = useRef<Record<string, string>>({});
   const [taskScores, setTaskScores] = useState<Record<string, number>>({});
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  // Ref flag set by the section timer so we can call handleNextSection outside the
+  // setSectionTimeLeft updater (side-effects in state updaters are not safe).
+  const timerExpiredRef = useRef(false);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
@@ -4064,19 +4071,33 @@ function MockTestSession({
   };
 
   useEffect(() => {
-    if (phase === 'testing') {
-      const timer = setInterval(() => {
-        setSectionTimeLeft(prev => {
-          if (prev <= 1) {
-            handleNextSection();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
+    if (phase !== 'testing') return;
+    timerExpiredRef.current = false;
+    const timer = setInterval(() => {
+      setSectionTimeLeft(prev => {
+        if (prev <= 1) {
+          // Mark expiry via ref so the effect below can advance the section safely.
+          timerExpiredRef.current = true;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
   }, [currentSectionIndex, phase]);
+
+  // Advance to the next section when the timer hits zero.
+  // Keeping this in a separate effect avoids calling handleNextSection() inside the
+  // setSectionTimeLeft updater, which is not safe for side-effects.
+  useEffect(() => {
+    if (timerExpiredRef.current && sectionTimeLeft === 0 && phase === 'testing') {
+      timerExpiredRef.current = false;
+      handleNextSection();
+    }
+  // handleNextSection reads currentSectionIndex from closure; it is stable within
+  // a given section so omitting it here is intentional.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionTimeLeft, phase]);
 
   const handleNextSection = () => {
     if (currentSectionIndex < test.sections.length - 1) {
@@ -4095,11 +4116,15 @@ function MockTestSession({
       return;
     }
 
-    // Store response for later analysis if it's a mock test
-    // If score is passed as a string (from my previous edit), handle it
-    const actualResponse = typeof score === 'string' ? score : response;
-    setTaskResponses(prev => ({ ...prev, [currentTaskId]: String(actualResponse || '') }));
-    
+    // score may actually be a response string when TaskModal passes the raw text/audio
+    // (it uses `onFinish(response as any)` for mock-test objective tasks).
+    const actualResponse = typeof score === 'string' ? score : (response ?? '');
+
+    // Update the ref first (synchronous) so handleCompleteTest always has the very
+    // latest responses even when it is invoked before the setState flush completes.
+    taskResponsesRef.current = { ...taskResponsesRef.current, [currentTaskId]: actualResponse };
+    setTaskResponses(taskResponsesRef.current);
+
     if (currentTaskIndex < currentSection.taskIds.length - 1) {
       setCurrentTaskIndex(prev => prev + 1);
     } else {
@@ -4132,7 +4157,9 @@ function MockTestSession({
     for (let i = 0; i < totalTasks; i++) {
       const taskId = allTaskIds[i];
       const task = allTasks.find(t => t.id === taskId)!;
-      const response = taskResponses[taskId];
+      // Use the ref instead of the stale `taskResponses` state value so the last
+      // submitted task response is always included.
+      const response = taskResponsesRef.current[taskId];
       
       setCalculationProgress(Math.round((i / totalTasks) * 100));
 
@@ -4204,13 +4231,17 @@ function MockTestSession({
       completedAt: new Date().toISOString(),
       sectionScores,
       overallScore,
-      taskResponses,
+      taskResponses: taskResponsesRef.current,
       ...(isPartial && { partial: true })
     };
 
-    setFinalResult(result);
     releaseGlobalMicStream();
+    // Save the result to the database (fire-and-forget; toast fires from onFinish).
     onFinish(result);
+    // Show the scorecard. This must happen AFTER onFinish is called so that the
+    // parent's handleMockTestFinish no longer closes the session on its own — the
+    // user dismisses the scorecard themselves via the "Back to Dojo" button.
+    setFinalResult(result);
   };
 
   if (finalResult) {
@@ -6829,9 +6860,11 @@ function TaskModal({
               </button>
             )}
             <div className="w-px h-6 bg-app-primary/20 mx-2" />
-            <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
-              <X size={20} />
-            </button>
+            {!isMockTest && (
+              <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
+                <X size={20} />
+              </button>
+            )}
           </div>
         </div>
 
