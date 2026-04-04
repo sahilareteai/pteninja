@@ -2300,6 +2300,126 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
         </div>
       </section>
 
+      {/* Platform Preview Section */}
+      <section className="relative z-10 py-24 px-6 bg-app-bg">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-14"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Platform Preview</p>
+            <h2 className="text-4xl md:text-5xl font-black text-app-text tracking-tight mb-4">
+              Everything You Need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">Master PTE</span>
+            </h2>
+            <p className="text-base text-app-text-muted max-w-2xl mx-auto leading-relaxed">
+              AI-powered practice tools, vocabulary mastery, full mock tests, and real-time support — all in one place.
+            </p>
+          </motion.div>
+
+          {/* Bento grid collage */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+            className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5"
+            style={{ gridTemplateRows: 'auto auto' }}
+          >
+            {/* Smart Dashboard — tall, spans 2 rows on md */}
+            <div className="col-span-2 md:col-span-1 md:row-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[260px] md:min-h-[420px]">
+              <img
+                src="https://github.com/user-attachments/assets/11c8bf33-08d1-4f67-8f8e-6a1128399abc"
+                alt="Smart Dashboard"
+                referrerPolicy="no-referrer"
+                loading="eager"
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-5">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Smart Dashboard</p>
+                <p className="text-white font-bold text-base leading-tight">Track your progress, study streak & plan</p>
+              </div>
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/5 rounded-2xl group-hover:ring-app-primary/20 transition-all duration-500 pointer-events-none" />
+            </div>
+
+            {/* Vocabulary Builder */}
+            <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
+              <img
+                src="https://github.com/user-attachments/assets/4a61c249-710b-4abc-a976-ec41335c4415"
+                alt="Vocabulary Builder"
+                referrerPolicy="no-referrer"
+                loading="eager"
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Vocabulary Builder</p>
+                <p className="text-white font-bold text-sm leading-tight">2000+ academic words with audio</p>
+              </div>
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/5 rounded-2xl group-hover:ring-app-primary/20 transition-all duration-500 pointer-events-none" />
+            </div>
+
+            {/* Premium Plans */}
+            <div className="relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
+              <img
+                src="https://github.com/user-attachments/assets/fcba71a4-7556-4dc3-a49e-93f50fdd3f8c"
+                alt="Premium Plans"
+                referrerPolicy="no-referrer"
+                loading="eager"
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Premium Plans</p>
+                <p className="text-white font-bold text-sm leading-tight">Affordable pricing, exceptional results</p>
+              </div>
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/5 rounded-2xl group-hover:ring-app-primary/20 transition-all duration-500 pointer-events-none" />
+            </div>
+
+            {/* Help & Support — spans full width on mobile, 2 cols on md */}
+            <div className="col-span-2 md:col-span-2 relative rounded-2xl overflow-hidden group border border-app-primary/10 hover:border-app-primary/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-app-primary/15 min-h-[200px]">
+              <img
+                src="https://github.com/user-attachments/assets/fe4b889e-bf3f-4bc6-9120-7450a4695a5b"
+                alt="Help & Support"
+                referrerPolicy="no-referrer"
+                loading="eager"
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-5">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-1">Help & Support</p>
+                <p className="text-white font-bold text-base leading-tight">AI-powered support bot, always ready to help</p>
+              </div>
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/5 rounded-2xl group-hover:ring-app-primary/20 transition-all duration-500 pointer-events-none" />
+            </div>
+          </motion.div>
+
+          {/* CTA below grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12"
+          >
+            <button
+              onClick={onLogin}
+              className="group flex items-center gap-3 px-10 py-4 bg-app-primary text-app-bg font-bold text-base rounded-2xl hover:bg-app-accent transition-all shadow-lg shadow-app-primary/30"
+            >
+              Explore the Platform
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Stats Section */}
       <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
@@ -4792,6 +4912,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             <img
               src="https://github.com/user-attachments/assets/11c8bf33-08d1-4f67-8f8e-6a1128399abc"
               alt="Smart Dashboard"
+              referrerPolicy="no-referrer"
+              loading="eager"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/20 to-transparent" />
@@ -4806,6 +4928,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             <img
               src="https://github.com/user-attachments/assets/4a61c249-710b-4abc-a976-ec41335c4415"
               alt="Vocabulary Builder"
+              referrerPolicy="no-referrer"
+              loading="eager"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
@@ -4820,6 +4944,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             <img
               src="https://github.com/user-attachments/assets/fcba71a4-7556-4dc3-a49e-93f50fdd3f8c"
               alt="Premium Plans"
+              referrerPolicy="no-referrer"
+              loading="eager"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
@@ -4834,6 +4960,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             <img
               src="https://github.com/user-attachments/assets/fe4b889e-bf3f-4bc6-9120-7450a4695a5b"
               alt="Help & Support"
+              referrerPolicy="no-referrer"
+              loading="eager"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-app-bg/90 via-app-bg/10 to-transparent" />
