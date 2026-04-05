@@ -1821,6 +1821,7 @@ function AppContent() {
                 user={user}
                 allTasks={tasks}
                 onStartTask={(task) => {
+                  if (task.hasAudio) preFetchAudio(task);
                   setSelectedTask(task);
                   setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
@@ -1857,6 +1858,7 @@ function AppContent() {
                 allTasks={tasks}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
+                  if (task.hasAudio) preFetchAudio(task);
                   setSelectedTask(task);
                   setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
@@ -1883,6 +1885,7 @@ function AppContent() {
                 allTasks={tasks}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
+                  if (task.hasAudio) preFetchAudio(task);
                   setSelectedTask(task);
                   setCurrentCategoryTasks(tasks.filter(t => t.section === task.section));
                   setActiveTab(task.section);
@@ -2010,11 +2013,15 @@ function AppContent() {
             onFinish={(score) => handleTaskFinish(selectedTask.id, score)}
             onPrev={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) > 0 ? () => {
               const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
-              setSelectedTask(currentCategoryTasks[idx - 1]);
+              const prevTask = currentCategoryTasks[idx - 1];
+              if (prevTask?.hasAudio) preFetchAudio(prevTask);
+              setSelectedTask(prevTask);
             } : undefined}
             onNext={currentCategoryTasks.length > 1 && currentCategoryTasks.findIndex(t => t.id === selectedTask.id) < currentCategoryTasks.length - 1 ? () => {
               const idx = currentCategoryTasks.findIndex(t => t.id === selectedTask.id);
-              setSelectedTask(currentCategoryTasks[idx + 1]);
+              const nextTask = currentCategoryTasks[idx + 1];
+              if (nextTask?.hasAudio) preFetchAudio(nextTask);
+              setSelectedTask(nextTask);
             } : undefined}
           />
         )}
@@ -7356,8 +7363,8 @@ function TaskModal({
           {task.passage ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               {/* Left Column: Passage */}
-              <div className="bg-app-bg p-8 rounded-2xl border border-app-primary/20 h-full overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-app-primary/20 scrollbar-track-transparent">
-                <div className="text-app-text/90 leading-relaxed text-base font-normal">
+              <div className="bg-app-bg p-4 sm:p-6 md:p-8 rounded-2xl border border-app-primary/20 h-full overflow-y-auto max-h-[600px] scrollbar-thin scrollbar-thumb-app-primary/20 scrollbar-track-transparent">
+                <div className="text-app-text/90 leading-relaxed text-sm sm:text-base font-normal">
                   {task.passage}
                 </div>
               </div>
@@ -7365,8 +7372,8 @@ function TaskModal({
               {/* Right Column: Question and Options */}
               <div className="space-y-6">
                 {task.prompt && (
-                  <div className="bg-app-surface/30 p-6 rounded-2xl border border-app-primary/20">
-                    <p className="text-app-accent font-bold text-xl leading-relaxed">
+                  <div className="bg-app-surface/30 p-4 sm:p-6 rounded-2xl border border-app-primary/20">
+                    <p className="text-app-accent font-bold text-sm sm:text-base md:text-xl leading-relaxed">
                       {task.prompt}
                     </p>
                   </div>
@@ -7432,7 +7439,7 @@ function TaskModal({
                   {task.category !== 'Retell Lecture' && (
                   <p className={cn(
                     "text-app-text leading-relaxed font-medium",
-                    task.category === 'Read Aloud' ? "text-2xl" : "text-lg",
+                    task.category === 'Read Aloud' ? "text-base sm:text-lg md:text-xl lg:text-2xl" : "text-sm sm:text-base md:text-lg",
                     task.category === 'Answer Short Question' && "italic font-bold"
                   )}>
                     {/* Hide transcript for listening tasks, show prompt (instruction/question) */}
