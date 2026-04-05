@@ -7290,7 +7290,7 @@ function TaskModal({
                         ) : phase === 'audio' ? (
                           isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
                         ) : phase === 'recording' ? (
-                          'Recording...'
+                          recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
                       </span>
                     </div>
@@ -8259,8 +8259,8 @@ function TaskModal({
           </AnimatePresence>
         </div>
 
-        {/* Mock-test sticky footer: always-visible Next + Save & Exit buttons */}
-        {isMockTest && (phase === 'prep' || phase === 'audio' || phase === 'recording' || recordingStopped) && (
+        {/* Mock-test sticky footer: always-visible Next + Save & Exit buttons (speaking tasks only) */}
+        {isMockTest && task.section === 'speaking' && (phase === 'prep' || phase === 'audio' || phase === 'recording' || recordingStopped) && (
           <div className="border-t border-app-primary/10 px-6 py-4 flex items-center justify-between gap-3 bg-app-surface shrink-0">
             {onMockExit && (
               <button
