@@ -1085,7 +1085,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     ];
 
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents,
       config: { systemInstruction },
     });
@@ -1579,7 +1579,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
   try {
     const safeText = sanitizePromptValue(text.trim(), 500);
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-preview-tts",
+      model: "gemini-2.5-flash-lite-preview-tts",
       contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
@@ -1630,7 +1630,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
       config: {
         responseMimeType: "application/json",
@@ -1685,7 +1685,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
       config: {
         responseMimeType: "application/json",
