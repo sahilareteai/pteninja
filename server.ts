@@ -976,6 +976,148 @@ app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
   }
 });
 
+// ─── Ensure Admin Role ────────────────────────────────────────────────────────
+// Called on sign-in: if the user's email is in ADMIN_EMAILS, persist role:'admin'
+// in Firestore using the Admin SDK so it is never overwritten by client-side writes.
+app.post("/api/ensure-admin-role", deleteUserLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+    const email = decodedToken.email ?? "";
+
+    if (!ADMIN_EMAILS.includes(email)) {
+      return res.json({ isAdmin: false });
+    }
+
+    await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(decodedToken.uid)
+      .set({ role: "admin" }, { merge: true });
+
+    res.json({ isAdmin: true });
+  } catch (error) {
+    console.error("Ensure admin role error:", error);
+    res.status(400).json({ error: "Failed to ensure admin role" });
+  }
+});
+
+// ─── Set User Role ────────────────────────────────────────────────────────────
+// Allows an admin to set the role of any user to 'admin' or 'user'.
+app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const { uid, role } = req.body;
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+  if (!uid || typeof uid !== "string") {
+    return res.status(400).json({ error: "uid is required" });
+  }
+  if (role !== "admin" && role !== "user") {
+    return res.status(400).json({ error: "role must be 'admin' or 'user'" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+
+    // Resolve admin status
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch (lookupErr) {
+        console.warn("Could not look up caller role:", lookupErr);
+      }
+    }
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    // Prevent downgrading accounts protected by ADMIN_EMAILS
+    if (role !== "admin") {
+      try {
+        const targetAuth = await getAdminAuth(adminInstance).getUser(uid);
+        if (ADMIN_EMAILS.includes(targetAuth.email ?? "")) {
+          return res.status(403).json({ error: "Cannot remove admin role from a protected admin account" });
+        }
+      } catch {
+        // If we can't look up the target user's email, proceed anyway
+      }
+    }
+
+    await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(uid)
+      .set({ role }, { merge: true });
+
+    res.json({ success: true, role });
+  } catch (error) {
+    console.error("Set user role error:", error);
+    res.status(400).json({ error: "Failed to set user role" });
+  }
+});
+
+// ─── Record Visit ─────────────────────────────────────────────────────────────
+// Called on app load to increment the visitor counter in Firestore.
+// Rate-limited to prevent abuse. No auth required.
+const visitLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip ?? "unknown",
+  message: { error: "Too many requests." },
+});
+
+app.post("/api/record-visit", visitLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(200).json({ ok: true }); // Silently skip if admin not configured
+  }
+
+  try {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const analyticsRef = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("analytics")
+      .doc("visitors");
+
+    const { FieldValue } = await import("firebase-admin/firestore");
+    await analyticsRef.set(
+      {
+        totalVisits: FieldValue.increment(1),
+        [`dailyVisits.${today}`]: FieldValue.increment(1),
+      },
+      { merge: true }
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Record visit error:", error);
+    res.status(200).json({ ok: true }); // Don't surface analytics errors to users
+  }
+});
+
 // ─── Support Bot: PTE-restricted Gemini chat ─────────────────────────────────
 const SUPPORT_BOT_SYSTEM_PROMPT = `You are a helpful customer support assistant for PTE Ninja, an AI-powered PTE Academic exam preparation platform.
 
