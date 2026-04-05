@@ -228,6 +228,189 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
       });
       break;
     }
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as Stripe.Invoice;
+      // Only send for subscription invoices with a positive amount charged
+      const isSubscriptionInvoice = !!(invoice.parent?.subscription_details?.subscription);
+      if (!isSubscriptionInvoice || (invoice.amount_paid ?? 0) <= 0) break;
+
+      const recipientEmail = invoice.customer_email;
+      if (!recipientEmail || !isValidEmail(recipientEmail)) break;
+
+      const transport = createMailTransport();
+      if (!transport) {
+        console.warn("No SMTP config — invoice email not sent for invoice:", invoice.id);
+        break;
+      }
+
+      const invoiceAppUrl = process.env.APP_URL ?? "https://pteninja.com";
+      const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+
+      // Format amount: Stripe stores amounts in the smallest currency unit (cents)
+      const currencyUpper = (invoice.currency ?? "aud").toUpperCase();
+      const amountFormatted = ((invoice.amount_paid ?? 0) / 100).toFixed(2);
+      const amountDisplay = `${currencyUpper} $${amountFormatted}`;
+
+      // Plan description from the first line item
+      const planDescription = invoice.lines?.data?.[0]?.description ?? "PTE Ninja Subscription";
+      const safePlanDescription = escapeHtml(planDescription);
+
+      // Billing period
+      const periodStart = invoice.lines?.data?.[0]?.period?.start
+        ? new Date((invoice.lines.data[0].period.start as number) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+        : null;
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end
+        ? new Date((invoice.lines.data[0].period.end as number) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+        : null;
+      const periodText = periodStart && periodEnd ? `${periodStart} – ${periodEnd}` : null;
+
+      const invoiceNumber = invoice.number ? escapeHtml(invoice.number) : null;
+      const invoiceUrl = invoice.hosted_invoice_url ? escapeHtml(invoice.hosted_invoice_url) : null;
+      const safeEmail = escapeHtml(recipientEmail);
+      const paymentDate = new Date((invoice.created ?? Date.now() / 1000) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+
+      const subject = `Payment Confirmed — ${amountDisplay} for PTE Ninja`;
+
+      const textLines = [
+        `Hi,`,
+        ``,
+        `Your payment of ${amountDisplay} for PTE Ninja has been received. Thank you!`,
+        ``,
+        `Plan: ${planDescription}`,
+        `Amount: ${amountDisplay}`,
+        `Date: ${paymentDate}`,
+        ...(periodText ? [`Billing period: ${periodText}`] : []),
+        ...(invoiceNumber ? [`Invoice #: ${invoiceNumber}`] : []),
+        ...(invoiceUrl ? [`View invoice: ${invoice.hosted_invoice_url}`] : []),
+        ``,
+        `Access your account: ${invoiceAppUrl}`,
+        ``,
+        `Happy studying,`,
+        `The PTE Ninja Team`,
+      ];
+      const textBody = textLines.join("\n");
+
+      const htmlBody = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(108,99,255,0.10);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:40px 40px 32px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 20px;margin-bottom:20px;">
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
+                <span style="font-size:22px;color:rgba(255,255,255,0.7);margin-left:2px;">⚡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;line-height:1.3;">Payment Confirmed! ✅</h1>
+              <p style="margin:12px 0 0;color:rgba(255,255,255,0.85);font-size:16px;line-height:1.6;">Thank you for your payment. Your subscription is active.</p>
+            </td>
+          </tr>
+
+          <!-- Invoice Summary -->
+          <tr>
+            <td style="padding:36px 40px 28px;">
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">Hi,</p>
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
+                We've successfully received your payment. Here's a summary of your purchase:
+              </p>
+
+              <!-- Details Table -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:28px;">
+                <tr style="background:#f9fafb;">
+                  <td style="padding:14px 20px;font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e5e7eb;" colspan="2">Invoice Details</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #f3f4f6;width:40%;">Plan</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;border-bottom:1px solid #f3f4f6;">${safePlanDescription}</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #f3f4f6;">Amount Paid</td>
+                  <td style="padding:14px 20px;font-size:16px;color:#6c63ff;font-weight:800;border-bottom:1px solid #f3f4f6;">${amountDisplay}</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;${periodText || invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">Payment Date</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;${periodText || invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">${paymentDate}</td>
+                </tr>
+                ${periodText ? `<tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;${invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">Billing Period</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;${invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">${periodText}</td>
+                </tr>` : ""}
+                ${invoiceNumber ? `<tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;">Invoice #</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;">${invoiceNumber}</td>
+                </tr>` : ""}
+              </table>
+
+              ${invoiceUrl ? `<!-- View Invoice CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center">
+                    <a href="${invoiceUrl}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:13px 40px;border-radius:50px;letter-spacing:0.5px;">
+                      View Invoice &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>` : ""}
+
+              <!-- Access Account -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(invoiceAppUrl)}" style="display:inline-block;border:2px solid #6c63ff;color:#6c63ff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 40px;border-radius:50px;">
+                      Go to My Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:14px;color:#6b7280;text-align:center;line-height:1.6;">
+                Have questions? Reply to this email or visit our
+                <a href="${escapeHtml(invoiceAppUrl)}" style="color:#6c63ff;text-decoration:none;">support centre</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">
+                This receipt was sent to <a href="mailto:${safeEmail}" style="color:#9ca3af;">${safeEmail}</a>.
+              </p>
+              <p style="margin:0;font-size:12px;color:#d1d5db;">
+                &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+      try {
+        await transport.sendMail({
+          from: `PTE Ninja <${fromAddress}>`,
+          to: recipientEmail,
+          subject,
+          text: textBody,
+          html: htmlBody,
+        });
+      } catch (emailErr) {
+        console.error("Failed to send invoice email for invoice:", invoice.id, emailErr);
+      }
+      break;
+    }
     default:
       break;
   }
@@ -591,8 +774,9 @@ app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
   }
 
   // Validate the returnUrl against the allowlist to prevent open-redirect abuse.
+  const portalFallbackUrl = process.env.APP_URL ?? "https://pteninja.com";
   const resolvedReturnUrl = (() => {
-    if (!returnUrl) return "https://pteninja.vercel.app";
+    if (!returnUrl) return portalFallbackUrl;
     try {
       const parsed = new URL(returnUrl as string);
       const allowedHostnames = ALLOWED_ORIGINS.map((o) => new URL(o).hostname);
@@ -602,7 +786,7 @@ app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
     } catch {
       // fall through to default
     }
-    return "https://pteninja.vercel.app";
+    return portalFallbackUrl;
   })();
 
   try {
