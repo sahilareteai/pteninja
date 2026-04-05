@@ -1334,7 +1334,10 @@ function AppContent() {
         setIsSyncingPortal(false);
       }
     })();
-  }, [user]);
+  // Only re-run when the user's identity or Stripe IDs change, not on every
+  // onSnapshot update to the user document.  Broad [user] dep would re-execute
+  // this effect on every real-time Firestore change, adding unnecessary overhead.
+  }, [user?.uid, user?.stripeSubscriptionId, user?.stripeCustomerId]);
 
   useEffect(() => {
     const interval = setInterval(() => {
