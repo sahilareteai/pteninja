@@ -1,6 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
+// ─── Firebase Admin mocks (hoisted so vi.mock can use them) ───────────────────
+const mockVerifyIdToken  = vi.hoisted(() => vi.fn());
+const mockFirestoreDocGet = vi.hoisted(() => vi.fn());
+const mockGetApps        = vi.hoisted(() => vi.fn());
+const mockInitApp        = vi.hoisted(() => vi.fn());
+
+vi.mock("firebase-admin/auth", () => ({
+  getAuth: () => ({ verifyIdToken: mockVerifyIdToken }),
+}));
+
+vi.mock("firebase-admin/firestore", () => ({
+  getFirestore: () => ({
+    collection: () => ({
+      doc: () => ({ get: mockFirestoreDocGet }),
+      where: () => ({ limit: () => ({ get: mockFirestoreDocGet }) }),
+    }),
+  }),
+}));
+
+vi.mock("firebase-admin/app", () => ({
+  cert: vi.fn().mockReturnValue({}),
+  getApps: mockGetApps,
+  initializeApp: mockInitApp,
+}));
+
 // Use vi.hoisted so the mock functions are available when vi.mock is hoisted
 const mockPaymentIntentsCreate   = vi.hoisted(() => vi.fn());
 const mockPaymentIntentsRetrieve = vi.hoisted(() => vi.fn());
@@ -31,6 +56,20 @@ vi.mock("stripe", () => {
 // Import app after mocks are set up
 const { app } = await import("./server.ts");
 
+// ─── Global Firebase auth setup ───────────────────────────────────────────────
+// All tests run with a valid auth token. The Firestore user doc intentionally
+// has no stripeSubscriptionId/stripeCustomerId set so the ownership check is
+// skipped (first-use / new-user scenario). Override per-test as needed.
+beforeEach(() => {
+  vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", JSON.stringify({ project_id: "test" }));
+  mockGetApps.mockReturnValue([]);
+  mockInitApp.mockReturnValue({});
+  mockVerifyIdToken.mockResolvedValue({ uid: "test_user", email: "user@example.com" });
+  mockFirestoreDocGet.mockResolvedValue({ exists: true, data: () => ({}) });
+});
+
+const AUTH_HEADER = "Bearer fake_token";
+
 // ─── Legacy PaymentIntent endpoint ────────────────────────────────────────────
 describe("POST /api/create-payment-intent", () => {
   beforeEach(() => {
@@ -46,6 +85,7 @@ describe("POST /api/create-payment-intent", () => {
 
     const res = await request(app)
       .post("/api/create-payment-intent")
+      .set("Authorization", AUTH_HEADER)
       .send({ amount: 1000, currency: "aud", receipt_email: "user@example.com" });
 
     expect(res.status).toBe(200);
@@ -63,6 +103,7 @@ describe("POST /api/create-payment-intent", () => {
 
     const res = await request(app)
       .post("/api/create-payment-intent")
+      .set("Authorization", AUTH_HEADER)
       .send({ amount: 500, currency: "usd" });
 
     expect(res.status).toBe(200);
@@ -73,6 +114,7 @@ describe("POST /api/create-payment-intent", () => {
   it("returns 400 for missing amount", async () => {
     const res = await request(app)
       .post("/api/create-payment-intent")
+      .set("Authorization", AUTH_HEADER)
       .send({ currency: "aud" });
 
     expect(res.status).toBe(400);
@@ -82,6 +124,7 @@ describe("POST /api/create-payment-intent", () => {
   it("returns 400 for zero amount", async () => {
     const res = await request(app)
       .post("/api/create-payment-intent")
+      .set("Authorization", AUTH_HEADER)
       .send({ amount: 0 });
 
     expect(res.status).toBe(400);
@@ -93,6 +136,7 @@ describe("POST /api/create-payment-intent", () => {
 
     const res = await request(app)
       .post("/api/create-payment-intent")
+      .set("Authorization", AUTH_HEADER)
       .send({ amount: 1000, currency: "aud" });
 
     expect(res.status).toBe(400);
@@ -137,7 +181,7 @@ describe("POST /api/create-subscription", () => {
       },
     });
 
-    const res = await request(app).post("/api/create-subscription").send(validBody);
+    const res = await request(app).post("/api/create-subscription").set("Authorization", AUTH_HEADER).send(validBody);
 
     expect(res.status).toBe(200);
     expect(res.body.clientSecret).toBe("pi_secret_123");
@@ -159,6 +203,7 @@ describe("POST /api/create-subscription", () => {
 
     const res = await request(app)
       .post("/api/create-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ ...validBody, existingCustomerId: "cus_existing" });
 
     expect(res.status).toBe(200);
@@ -181,7 +226,7 @@ describe("POST /api/create-subscription", () => {
     });
     mockPaymentIntentsRetrieve.mockResolvedValue({ client_secret: "pi_fetched_secret" });
 
-    const res = await request(app).post("/api/create-subscription").send(validBody);
+    const res = await request(app).post("/api/create-subscription").set("Authorization", AUTH_HEADER).send(validBody);
 
     expect(res.status).toBe(200);
     expect(res.body.clientSecret).toBe("pi_fetched_secret");
@@ -202,11 +247,11 @@ describe("POST /api/create-subscription", () => {
       payment_intent: { client_secret: "pi_from_invoice" },
     });
 
-    const res = await request(app).post("/api/create-subscription").send(validBody);
+    const res = await request(app).post("/api/create-subscription").set("Authorization", AUTH_HEADER).send(validBody);
 
     expect(res.status).toBe(200);
     expect(res.body.clientSecret).toBe("pi_from_invoice");
-    expect(mockInvoicesRetrieve).toHaveBeenCalledWith("in_string_id", expect.objectContaining({ expand: ["payment_intent"] }));
+    expect(mockInvoicesRetrieve).toHaveBeenCalledWith("in_string_id", expect.objectContaining({ expand: expect.arrayContaining(["payment_intent"]) }));
     expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
   });
 
@@ -223,7 +268,7 @@ describe("POST /api/create-subscription", () => {
     });
     mockPaymentIntentsRetrieve.mockResolvedValue({ client_secret: "pi_double_secret" });
 
-    const res = await request(app).post("/api/create-subscription").send(validBody);
+    const res = await request(app).post("/api/create-subscription").set("Authorization", AUTH_HEADER).send(validBody);
 
     expect(res.status).toBe(200);
     expect(res.body.clientSecret).toBe("pi_double_secret");
@@ -247,6 +292,7 @@ describe("POST /api/create-subscription", () => {
 
     const res = await request(app)
       .post("/api/create-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ ...validBody, existingCustomerId: "cus_returning" });
 
     expect(res.status).toBe(200);
@@ -267,7 +313,7 @@ describe("POST /api/create-subscription", () => {
     });
     mockSubscriptionsCancel.mockResolvedValue({});
 
-    const res = await request(app).post("/api/create-subscription").send(validBody);
+    const res = await request(app).post("/api/create-subscription").set("Authorization", AUTH_HEADER).send(validBody);
 
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/could not be initialised/i);
@@ -277,6 +323,7 @@ describe("POST /api/create-subscription", () => {
   it("returns 400 for unknown planId", async () => {
     const res = await request(app)
       .post("/api/create-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ ...validBody, planId: "unknown_plan" });
 
     expect(res.status).toBe(400);
@@ -286,6 +333,7 @@ describe("POST /api/create-subscription", () => {
   it("returns 400 for missing amount", async () => {
     const res = await request(app)
       .post("/api/create-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ planId: "monthly", planName: "Monthly", currency: "aud" });
 
     expect(res.status).toBe(400);
@@ -312,6 +360,7 @@ describe("POST /api/cancel-subscription", () => {
   it("cancels by subscriptionId when provided", async () => {
     const res = await request(app)
       .post("/api/cancel-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ subscriptionId: "sub_cancel" });
 
     expect(res.status).toBe(200);
@@ -327,6 +376,7 @@ describe("POST /api/cancel-subscription", () => {
 
     const res = await request(app)
       .post("/api/cancel-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ customerId: "cus_lookup" });
 
     expect(res.status).toBe(200);
@@ -340,6 +390,7 @@ describe("POST /api/cancel-subscription", () => {
   it("returns 400 when neither subscriptionId nor customerId is provided", async () => {
     const res = await request(app)
       .post("/api/cancel-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({});
 
     expect(res.status).toBe(400);
@@ -351,6 +402,7 @@ describe("POST /api/cancel-subscription", () => {
 
     const res = await request(app)
       .post("/api/cancel-subscription")
+      .set("Authorization", AUTH_HEADER)
       .send({ customerId: "cus_empty" });
 
     expect(res.status).toBe(400);
