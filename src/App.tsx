@@ -3975,7 +3975,7 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-app-text font-display tracking-tight">Mock Tests</h2>
-          <p className="text-sm text-app-text-muted">Full-length PTE Academic practice tests</p>
+          <p className="text-sm text-app-text-muted">{MOCK_TESTS.length} Full-length PTE Academic practice tests</p>
         </div>
         <button 
           onClick={onBack}
@@ -4108,7 +4108,7 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
       {visibleCount < MOCK_TESTS.length && (
         <div className="flex justify-center pt-4">
           <button
-            onClick={() => setVisibleCount(c => Math.min(c + MOCK_TESTS_PAGE_SIZE, MOCK_TESTS.length))}
+            onClick={() => setVisibleCount(c => c + MOCK_TESTS_PAGE_SIZE)}
             className="px-8 py-3 bg-app-surface border border-app-primary/20 rounded-2xl font-bold text-sm uppercase tracking-widest text-app-primary hover:bg-app-primary/10 transition-all"
           >
             Load More ({MOCK_TESTS.length - visibleCount} remaining)
