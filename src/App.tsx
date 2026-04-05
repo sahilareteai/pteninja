@@ -1709,7 +1709,7 @@ function AppContent() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-app-accent/5 blur-[120px] rounded-full" />
       </div>
 
-      <div className="relative z-10 flex flex-col h-screen">
+      <div className="relative z-10 flex flex-col h-dvh">
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
           <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
@@ -7164,10 +7164,10 @@ function TaskModal({
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-app-surface w-full max-w-2xl lg:max-w-5xl rounded-3xl border border-app-primary/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto"
+        className="bg-app-surface w-full max-w-2xl lg:max-w-5xl rounded-3xl border border-app-primary/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] my-auto flex flex-col max-h-[calc(100dvh-2rem)]"
       >
         {/* Header */}
-        <div className="p-6 border-b border-app-primary/20 flex items-center justify-between bg-app-surface">
+        <div className="p-6 border-b border-app-primary/20 flex items-center justify-between bg-app-surface shrink-0">
           <div className="flex items-center gap-3 flex-1">
             <div className="p-2 bg-app-primary/10 rounded-lg">
               {task.section === 'speaking' ? <Mic className="text-app-primary" size={20} /> : 
@@ -7209,7 +7209,7 @@ function TaskModal({
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 md:p-8 space-y-6">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 md:p-8 space-y-6">
           {/* Status Bar */}
           {(phase === 'prep' || phase === 'recording' || phase === 'audio') && (
             <div className="flex items-center justify-between mb-4">
