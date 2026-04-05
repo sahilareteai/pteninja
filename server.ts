@@ -49,7 +49,12 @@ app.use((req, res, next) => {
 });
 
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
-const QUOTA_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per exhausted key
+// Per-key cooldown: 60 s is enough for a paid key to recover from a per-minute
+// rate-limit. Free keys (daily quota) will simply fail again and stay marked
+// exhausted until their daily window resets.
+const KEY_COOLDOWN_MS = 60 * 1000; // 1 minute per exhausted key
+// Alert-email deduplication window — kept longer to avoid inbox spam.
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 
 interface ServerKeyState {
   client: GoogleGenAI;
@@ -94,10 +99,11 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
       const isQuotaError =
         e.message?.includes("429") ||
         e.message?.includes("RESOURCE_EXHAUSTED") ||
+        e.status === 429 ||
         e.error?.code === 429;
 
       if (isQuotaError) {
-        keyState.exhaustedUntil = Date.now() + QUOTA_COOLDOWN_MS;
+        keyState.exhaustedUntil = Date.now() + KEY_COOLDOWN_MS;
         console.warn("[Gemini] Server key quota exceeded. Switching to next key...");
         continue;
       }
@@ -117,7 +123,7 @@ let serverAllKeysAlertUntil = 0;
 async function sendAllKeysExhaustedAlert() {
   const now = Date.now();
   if (now < serverAllKeysAlertUntil) return;
-  serverAllKeysAlertUntil = now + QUOTA_COOLDOWN_MS;
+  serverAllKeysAlertUntil = now + ALERT_COOLDOWN_MS;
 
   console.error("[Gemini] ALL API KEYS EXHAUSTED — sending alert email.");
 
@@ -1103,7 +1109,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
 
 // ─── Gemini Quota Alert (called by frontend when all client-side keys exhausted) ──
 const geminiQuotaAlertLimiter = rateLimit({
-  windowMs: QUOTA_COOLDOWN_MS,
+  windowMs: ALERT_COOLDOWN_MS,
   max: 1,
   standardHeaders: true,
   legacyHeaders: false,
