@@ -5,6 +5,7 @@ import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut, Loader2 } from 'lucide-react';
+import { getLocalDateStr } from '../lib/utils';
 import { Logo } from './Logo';
 
 interface SubscriptionContextType {
@@ -140,7 +141,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               accessType: isGuest ? 'guest' : 'user',
               subscriptionStatus: isGuest ? 'guest' : 'trial',
               trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-              activityLog: [now.toISOString().split('T')[0]],
+              activityLog: [getLocalDateStr(now)],
               completedTasks: [],
               completedTasksDetailed: [],
               taskScores: {},
@@ -315,7 +316,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
         createdAt,
         accessType: 'guest',
         subscriptionStatus: 'guest',
-        activityLog: [now.toISOString().split('T')[0]],
+        activityLog: [getLocalDateStr(now)],
         completedTasks: [],
         completedTasksDetailed: [],
         taskScores: {},
@@ -388,7 +389,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
   
   useEffect(() => {
     if (user && user.uid) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateStr();
       const activityLog = user.activityLog || [];
       
       if (!activityLog.includes(today)) {

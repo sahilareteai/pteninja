@@ -52,7 +52,7 @@ import {
   Save,
   RotateCcw
 } from 'lucide-react';
-import { cn } from './lib/utils';
+import { cn, getLocalDateStr } from './lib/utils';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { DatePicker } from './components/DatePicker';
@@ -103,42 +103,39 @@ const INITIAL_PROGRESS: UserProgress = {
 
 const calculateStreak = (activityLog: string[] = []) => {
   if (!activityLog || activityLog.length === 0) return 0;
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const logDates = activityLog.map(d => {
-    const date = new Date(d);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
-  }).sort((a, b) => b - a);
-  
-  const uniqueLogs = Array.from(new Set(logDates));
-  
-  let streak = 0;
-  let checkDate = today.getTime();
-  
-  // If today is not logged, check yesterday
-  if (uniqueLogs[0] !== checkDate) {
-    const yesterday = new Date(today);
+
+  const todayStr = getLocalDateStr();
+
+  // Deduplicate and sort descending so we walk from most-recent to oldest
+  const uniqueLogs = Array.from(new Set(activityLog)).sort((a, b) => b.localeCompare(a));
+
+  if (uniqueLogs.length === 0) return 0;
+
+  // The streak must start from today or yesterday; otherwise it is broken
+  let checkStr = todayStr;
+  if (uniqueLogs[0] !== checkStr) {
+    const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    if (uniqueLogs[0] !== yesterday.getTime()) {
+    const yesterdayStr = getLocalDateStr(yesterday);
+    if (uniqueLogs[0] !== yesterdayStr) {
       return 0;
     }
-    checkDate = yesterday.getTime();
+    checkStr = yesterdayStr;
   }
-  
-  for (const logTime of uniqueLogs) {
-    if (logTime === checkDate) {
+
+  let streak = 0;
+  for (const logStr of uniqueLogs) {
+    if (logStr === checkStr) {
       streak++;
-      const nextCheck = new Date(checkDate);
-      nextCheck.setDate(nextCheck.getDate() - 1);
-      checkDate = nextCheck.getTime();
-    } else if (logTime < checkDate) {
+      // Step back one calendar day using local date arithmetic
+      const checkDate = new Date(+checkStr.split('-')[0], +checkStr.split('-')[1] - 1, +checkStr.split('-')[2]);
+      checkDate.setDate(checkDate.getDate() - 1);
+      checkStr = getLocalDateStr(checkDate);
+    } else if (logStr < checkStr) {
       break;
     }
   }
-  
+
   return streak;
 };
 
@@ -532,7 +529,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
       taskId: resolvedTask.id,
       category: newSchedule.category,
       section: resolvedTask.section,
-      scheduledAt: new Date().toISOString().split('T')[0] + 'T' + newSchedule.time + ':00.000Z',
+      scheduledAt: getLocalDateStr() + 'T' + newSchedule.time + ':00.000Z',
       duration: newSchedule.duration,
       isCompleted: false,
       reminderSet: true
@@ -579,7 +576,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
       type: newGoal.type,
       target: newGoal.target,
       current: 0,
-      date: new Date().toISOString().split('T')[0]
+      date: getLocalDateStr()
     };
 
     try {
@@ -603,7 +600,7 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
   };
 
   const getTodayCompletions = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
     return (user.completedTasksDetailed || []).filter((c: TaskCompletion) => c.completedAt.startsWith(today));
   };
 
@@ -1239,14 +1236,24 @@ function AppContent() {
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
     if (!user) return 0;
-    const now = new Date();
+    // Compare whole calendar days in the user's local timezone so the count
+    // decrements at local midnight, not at the UTC boundary.
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+
     if (user.subscriptionStatus === 'trial' && user.trialEndsAt) {
-      return Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      const endsAt = new Date(user.trialEndsAt);
+      const endsMidnight = new Date(endsAt.getFullYear(), endsAt.getMonth(), endsAt.getDate());
+      return Math.max(0, Math.round((endsMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24)));
     }
+
     if (user.subscriptionStatus === 'guest') {
-      const expiresAt = new Date(user.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000;
-      return Math.max(0, Math.ceil((expiresAt - now.getTime()) / (1000 * 60 * 60 * 24)));
+      const createdAt = new Date(user.createdAt);
+      // Expiry = local calendar date of creation + 3 days (at local midnight)
+      const expiryMidnight = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate() + 3);
+      return Math.max(0, Math.round((expiryMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24)));
     }
+
     return 0;
   }, [user]);
 
@@ -2047,7 +2054,7 @@ function StreakCalendarModal({ activityLog, onClose }: { activityLog: string[], 
     return activityLog.includes(dateStr);
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateStr();
 
   return (
     <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 bg-app-bg/90 backdrop-blur-md overflow-y-auto">
@@ -4860,7 +4867,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
               <Trophy size={180} className="text-app-primary" />
             </div>
           </div>
-          <div className="relative z-10 max-w-[280px]">
+          <div className="relative z-10">
             {progress.targetScore === 0 ? (
               <div>
                 <h2 className="text-xs md:text-sm font-bold text-app-primary uppercase tracking-[0.2em] mb-4">Set Your Goal</h2>
@@ -4961,7 +4968,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                 </div>
 
                 {studyPlan && studyPlan.daysLeft > 0 && (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 bg-app-accent/5 border border-app-accent/20 rounded-2xl">
                       <div className="flex items-center gap-3 mb-2">
                         <Calendar className="text-app-accent" size={18} />
@@ -5018,7 +5025,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                         {Array.from({ length: 7 }).map((_, i) => {
                           const date = new Date();
                           date.setDate(date.getDate() - (6 - i));
-                          const dateStr = date.toISOString().split('T')[0];
+                          const dateStr = getLocalDateStr(date);
                           const isLogged = user?.activityLog?.includes(dateStr);
                           const isToday = i === 6;
                           
