@@ -4813,6 +4813,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const isScheduleSaved = isSaved || !!(user?.schedule && user.schedule.length > 0);
   const averageScore = calculateAverageScore();
   const studyPlan = calculateStudyPlan();
   const [tempTarget, setTempTarget] = useState<string | number>(79);
@@ -5034,18 +5035,18 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                             setIsSaving(false);
                           }
                         }}
-                        disabled={isSaving || isSaved}
+                        disabled={isSaving || isScheduleSaved}
                         className={cn(
                           "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
-                          isSaving || isSaved
+                          isSaving || isScheduleSaved
                             ? "bg-app-primary/30 text-app-bg/40 cursor-not-allowed" 
                             : "bg-app-accent text-app-bg hover:bg-app-primary"
                         )}
                       >
                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
-                        {isSaving ? 'Saving...' : isSaved ? 'Saved to Schedule' : 'Save to Schedule'}
+                        {isSaving ? 'Saving...' : isScheduleSaved ? 'Saved to Schedule' : 'Save to Schedule'}
                       </button>
-                      {(isSaved || (user.schedule && user.schedule.length > 0)) && (
+                      {isScheduleSaved && (
                         <button
                           onClick={onViewRoadmap}
                           className={cn(
@@ -5563,6 +5564,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
   const [selectedWord, setSelectedWord] = useState<VocabularyWord | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const wordListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -5571,11 +5573,30 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  useEffect(() => {
+    if (wordListRef.current) {
+      wordListRef.current.scrollTop = 0;
+    }
+  }, [searchTerm]);
+
   const filteredWords = PTE_VOCABULARY.filter(w => {
-    const matchesSearch = w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = !searchTerm ||
+                         w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          w.meaning.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFavorite = !showFavoritesOnly || user?.favoriteWords?.includes(w.id);
     return matchesSearch && matchesFavorite;
+  }).sort((a, b) => {
+    if (!searchTerm) return 0;
+    const term = searchTerm.toLowerCase();
+    const aStarts = a.word.toLowerCase().startsWith(term);
+    const bStarts = b.word.toLowerCase().startsWith(term);
+    if (aStarts && !bStarts) return -1;
+    if (!aStarts && bStarts) return 1;
+    const aWordMatch = a.word.toLowerCase().includes(term);
+    const bWordMatch = b.word.toLowerCase().includes(term);
+    if (aWordMatch && !bWordMatch) return -1;
+    if (!aWordMatch && bWordMatch) return 1;
+    return 0;
   });
 
   const playPronunciation = (word: string) => {
@@ -5657,7 +5678,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+        <div ref={wordListRef} className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           {filteredWords.map(word => {
             const isFavorite = user?.favoriteWords?.includes(word.id);
             return (
