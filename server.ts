@@ -1579,7 +1579,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
   try {
     const safeText = sanitizePromptValue(text.trim(), 500);
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite-preview-tts",
+      model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
