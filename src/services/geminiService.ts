@@ -205,7 +205,17 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
   }
 }
 
-export async function analyzeWriting(text: string, taskType: string) {
+export interface WritingAnalysisResult {
+  overall: number;
+  grammar: number;
+  vocabulary: number;
+  spelling: number;
+  content: number;
+  tips: string[];
+  mistakes: string[];
+}
+
+export async function analyzeWriting(text: string, taskType: string): Promise<WritingAnalysisResult> {
   const model = "gemini-2.5-flash";
   
   try {

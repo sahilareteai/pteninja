@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, FirebaseError } from 'firebase/app';
 import { 
   getAuth,
   GoogleAuthProvider, 
@@ -59,6 +59,14 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  // resource-exhausted means the write stream is temporarily overwhelmed.
+  // The Firebase SDK automatically closes and reopens the stream with exponential
+  // backoff, retrying all queued writes — no action needed from application code.
+  if (error instanceof FirebaseError && error.code === 'resource-exhausted') {
+    console.warn('Firestore write stream temporarily exhausted; Firebase is retrying automatically.', { operationType, path });
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
