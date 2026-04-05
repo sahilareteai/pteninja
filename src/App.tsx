@@ -4520,7 +4520,7 @@ function MockTestSession({
               onClick={() => setPhase('personal-intro')}
               className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Start Personal Intro <ArrowRight size={18} />
+              Start Test <ArrowRight size={18} />
             </button>
           </div>
         </motion.div>
@@ -4629,7 +4629,7 @@ function MockTestSession({
               onClick={() => setPhase('testing')}
               className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Begin Section <Play size={18} />
+              {savedSession ? <>Resume from Task {currentTaskIndex + 1} <RotateCcw size={18} /></> : <>Begin Section <Play size={18} /></>}
             </button>
           </div>
         </motion.div>
@@ -6681,6 +6681,12 @@ function TaskModal({
               // Audio finished, handleAudioEnd will take care of phase transition
               return 0;
             } else {
+              if (isMockTest) {
+                // In mock test mode, don't auto-advance when time runs out.
+                // The sticky footer "Next Task" button lets the user submit when ready.
+                // The recorder will be stopped by the useEffect below.
+                return 0;
+              }
               handleFinish();
               return 0;
             }
@@ -6691,6 +6697,20 @@ function TaskModal({
     }
     return () => clearInterval(timer);
   }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
+
+  // In mock test mode, stop the MediaRecorder when the recording timer expires
+  // (the user submits manually via the "Next Task" button).
+  // `task.section` and `mediaRecorder` are intentionally omitted: task.section is stable for a
+  // given TaskModal instance, and mediaRecorder changing mid-recording would be a separate concern.
+  useEffect(() => {
+    if (isMockTest && phase === 'recording' && timeLeft === 0 && task.section === 'speaking') {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        cleanupRecordingAnalysis();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMockTest, phase, timeLeft]);
 
   const handleFinish = async () => {
     try {
@@ -7311,8 +7331,12 @@ function TaskModal({
                       </button>}
 
                       <div className="flex-1 overflow-hidden">
-                        {/* Wave Animation when active */}
-                        {(isAudioPlaying || phase === 'recording' || isPreparingAudio) ? (
+                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
+                        {isPreparingAudio ? (
+                          <div className="w-full h-12 flex items-center justify-center">
+                            <Loader2 size={28} className="text-blue-400 animate-spin" />
+                          </div>
+                        ) : (isAudioPlaying || phase === 'recording') ? (
                           <div className="w-full h-12 flex items-center justify-center gap-1">
                             {[...Array(20)].map((_, i) => (
                               <motion.div 
