@@ -6454,6 +6454,14 @@ function TaskModal({
         setIsAudioPlaying(false);
         setIsPreparingAudio(false);
         setAudioFinished(true);
+        // Pre-set timeLeft to the upcoming phase's value so there is no "0 sec" flash
+        if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+          setTimeLeft(task.prepTime);
+        } else {
+          if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
+          else if (task.section === 'listening') setTimeLeft(120);
+          else setTimeLeft(task.recordingTime ?? 15);
+        }
         // Small pause after audio before next phase
         setTimeout(() => {
           if (isCancelled) return;
@@ -6990,7 +6998,7 @@ function TaskModal({
                                      task.category === 'Write from Dictation' ||
                                      task.category === 'Respond to a Situation';
               
-              if (task.hasAudio && isListeningPrep && !audioRef.current) {
+              if (task.hasAudio && isListeningPrep && !audioRef.current && !audioFinished) {
                 setPhase('audio');
                 return 0;
               }
@@ -7025,7 +7033,7 @@ function TaskModal({
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
+  }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying, audioFinished]);
 
   // In mock test mode, stop the MediaRecorder when the recording timer expires
   // (the user submits manually via the "Next" button).
@@ -7638,7 +7646,7 @@ function TaskModal({
                         {phase === 'prep' ? (
                           task.category === 'Repeat Sentence' ? `Beginning in ${timeLeft} sec` : `Recording starts in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
@@ -7761,7 +7769,7 @@ function TaskModal({
                   <div className="w-full space-y-6">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                       <span className="text-gray-500 font-medium text-base">
-                        {phase === 'audio' ? 'Audio Player' : 'Audio Recorder'}
+                        {phase === 'audio' && !audioFinished ? 'Audio Player' : 'Audio Recorder'}
                       </span>
                       <span className={cn(
                         "font-bold text-base",
@@ -7770,15 +7778,15 @@ function TaskModal({
                         {phase === 'prep' ? (
                           `Beginning in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
                       </span>
                     </div>
                     <div className="flex items-center gap-6 pt-2">
-                      {/* Control Button — hidden while audio is being prepared (wave area shows spinner) */}
-                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && (
+                      {/* Control Button — hidden while audio is being prepared or during post-audio transition */}
+                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying) && (
                         <button 
                           onClick={() => {
                             if (phase === 'prep') {
@@ -7793,14 +7801,6 @@ function TaskModal({
                                 setTimeLeft(0);
                               } else {
                                 handleFinish();
-                              }
-                            } else if (phase === 'audio' && audioFinished) {
-                              if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
-                                setPhase('prep');
-                                setTimeLeft(task.prepTime);
-                              } else {
-                                setPhase('recording');
-                                setTimeLeft(task.recordingTime ?? 40);
                               }
                             }
                           }}
