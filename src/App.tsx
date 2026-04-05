@@ -7465,7 +7465,7 @@ function TaskModal({
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
                           (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
                           recordingStopped ? <CheckCircle size={28} /> :
-                          (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
+                          (isAudioPlaying ? <Headphones size={28} /> : <Loader2 size={28} className="animate-spin text-white" />))}
                       </button>}
 
                       <div className="flex-1 overflow-hidden">
