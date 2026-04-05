@@ -4809,7 +4809,14 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   const highPriorityTasks = allTasks.filter(t => weakestSectionIds.includes(t.section) && !user?.completedTasks?.includes(t.id)).slice(0, 2);
   const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : allTasks.slice(0, 4);
 
-  // Calculate current belt based on score
+  // Per-section task counts and completed counts
+  const sectionData = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => {
+    const sectionTasks = allTasks.filter(t => t.section === s);
+    const completedCount = sectionTasks.filter(t => (user?.completedTasks || []).includes(t.id)).length;
+    return { section: s, total: sectionTasks.length, completed: completedCount };
+  });
+  const completedMockTests = (user?.mockTestResults || []).length;
+  const totalMockTests = MOCK_TESTS.length;
   const getBelt = (score: number) => {
     if (score >= 79) return { title: 'Black Belt', next: 'Mastery' };
     if (score >= 65) return { title: 'Blue Belt', next: 'Black Belt' };
@@ -5097,44 +5104,139 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             </div>
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/5">
               <p className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest mb-1">Available</p>
-              <p className="text-2xl font-black text-app-primary">{totalTasks - attemptedTasks}</p>
+              <p className="text-2xl font-black text-app-primary">{totalTasks}</p>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest">Section Performance</h4>
-            <div className="space-y-2">
-              {[...sectionAverages]
-                .sort((a, b) => a.average - b.average)
-                .map((s) => (
-                  <button
-                    key={s.section}
-                    onClick={() => onSelectSection(s.section)}
-                    className="w-full text-left group p-3 bg-app-bg hover:bg-app-primary/10 border border-app-primary/5 hover:border-app-primary/30 rounded-2xl transition-all duration-200 cursor-pointer"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-bold text-app-text capitalize group-hover:text-app-primary transition-colors">{s.section}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-app-text-muted">
-                          {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
-                        </span>
-                        <ChevronRight size={12} className="text-app-text-muted/40 group-hover:text-app-primary transition-colors" />
-                      </div>
-                    </div>
-                    <div className="h-1.5 w-full bg-app-surface rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${s.attempts > 0 ? Math.max((s.average / 90) * 100, 5) : 0}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className={cn(
-                          "h-full rounded-full",
-                          s.average === 0 ? "bg-gray-700" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-app-accent"
-                        )}
-                      />
-                    </div>
-                  </button>
-                ))}
-            </div>
+            {/* Speaking */}
+            <button
+              onClick={() => onSelectSection('speaking')}
+              className="w-full text-left group p-3 bg-teal-500/5 hover:bg-teal-500/10 border border-teal-500/20 hover:border-teal-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-teal-400 uppercase tracking-wide">Speaking</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'speaking')!.completed}/{sectionData.find(d => d.section === 'speaking')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-teal-500">
+                    {sectionAverages.find(s => s.section === 'speaking')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'speaking')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-teal-500/40 group-hover:text-teal-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-teal-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'speaking')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'speaking')!.completed / sectionData.find(d => d.section === 'speaking')!.total) * 100, sectionData.find(d => d.section === 'speaking')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-teal-500"
+                />
+              </div>
+            </button>
+            {/* Writing */}
+            <button
+              onClick={() => onSelectSection('writing')}
+              className="w-full text-left group p-3 bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wide">Writing</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'writing')!.completed}/{sectionData.find(d => d.section === 'writing')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-orange-500">
+                    {sectionAverages.find(s => s.section === 'writing')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'writing')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-orange-500/40 group-hover:text-orange-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-orange-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'writing')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'writing')!.completed / sectionData.find(d => d.section === 'writing')!.total) * 100, sectionData.find(d => d.section === 'writing')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-orange-500"
+                />
+              </div>
+            </button>
+            {/* Reading */}
+            <button
+              onClick={() => onSelectSection('reading')}
+              className="w-full text-left group p-3 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">Reading</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'reading')!.completed}/{sectionData.find(d => d.section === 'reading')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-blue-400">
+                    {sectionAverages.find(s => s.section === 'reading')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'reading')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-blue-400/40 group-hover:text-blue-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-blue-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'reading')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'reading')!.completed / sectionData.find(d => d.section === 'reading')!.total) * 100, sectionData.find(d => d.section === 'reading')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-blue-500"
+                />
+              </div>
+            </button>
+            {/* Listening */}
+            <button
+              onClick={() => onSelectSection('listening')}
+              className="w-full text-left group p-3 bg-purple-500/5 hover:bg-purple-500/10 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-purple-400 uppercase tracking-wide">Listening</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'listening')!.completed}/{sectionData.find(d => d.section === 'listening')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-400">
+                    {sectionAverages.find(s => s.section === 'listening')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'listening')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-purple-400/40 group-hover:text-purple-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'listening')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'listening')!.completed / sectionData.find(d => d.section === 'listening')!.total) * 100, sectionData.find(d => d.section === 'listening')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-purple-500"
+                />
+              </div>
+            </button>
+            {/* Mock Tests */}
+            <button
+              onClick={onViewMockTests}
+              className="w-full text-left group p-3 bg-yellow-500/5 hover:bg-yellow-500/10 border border-yellow-500/20 hover:border-yellow-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">Mock Tests</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {completedMockTests}/{totalMockTests} done
+                  </span>
+                  <ChevronRight size={12} className="text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-yellow-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${totalMockTests > 0 ? Math.max((completedMockTests / totalMockTests) * 100, completedMockTests > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-yellow-500"
+                />
+              </div>
+            </button>
           </div>
 
           <div className="p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-center gap-4">
