@@ -4161,14 +4161,14 @@ function MockTestSession({
 
   // Build an O(1) lookup map to avoid scanning 10K+ tasks on every navigation.
   const taskMap = useMemo(() => {
-    const map = new Map<string, PTETask>();
-    for (const t of allTasks) map.set(t.id, t);
+    const map: Record<string, PTETask> = {};
+    for (const t of allTasks) map[t.id] = t;
     return map;
   }, [allTasks]);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
-  const currentTask = taskMap.get(currentTaskId)!;
+  const currentTask = taskMap[currentTaskId]!;
 
   const personalIntroTask: PTETask = {
     id: 'personal-intro',
@@ -4325,7 +4325,7 @@ function MockTestSession({
 
     for (let i = 0; i < totalTasks; i++) {
       const taskId = allTaskIds[i];
-      const task = taskMap.get(taskId)!;
+      const task = taskMap[taskId]!;
       // Use the ref instead of the stale `taskResponses` state value so the last
       // submitted task response is always included.
       const response = taskResponsesRef.current[taskId];
