@@ -5931,7 +5931,14 @@ function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTas
               return (
                 <button 
                   key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => {
+                    setSelectedCategory(category);
+                    // Precache only the first uncached task in this category.
+                    // Subsequent tasks are precached when a task is selected.
+                    // localStorage cache means this is free on repeat visits.
+                    const firstUncached = categoryTasks.find(t => t.hasAudio && !globalAudioCache[t.id]);
+                    if (firstUncached) preFetchAudio(firstUncached);
+                  }}
                   className="flex items-center gap-4 p-6 bg-app-surface border border-app-primary/5 rounded-2xl hover:border-app-primary/40 transition-all group text-left relative overflow-hidden"
                 >
                   <div className="w-12 h-12 rounded-xl bg-app-bg flex items-center justify-center group-hover:bg-app-primary transition-colors shrink-0">
@@ -6110,24 +6117,75 @@ const getAudioContext = () => {
   return globalAudioContext;
 };
 
-const preFetchAudio = async (task: PTETask) => {
-  if (!task.hasAudio || globalAudioCache[task.id]) return;
-  
+// --- Persistent localStorage audio cache ---
+const LS_AUDIO_PREFIX = 'pte_audio_v1_';
+const LS_AUDIO_MAX = 40; // maximum number of tasks to keep cached in localStorage
+
+const lsGetAudio = (taskId: string): string | null => {
   try {
-    const audioContent = task.transcript || task.prompt || "";
-    const base64 = await generateTTS(audioContent);
-    if (base64) {
-      const ctx = getAudioContext();
-      if (ctx) {
-        const arrayBuffer = base64ToArrayBuffer(base64);
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        globalAudioCache[task.id] = { base64, buffer: audioBuffer };
-        console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
-      }
+    return localStorage.getItem(LS_AUDIO_PREFIX + taskId);
+  } catch { return null; }
+};
+
+const lsSetAudio = (taskId: string, base64: string) => {
+  try {
+    // Track insertion order in a separate LRU list so eviction is predictable
+    const LRU_KEY = 'pte_audio_lru_v1';
+    let lruList: string[] = [];
+    try { lruList = JSON.parse(localStorage.getItem(LRU_KEY) || '[]'); } catch { lruList = []; }
+
+    // Evict the least-recently-used (back of list) entry when at the limit
+    if (lruList.length >= LS_AUDIO_MAX) {
+      const evict = lruList.pop();
+      if (evict) localStorage.removeItem(LS_AUDIO_PREFIX + evict);
     }
-  } catch (err) {
-    console.error(`[Audio] Global Cache: Pre-fetch failed for task ${task.id}`, err);
-  }
+    // Insert at the front (most-recently-used)
+    lruList = [taskId, ...lruList.filter(id => id !== taskId)];
+    localStorage.setItem(LRU_KEY, JSON.stringify(lruList));
+    localStorage.setItem(LS_AUDIO_PREFIX + taskId, base64);
+  } catch { /* storage full – silently skip */ }
+};
+
+// Track in-flight prefetch promises so we never double-call Gemini for the same task
+const preFetchInFlight: Record<string, Promise<void>> = {};
+
+const preFetchAudio = (task: PTETask): Promise<void> => {
+  if (!task.hasAudio) return Promise.resolve();
+  // Already in memory – nothing to do
+  if (globalAudioCache[task.id]) return Promise.resolve();
+  // De-duplicate concurrent calls
+  if (preFetchInFlight[task.id]) return preFetchInFlight[task.id];
+
+  const work = (async () => {
+    try {
+      // 1. Check localStorage first – free (no API token)
+      let base64 = lsGetAudio(task.id);
+
+      // 2. Fall back to Gemini TTS only if not cached
+      if (!base64) {
+        const audioContent = task.transcript || task.prompt || "";
+        base64 = await generateTTS(audioContent);
+        if (base64) lsSetAudio(task.id, base64);
+      }
+
+      if (base64) {
+        const ctx = getAudioContext();
+        if (ctx) {
+          const arrayBuffer = base64ToArrayBuffer(base64);
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+          globalAudioCache[task.id] = { base64, buffer: audioBuffer };
+          console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[Audio] Global Cache: Pre-fetch failed for task ${task.id}`, err);
+    } finally {
+      delete preFetchInFlight[task.id];
+    }
+  })();
+
+  preFetchInFlight[task.id] = work;
+  return work;
 };
 
 function TaskModal({ 
@@ -6151,13 +6209,14 @@ function TaskModal({
     const isListeningPrep = task.section === 'listening' || 
                            task.category === 'Repeat Sentence' || 
                            task.category === 'Answer Short Question' || 
-                           task.category === 'Write from Dictation';
+                           task.category === 'Write from Dictation' ||
+                           task.category === 'Respond to a Situation';
     
     if (isListeningPrep) return 'prep';
     return task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep');
   });
   const [timeLeft, setTimeLeft] = useState(() => {
-    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation' || task.category === 'Respond to a Situation') {
       return 3;
     }
     if (task.category === 'Summarize Spoken Text') return 12;
@@ -6190,6 +6249,9 @@ function TaskModal({
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const beepPlayedRef = useRef(false);
+  const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always-current ref to handleFinish so the RAF silence-detection can call it
+  const handleFinishRef = useRef<(() => void) | null>(null);
 
   const needsBeep = task.section === 'listening' || 
                    task.category === 'Repeat Sentence' || 
@@ -6326,7 +6388,8 @@ function TaskModal({
     const isListeningPrep = task.section === 'listening' || 
                            task.category === 'Repeat Sentence' || 
                            task.category === 'Answer Short Question' || 
-                           task.category === 'Write from Dictation';
+                           task.category === 'Write from Dictation' ||
+                           task.category === 'Respond to a Situation';
     
     const initialPhase = isListeningPrep ? 'prep' : (task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep'));
     
@@ -6334,7 +6397,7 @@ function TaskModal({
     setAudioFinished(false);
     
     let initialTime = 0;
-    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation' || task.category === 'Respond to a Situation') {
       initialTime = 3; // Reset to 3s for better user experience
     } else if (task.category === 'Summarize Spoken Text') {
       initialTime = 12;
@@ -6744,6 +6807,11 @@ function TaskModal({
   }, [phase, task.id, task.hasAudio, audioRetryCount, needsBeep]);
 
   const cleanupRecordingAnalysis = () => {
+    // Clear silence auto-stop timer
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
     if (recordingAnimationFrameRef.current) {
       cancelAnimationFrame(recordingAnimationFrameRef.current);
       recordingAnimationFrameRef.current = null;
@@ -6828,17 +6896,46 @@ function TaskModal({
       
       const dataArray = new Uint8Array(analyzer.frequencyBinCount);
       
+      // Silence detection constants
+      // SILENCE_AMPLITUDE_THRESHOLD: average of Uint8 frequency bin data (0-255 scale).
+      // Values below 5 correspond to near-total silence or background noise floor.
+      const SILENCE_AMPLITUDE_THRESHOLD = 5;
+      const SILENCE_AUTO_STOP_MS = 7000; // stop after 7 s of continuous silence
+
       const updateVolume = () => {
-        if (recordingAnalyzerRef.current) {
-          recordingAnalyzerRef.current.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / dataArray.length;
-          setVolume(average);
-          recordingAnimationFrameRef.current = requestAnimationFrame(updateVolume);
+        // Guard: if the analyser was already disconnected (recording stopped externally),
+        // exit the loop to prevent stale RAF callbacks
+        if (!recordingAnalyzerRef.current) return;
+
+        recordingAnalyzerRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
         }
+        const average = sum / dataArray.length;
+        setVolume(average);
+
+        // --- Silence auto-stop (not in mock test) ---
+        if (!isMockTest) {
+          if (average < SILENCE_AMPLITUDE_THRESHOLD) {
+            // Start silence timer if not already running
+            if (!silenceTimeoutRef.current) {
+              silenceTimeoutRef.current = setTimeout(() => {
+                silenceTimeoutRef.current = null;
+                handleFinishRef.current?.();
+              }, SILENCE_AUTO_STOP_MS);
+            }
+          } else {
+            // Sound detected – reset silence timer
+            if (silenceTimeoutRef.current) {
+              clearTimeout(silenceTimeoutRef.current);
+              silenceTimeoutRef.current = null;
+            }
+          }
+        }
+        // -----------------------------------------------
+
+        recordingAnimationFrameRef.current = requestAnimationFrame(updateVolume);
       };
       updateVolume();
 
@@ -6890,7 +6987,8 @@ function TaskModal({
               const isListeningPrep = task.section === 'listening' || 
                                      task.category === 'Repeat Sentence' || 
                                      task.category === 'Answer Short Question' || 
-                                     task.category === 'Write from Dictation';
+                                     task.category === 'Write from Dictation' ||
+                                     task.category === 'Respond to a Situation';
               
               if (task.hasAudio && isListeningPrep && !audioRef.current) {
                 setPhase('audio');
@@ -7253,6 +7351,11 @@ function TaskModal({
       setPhase('feedback');
     }
   };
+
+  // Keep handleFinishRef in sync so the silence-detection RAF can call the latest closure
+  useEffect(() => {
+    handleFinishRef.current = handleFinish;
+  });
 
   const skipPrep = () => {
     // Resume audio context on user interaction to avoid browser blocks
@@ -7653,96 +7756,122 @@ function TaskModal({
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10 mb-8"
+                  className="flex flex-col py-6 rounded-2xl border bg-white border-gray-200 shadow-sm mb-4 sm:mb-8 px-4 sm:px-10"
                 >
-                  {(phase === 'recording' && !recordingStopped && task.section === 'speaking') || isAudioPlaying ? (
-                    <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
-                      {[...Array(20)].map((_, i) => (
-                        <motion.div 
-                          key={i}
-                          animate={(isAudioPlaying || (phase === 'recording' && !recordingStopped && task.section === 'speaking')) 
-                            ? { height: [8, Math.random() * 24 + 8, 8] } 
-                            : { height: 8 }
-                          }
-                          transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.05 }}
-                          className={cn(
-                            "w-1 rounded-full",
-                            isAudioPlaying ? "bg-blue-400" : "bg-app-primary"
-                          )}
-                        />
-                      ))}
+                  <div className="w-full space-y-6">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                      <span className="text-gray-500 font-medium text-base">
+                        {phase === 'audio' ? 'Audio Player' : 'Audio Recorder'}
+                      </span>
+                      <span className={cn(
+                        "font-bold text-base",
+                        (phase === 'prep' || (phase === 'audio' && !isAudioPlaying)) ? "text-red-500" : "text-app-primary"
+                      )}>
+                        {phase === 'prep' ? (
+                          `Beginning in ${timeLeft} sec`
+                        ) : phase === 'audio' ? (
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
+                        ) : phase === 'recording' ? (
+                          recordingStopped ? 'Recorded' : 'Recording...'
+                        ) : 'Ready'}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
-                      {[...Array(20)].map((_, i) => (
-                        <div key={i} className="w-1 h-2 rounded-full bg-app-primary/20" />
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center gap-6">
-                    <button 
-                      disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
-                      onClick={() => {
-                        if (isPreparingAudio) return;
-                        
-                        if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
-                          if (audioRef.current) {
-                            audioRef.current.play().catch(e => console.error("Manual play failed", e));
-                            setIsAudioPlaying(true);
-                          } else {
-                            setAudioRetryCount(prev => prev + 1);
-                          }
-                        } else if (phase === 'audio' && audioFinished) {
-                          // If audio finished but we're still in 'audio' phase (the 1s pause), skip to next
-                          if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
-                            setPhase('prep');
-                            setTimeLeft(task.prepTime);
-                          } else {
-                            setPhase('recording');
-                            setTimeLeft(task.recordingTime ?? 40);
-                          }
-                        } else if (phase === 'recording') {
-                          if (isMockTest) {
-                            // In mock test: stop recording but wait for user to click "Next"
-                            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                              mediaRecorder.stop();
-                              cleanupRecordingAnalysis();
+                    <div className="flex items-center gap-6 pt-2">
+                      {/* Control Button — hidden while audio is being prepared (wave area shows spinner) */}
+                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && (
+                        <button 
+                          onClick={() => {
+                            if (phase === 'prep') {
+                              skipPrep();
+                            } else if (phase === 'recording') {
+                              if (isMockTest) {
+                                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                                  mediaRecorder.stop();
+                                  cleanupRecordingAnalysis();
+                                }
+                                setRecordingStopped(true);
+                                setTimeLeft(0);
+                              } else {
+                                handleFinish();
+                              }
+                            } else if (phase === 'audio' && audioFinished) {
+                              if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+                                setPhase('prep');
+                                setTimeLeft(task.prepTime);
+                              } else {
+                                setPhase('recording');
+                                setTimeLeft(task.recordingTime ?? 40);
+                              }
                             }
-                            setRecordingStopped(true);
-                            setTimeLeft(0);
-                          } else {
-                            handleFinish();
-                          }
-                        } else if (phase === 'prep') {
-                          skipPrep();
-                        }
-                      }}
-                      className={cn(
-                        "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl",
-                        (phase === 'recording' && !recordingStopped) ? "bg-red-500 shadow-red-500/20" : 
-                        recordingStopped ? "bg-gray-400 opacity-60 cursor-default" :
-                        (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
-                        (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
-                        isPreparingAudio && "bg-blue-500/50 cursor-wait",
-                        hasAudioError && "bg-red-500/50"
+                          }}
+                          disabled={(phase === 'audio' && isAudioPlaying) || recordingStopped}
+                          className={cn(
+                            "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl shrink-0",
+                            phase === 'prep' ? "bg-app-primary text-app-bg hover:scale-105" : 
+                            (phase === 'recording' && !recordingStopped) ? "bg-red-500 text-white hover:scale-105" :
+                            recordingStopped ? "bg-gray-400 text-white cursor-default opacity-60" :
+                            "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
+                          )}
+                          title={phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : 'Play'}
+                        >
+                          {phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
+                           (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                           recordingStopped ? <CheckCircle size={28} /> :
+                           (isAudioPlaying ? <Headphones size={28} /> : <Play size={28} className="text-white ml-1" />)}
+                        </button>
                       )}
-                    >
-                      {isPreparingAudio ? <Loader2 size={24} className="text-white animate-spin" /> : 
-                       (recordingStopped ? <CheckCircle size={24} className="text-white" /> :
-                       (phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> : 
-                       (phase === 'audio' ? (isAudioPlaying ? <Headphones size={24} className="text-white" /> : <Play size={24} className="text-white ml-1" />) : 
-                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />))))}
-                    </button>
-                    
-                    <div className="flex flex-col">
-                      <p className="text-xs font-bold text-app-text uppercase tracking-wider">
-                        {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : (isAudioPlaying ? "Playing Audio" : "Ready to Play")) : 
-                         (phase === 'prep' ? "Preparing..." : (recordingStopped ? "Recorded" : "Recording..."))}
-                      </p>
-                      {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
-                        <p className="text-[10px] text-app-primary font-medium animate-pulse">Click to start audio</p>
-                      )}
+
+                      <div className="flex-1 overflow-hidden">
+                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
+                        {isPreparingAudio ? (
+                          <div className="w-full h-12 flex items-center justify-center">
+                            <Loader2 size={28} className="text-blue-400 animate-spin" />
+                          </div>
+                        ) : (isAudioPlaying || phase === 'recording') ? (
+                          <div className="w-full h-12 flex items-center justify-center gap-1">
+                            {[...Array(20)].map((_, i) => (
+                              <motion.div 
+                                key={i}
+                                animate={phase === 'recording' ? {
+                                  height: Math.max(6, (volume / 128) * 32 + (Math.random() * 4)),
+                                  opacity: Math.min(1, (volume / 128) + 0.4)
+                                } : { 
+                                  height: [6, Math.random() * 32 + 6, 6],
+                                  opacity: [0.4, 1, 0.4]
+                                }}
+                                transition={{ 
+                                  repeat: phase === 'recording' ? 0 : Infinity, 
+                                  duration: phase === 'recording' ? 0.05 : (0.4 + Math.random() * 0.2), 
+                                  delay: phase === 'recording' ? 0 : (i * 0.02)
+                                }}
+                                className={cn(
+                                  "w-1.5 rounded-full shrink-0",
+                                  isAudioPlaying ? "bg-blue-400" : "bg-red-400"
+                                )}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ 
+                                  width: `${(timeLeft / (
+                                    phase === 'prep' ? (task.prepTime || 3) : 
+                                    phase === 'audio' ? (audioRef.current?.duration || 10) :
+                                    (task.recordingTime || 40)
+                                  )) * 100}%` 
+                                }}
+                                className="h-full transition-all bg-app-primary"
+                              />
+                            </div>
+                            <span className="text-xs font-mono text-gray-400 whitespace-nowrap">
+                              {formatTime(timeLeft)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.div>

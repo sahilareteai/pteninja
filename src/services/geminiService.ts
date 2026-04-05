@@ -155,7 +155,7 @@ export async function analyzeSpeaking(audioData: string, taskType: string, mimeT
     // Sanitize mimeType (remove parameters like ;codecs=opus)
     const cleanMimeType = mimeType.split(';')[0].trim();
     
-    let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words.`;
+    let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${taskType}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
     
     if (taskType === 'Answer Short Question' && correctAnswer) {
       prompt += ` The expected answer is: "${correctAnswer}". Please check if the spoken response matches this answer or is a valid synonym.`;
