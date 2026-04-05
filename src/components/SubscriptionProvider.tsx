@@ -172,6 +172,28 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 handleFirestoreError(err, OperationType.CREATE, `users/${firebaseUser.uid}`);
               }
             });
+
+            // Send a welcome email for real (non-anonymous) users with an email address
+            if (!isGuest && firebaseUser.email) {
+              firebaseUser.getIdToken().then(idToken => {
+                return fetch('/api/send-welcome-email', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                  },
+                }).then(res => {
+                  if (!res.ok) {
+                    return res.json().then(body => {
+                      console.warn("Welcome email API error:", body?.error ?? res.status);
+                    });
+                  }
+                });
+              }).catch(err => {
+                console.warn("Could not send welcome email:", err);
+              });
+            }
+
             setUser(newUser);
           }
           setLoading(false);

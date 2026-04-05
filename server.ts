@@ -798,6 +798,262 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
   }
 });
 
+// ─── Welcome Email ────────────────────────────────────────────────────────────
+const welcomeEmailLimiter = rateLimit({
+  windowMs: 60_000 * 60, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required." });
+  }
+
+  let decodedToken: import("firebase-admin/auth").DecodedIdToken;
+  try {
+    decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token." });
+  }
+
+  // Only send to real (non-anonymous) users with a valid email address
+  if (decodedToken.firebase?.sign_in_provider === "anonymous") {
+    return res.status(400).json({ error: "Welcome email is not sent to anonymous users." });
+  }
+
+  const email = decodedToken.email;
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "No valid email address for this user." });
+  }
+
+  const transport = createMailTransport();
+  if (!transport) {
+    // No mail transport configured — log and continue silently so signup still succeeds
+    console.warn("No SMTP config found — welcome email not sent for user:", decodedToken.uid);
+    return res.json({ success: true, message: "Welcome email skipped (no SMTP config)." });
+  }
+
+  const displayName = decodedToken.name ?? email.split("@")[0];
+  const safeName = escapeHtml(displayName);
+  const safeEmail = escapeHtml(email);
+  const appUrl = process.env.APP_URL ?? "https://pteninja.com";
+  const upgradeUrl = escapeHtml(appUrl);
+  const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+
+  const subject = "Welcome to PTE Ninja 🎉 — Your Journey to PTE Success Starts Now";
+
+  const textBody = [
+    `Hi ${displayName},`,
+    ``,
+    `Welcome to PTE Ninja! 🎉`,
+    ``,
+    `You now have a 7-day free trial — unlimited access to AI-powered PTE Academic practice.`,
+    ``,
+    `Ready to unlock the full experience?`,
+    ``,
+    `Monthly Plan   — A$21/month (was A$35)`,
+    `Quarterly Plan — A$50 for 3 months (was A$90) ⭐ Best Value`,
+    `Annual Plan    — A$175/year (was A$350) — Save 50%`,
+    ``,
+    `Upgrade now: ${appUrl}`,
+    ``,
+    `Happy studying,`,
+    `The PTE Ninja Team`,
+  ].join("\n");
+
+  const htmlBody = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to PTE Ninja</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(108,99,255,0.10);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:40px 40px 32px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 20px;margin-bottom:20px;">
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
+                <span style="font-size:22px;color:rgba(255,255,255,0.7);margin-left:2px;">⚡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;line-height:1.3;">Welcome aboard, ${safeName}! 🎉</h1>
+              <p style="margin:12px 0 0;color:rgba(255,255,255,0.85);font-size:16px;line-height:1.6;">Your AI-powered PTE Academic journey starts today.</p>
+            </td>
+          </tr>
+
+          <!-- Trial Banner -->
+          <tr>
+            <td style="background:#f5f3ff;padding:20px 40px;text-align:center;border-bottom:1px solid #ede9fe;">
+              <p style="margin:0;font-size:15px;color:#5b21b6;">
+                <strong>🎁 Your 7-Day Free Trial is active!</strong> Explore every feature with no commitment.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px 20px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.7;">
+                Hi <strong>${safeName}</strong>,
+              </p>
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
+                We're thrilled to have you join thousands of students preparing for the
+                <strong>PTE Academic exam</strong> with the help of AI. During your free trial
+                you get <em>full access</em> to all our practice tools:
+              </p>
+
+              <!-- Features -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+                <tr>
+                  <td style="padding:8px 12px;background:#f9fafb;border-radius:8px;margin-bottom:8px;display:block;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:18px;padding-right:10px;">🧠</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>AI-Powered Practice</strong> — Real exam-like tasks scored by AI</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:8px 12px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:18px;padding-right:10px;">📊</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Performance Tracking</strong> — Detailed scores and progress insights</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:8px 12px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:18px;padding-right:10px;">📚</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Vocabulary Builder</strong> — Master high-frequency PTE words</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:8px 12px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:18px;padding-right:10px;">📅</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Study Planner</strong> — Customised schedule to reach your target score</td>
+                    </tr></table>
+                  </td>
+                </tr>
+              </table>
+
+              <h2 style="margin:0 0 20px;font-size:20px;color:#1a1a2e;font-weight:700;text-align:center;">
+                🚀 Choose Your Plan &amp; Keep the Momentum
+              </h2>
+              <p style="margin:0 0 24px;font-size:14px;color:#6b7280;text-align:center;">
+                All plans include unlimited access. Cancel anytime.
+              </p>
+
+              <!-- Pricing Cards -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <!-- Monthly -->
+                  <td width="31%" style="vertical-align:top;padding:0 6px 0 0;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:18px 14px;text-align:center;">
+                      <div style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">Popular</div>
+                      <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Monthly</p>
+                      <p style="margin:0 0 2px;font-size:22px;font-weight:800;color:#6c63ff;">A$21</p>
+                      <p style="margin:0 0 12px;font-size:11px;color:#9ca3af;text-decoration:line-through;">A$35/month</p>
+                      <a href="${upgradeUrl}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 0;border-radius:8px;">Get Started</a>
+                    </div>
+                  </td>
+                  <!-- Quarterly -->
+                  <td width="38%" style="vertical-align:top;padding:0 6px;">
+                    <div style="border:2px solid #6c63ff;border-radius:12px;padding:18px 14px;text-align:center;position:relative;background:#faf9ff;">
+                      <div style="background:#6c63ff;color:#ffffff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">⭐ Best Value</div>
+                      <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Quarterly</p>
+                      <p style="margin:0 0 2px;font-size:22px;font-weight:800;color:#6c63ff;">A$50</p>
+                      <p style="margin:0 0 2px;font-size:11px;color:#9ca3af;text-decoration:line-through;">A$90 / 3 months</p>
+                      <p style="margin:0 0 12px;font-size:11px;color:#6c63ff;font-weight:600;">≈ A$16.67/month</p>
+                      <a href="${upgradeUrl}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 0;border-radius:8px;">Best Deal</a>
+                    </div>
+                  </td>
+                  <!-- Annual -->
+                  <td width="31%" style="vertical-align:top;padding:0 0 0 6px;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:18px 14px;text-align:center;">
+                      <div style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">Save 50%</div>
+                      <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Annual</p>
+                      <p style="margin:0 0 2px;font-size:22px;font-weight:800;color:#6c63ff;">A$175</p>
+                      <p style="margin:0 0 12px;font-size:11px;color:#9ca3af;text-decoration:line-through;">A$350/year</p>
+                      <a href="${upgradeUrl}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 0;border-radius:8px;">Get Started</a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Main CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${upgradeUrl}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:14px 48px;border-radius:50px;letter-spacing:0.5px;">
+                      Upgrade My Plan &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px;font-size:14px;color:#6b7280;text-align:center;line-height:1.6;">
+                Have questions? Just reply to this email or visit our
+                <a href="${upgradeUrl}" style="color:#6c63ff;text-decoration:none;">support centre</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">
+                You're receiving this because you created an account at PTE Ninja
+                (<a href="mailto:${safeEmail}" style="color:#9ca3af;">${safeEmail}</a>).
+              </p>
+              <p style="margin:0;font-size:12px;color:#d1d5db;">
+                &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    await transport.sendMail({
+      from: `PTE Ninja <${fromAddress}>`,
+      to: email,
+      subject,
+      text: textBody,
+      html: htmlBody,
+    });
+    res.json({ success: true, message: "Welcome email sent." });
+  } catch (error) {
+    console.error("Failed to send welcome email:", error);
+    // Return success anyway so signup flow is not interrupted
+    res.json({ success: true, message: "Welcome email could not be delivered." });
+  }
+});
+
 // ─── Support Ticket: collect details and email to Google Groups ───────────────
 const supportTicketLimiter = rateLimit({
   windowMs: 60_000 * 10,
