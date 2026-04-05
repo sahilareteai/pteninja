@@ -1,16 +1,48 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-console.log("[Gemini] SDK initialized. API Key present:", !!process.env.GEMINI_API_KEY);
-
-let quotaExceededUntil = 0;
-
-function isQuotaExceeded() {
-  return Date.now() < quotaExceededUntil;
+// ─── Multi-key rotation ───────────────────────────────────────────────────────
+interface KeyState {
+  client: GoogleGenAI;
+  exhaustedUntil: number;
 }
 
-function setQuotaExceeded() {
-  quotaExceededUntil = Date.now() + 5 * 60 * 1000; // 5 minutes
+function buildKeyStates(): KeyState[] {
+  const keys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+  ].filter(Boolean) as string[];
+
+  if (keys.length === 0) {
+    console.error("[Gemini] No API keys configured.");
+    return [];
+  }
+
+  console.log(`[Gemini] SDK initialized with ${keys.length} API key(s).`);
+  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0 }));
+}
+
+const keyStates: KeyState[] = buildKeyStates();
+
+function getAvailableKeys(): KeyState[] {
+  const now = Date.now();
+  return keyStates.filter((k) => now >= k.exhaustedUntil);
+}
+
+function areAllKeysExhausted(): boolean {
+  return keyStates.length > 0 && getAvailableKeys().length === 0;
+}
+
+// Deduplicate alert: send at most once per exhaustion window (5 minutes)
+let allKeysAlertUntil = 0;
+
+function triggerAllKeysAlert() {
+  const now = Date.now();
+  if (now < allKeysAlertUntil) return;
+  allKeysAlertUntil = now + 5 * 60 * 1000;
+
+  // Fire-and-forget POST to server; server sends the alert email
+  fetch("/api/gemini-quota-alert", { method: "POST" }).catch(() => {});
 }
 
 function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
@@ -66,45 +98,51 @@ function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
 }
 
 async function callGemini(params: any, retries: number = 3): Promise<any> {
-  if (isQuotaExceeded()) {
-    const quotaError = new Error("GEMINI_QUOTA_EXCEEDED");
-    (quotaError as any).status = 429;
-    throw quotaError;
+  const available = getAvailableKeys();
+
+  if (available.length === 0) {
+    triggerAllKeysAlert();
+    const err = new Error("GEMINI_QUOTA_EXCEEDED");
+    (err as any).status = 429;
+    throw err;
   }
 
-  for (let i = 0; i <= retries; i++) {
-    try {
-      console.log(`[Gemini] Calling generateContent for model: ${params.model}`);
-      return await ai.models.generateContent(params);
-    } catch (e: any) {
-      console.error(`[Gemini] API Call Error:`, e);
-      const isQuotaError = e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED') || (e.error?.code === 429);
-      
-      if (isQuotaError) {
-        setQuotaExceeded();
-        console.warn(`Gemini Quota Exceeded (Attempt ${i + 1}/${retries + 1})`);
-        if (i < retries) {
-          // Longer delay for quota errors
-          const delay = Math.pow(3, i) * 2000 + Math.random() * 1000;
-          console.log(`Quota exceeded. Retrying in ${Math.round(delay)}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        const quotaError = new Error("GEMINI_QUOTA_EXCEEDED");
-        (quotaError as any).status = 429;
-        throw quotaError;
-      }
+  // Try each available key in order; on quota error mark it and move to the next
+  for (const keyState of available) {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        console.log(`[Gemini] Calling generateContent for model: ${params.model}`);
+        return await keyState.client.models.generateContent(params);
+      } catch (e: any) {
+        console.error(`[Gemini] API Call Error:`, e);
+        const isQuotaError =
+          e.message?.includes("429") ||
+          e.message?.includes("RESOURCE_EXHAUSTED") ||
+          e.error?.code === 429;
 
-      console.error(`Gemini call attempt ${i + 1} failed:`, e);
-      if (i < retries) {
-        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-        console.log(`Retrying in ${Math.round(delay)}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      } else {
-        throw e;
+        if (isQuotaError) {
+          keyState.exhaustedUntil = Date.now() + 5 * 60 * 1000;
+          console.warn(`[Gemini] Key quota exceeded (5-min cooldown). Switching to next key if available...`);
+          break; // stop retrying this key, try the next one
+        }
+
+        console.error(`[Gemini] Call attempt ${i + 1}/${retries + 1} failed:`, e);
+        if (i < retries) {
+          const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+          console.log(`[Gemini] Retrying in ${Math.round(delay)}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          throw e;
+        }
       }
     }
   }
+
+  // All available keys are now exhausted
+  triggerAllKeysAlert();
+  const err = new Error("GEMINI_QUOTA_EXCEEDED");
+  (err as any).status = 429;
+  throw err;
 }
 
 export async function generateTTS(text: string, retries: number = 1) {

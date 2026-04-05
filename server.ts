@@ -17,6 +17,112 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 
+// ─── Gemini Key Rotation ──────────────────────────────────────────────────────
+interface ServerKeyState {
+  client: GoogleGenAI;
+  exhaustedUntil: number;
+}
+
+function buildServerKeyStates(): ServerKeyState[] {
+  const keys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+  ].filter(Boolean) as string[];
+  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0 }));
+}
+
+const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
+
+function getAvailableServerKeys(): ServerKeyState[] {
+  const now = Date.now();
+  return serverGeminiKeys.filter((k) => now >= k.exhaustedUntil);
+}
+
+// Returns the result of a Gemini generateContent call, rotating through keys on quota errors.
+// Throws an error with code "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
+async function serverCallGemini(params: Parameters<GoogleGenAI["models"]["generateContent"]>[0]): Promise<ReturnType<GoogleGenAI["models"]["generateContent"]>> {
+  const available = getAvailableServerKeys();
+
+  if (available.length === 0) {
+    await sendAllKeysExhaustedAlert();
+    const err = new Error("GEMINI_QUOTA_EXCEEDED");
+    (err as any).status = 429;
+    throw err;
+  }
+
+  for (const keyState of available) {
+    try {
+      return await keyState.client.models.generateContent(params);
+    } catch (e: any) {
+      const isQuotaError =
+        e.message?.includes("429") ||
+        e.message?.includes("RESOURCE_EXHAUSTED") ||
+        e.error?.code === 429;
+
+      if (isQuotaError) {
+        keyState.exhaustedUntil = Date.now() + 5 * 60 * 1000;
+        console.warn("[Gemini] Server key quota exceeded. Switching to next key...");
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  await sendAllKeysExhaustedAlert();
+  const err = new Error("GEMINI_QUOTA_EXCEEDED");
+  (err as any).status = 429;
+  throw err;
+}
+
+// Deduplication: only send one alert email per exhaustion window
+let serverAllKeysAlertUntil = 0;
+
+async function sendAllKeysExhaustedAlert() {
+  const now = Date.now();
+  if (now < serverAllKeysAlertUntil) return;
+  serverAllKeysAlertUntil = now + 5 * 60 * 1000;
+
+  console.error("[Gemini] ALL API KEYS EXHAUSTED — sending alert email.");
+
+  const supportEmail = process.env.SUPPORT_EMAIL;
+  if (!supportEmail) {
+    console.error("[Gemini] SUPPORT_EMAIL not configured — cannot send alert.");
+    return;
+  }
+
+  const transport = createMailTransport();
+  if (!transport) {
+    console.error("[Gemini] No email transport configured — cannot send alert.");
+    return;
+  }
+
+  const from = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+  const keyCount = serverGeminiKeys.length;
+  const timestamp = new Date().toISOString();
+
+  try {
+    await transport.sendMail({
+      from,
+      to: supportEmail,
+      subject: "[PTE Ninja] ⚠️ All Gemini API Keys Quota Exhausted",
+      text: [
+        "⚠️  PTE Ninja — All Gemini API Keys Exhausted",
+        "",
+        `All ${keyCount} configured Gemini API key(s) have hit their quota limits.`,
+        `Time: ${timestamp}`,
+        "",
+        "Please rotate or add new API keys (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3) immediately.",
+        "Keys will automatically resume after their 5-minute cooldown resets.",
+      ].join("\n"),
+    });
+    console.warn("[Gemini] Alert email sent to support team.");
+  } catch (mailErr) {
+    console.error("[Gemini] Failed to send alert email:", mailErr);
+  }
+}
+
+
 // ─── Stripe Webhook ───────────────────────────────────────────────────────────
 // IMPORTANT: This route must be registered BEFORE app.use(express.json()) so
 // that express.raw() can capture the raw body needed for signature verification.
@@ -758,8 +864,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     return res.status(400).json({ error: "Message is required." });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (serverGeminiKeys.length === 0) {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
@@ -775,7 +880,6 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
   const safeIssueType = sanitizePromptValue(userDetails?.issueType ?? "General");
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `${SUPPORT_BOT_SYSTEM_PROMPT}\n\nUser name: ${safeUserName}\nIssue type: ${safeIssueType}`;
 
     // Build the full contents array: history + new user message
@@ -784,7 +888,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
       { role: "user" as const, parts: [{ text: message.trim() }] },
     ];
 
-    const response = await ai.models.generateContent({
+    const response = await serverCallGemini({
       model: "gemini-2.5-flash",
       contents,
       config: { systemInstruction },
@@ -792,10 +896,27 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
 
     const text = response.text ?? "";
     res.json({ response: text });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "GEMINI_QUOTA_EXCEEDED") {
+      return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
+    }
     console.error("Support chat error:", error);
     res.status(500).json({ error: "Failed to generate response. Please try again." });
   }
+});
+
+// ─── Gemini Quota Alert (called by frontend when all client-side keys exhausted) ──
+const geminiQuotaAlertLimiter = rateLimit({
+  windowMs: 5 * 60_000, // 5 minutes
+  max: 1,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Alert already sent." },
+});
+
+app.post("/api/gemini-quota-alert", geminiQuotaAlertLimiter, async (_req, res) => {
+  await sendAllKeysExhaustedAlert();
+  res.json({ ok: true });
 });
 
 // ─── Welcome Email ────────────────────────────────────────────────────────────
