@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Zap, 
@@ -3960,18 +3960,22 @@ function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: st
     </button>
   );
 }
+const MOCK_TESTS_PAGE_SIZE = 20;
+
 function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void, savedSessions?: Record<string, MockTestSavedSession> | null, onResumeTest: (test: MockTest, session: MockTestSavedSession) => void }) {
+  const [visibleCount, setVisibleCount] = useState(MOCK_TESTS_PAGE_SIZE);
   // Also include legacy single-session for backward compat
   const allSavedSessions: Record<string, MockTestSavedSession> = {
     ...(user.savedMockSession ? { [user.savedMockSession.testId]: user.savedMockSession } : {}),
     ...(savedSessions ?? {}),
   };
+  const visibleTests = MOCK_TESTS.slice(0, visibleCount);
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-app-text font-display tracking-tight">Mock Tests</h2>
-          <p className="text-sm text-app-text-muted">100 Full-length PTE Academic practice tests</p>
+          <p className="text-sm text-app-text-muted">{MOCK_TESTS.length} Full-length PTE Academic practice tests</p>
         </div>
         <button 
           onClick={onBack}
@@ -4018,7 +4022,7 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
       })}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_TESTS.map((test, index) => {
+        {visibleTests.map((test, index) => {
           const isCompleted = user.mockTestResults?.some(r => r.testId === test.id);
           const bestScore = user.mockTestResults?.filter(r => r.testId === test.id).reduce((max, r) => Math.max(max, r.overallScore), 0) || 0;
           const isInProgress = !!allSavedSessions[test.id];
@@ -4026,9 +4030,9 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
           return (
             <motion.div
               key={test.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.01 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: Math.min(index, 4) * 0.05 }}
               className={cn(
                 "group relative bg-app-surface border rounded-3xl p-6 transition-all overflow-hidden",
                 isInProgress ? "border-app-primary/40 ring-1 ring-app-primary/20" : "border-app-primary/10 hover:border-app-primary/30"
@@ -4101,6 +4105,16 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
           );
         })}
       </div>
+      {visibleCount < MOCK_TESTS.length && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={() => setVisibleCount(c => c + MOCK_TESTS_PAGE_SIZE)}
+            className="px-8 py-3 bg-app-surface border border-app-primary/20 rounded-2xl font-bold text-sm uppercase tracking-widest text-app-primary hover:bg-app-primary/10 transition-all"
+          >
+            Load More ({MOCK_TESTS.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -4145,9 +4159,16 @@ function MockTestSession({
   // Debounce ref for auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Build an O(1) lookup map to avoid scanning 10K+ tasks on every navigation.
+  const taskMap = useMemo(() => {
+    const map: Record<string, PTETask> = {};
+    for (const t of allTasks) map[t.id] = t;
+    return map;
+  }, [allTasks]);
+
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
-  const currentTask = allTasks.find(t => t.id === currentTaskId)!;
+  const currentTask = taskMap[currentTaskId]!;
 
   const personalIntroTask: PTETask = {
     id: 'personal-intro',
@@ -4304,7 +4325,7 @@ function MockTestSession({
 
     for (let i = 0; i < totalTasks; i++) {
       const taskId = allTaskIds[i];
-      const task = allTasks.find(t => t.id === taskId)!;
+      const task = taskMap[taskId]!;
       // Use the ref instead of the stale `taskResponses` state value so the last
       // submitted task response is always included.
       const response = taskResponsesRef.current[taskId];
@@ -6503,6 +6524,7 @@ function TaskModal({
               try {
                 const ctx = getAudioContext();
                 if (ctx) {
+                  if (ctx.state === 'suspended') await ctx.resume();
                   const arrayBuffer = base64ToArrayBuffer(base64);
                   const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
                   if (!isCancelled) {
@@ -6564,20 +6586,6 @@ function TaskModal({
             
             if (isCancelled) return;
             
-            // Start audio immediately after beep
-            audio.play().then(() => {
-              if (!isCancelled) {
-                console.log("[Audio] Audio playback started");
-                setIsAudioPlaying(true);
-                setIsPreparingAudio(false);
-                if (audio.duration) {
-                  setTimeLeft(Math.ceil(audio.duration));
-                }
-              }
-            }).catch(err => {
-              console.error("[Audio] Playback failed:", err);
-            });
-
             audio.onended = handleAudioEnd;
 
             audio.onerror = (e) => {
@@ -6594,7 +6602,14 @@ function TaskModal({
               const playPromise = audio.play();
               if (playPromise !== undefined) {
                 await playPromise;
-                if (!isCancelled) setIsAudioPlaying(true);
+                if (!isCancelled) {
+                  console.log("[Audio] Audio playback started");
+                  setIsAudioPlaying(true);
+                  setIsPreparingAudio(false);
+                  if (audio.duration) {
+                    setTimeLeft(Math.ceil(audio.duration));
+                  }
+                }
               }
             } catch (playErr: any) {
               // Ignore AbortError which happens when pause() is called before play() promise resolves
