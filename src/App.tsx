@@ -2518,7 +2518,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
       <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
           <StatItem value="98%" label="Accuracy Rate" />
-          <StatItem value="25k+" label="Practice Tasks" />
+          <StatItem value="22k+" label="Practice Tasks" />
           <StatItem value="15k+" label="Active Ninjas" />
           <StatItem value="24/7" label="AI Support" />
         </div>
