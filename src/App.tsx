@@ -6454,6 +6454,14 @@ function TaskModal({
         setIsAudioPlaying(false);
         setIsPreparingAudio(false);
         setAudioFinished(true);
+        // Pre-set timeLeft to the upcoming phase's value so there is no "0 sec" flash
+        if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+          setTimeLeft(task.prepTime);
+        } else {
+          if (task.category === 'Summarize Spoken Text') setTimeLeft(600);
+          else if (task.section === 'listening') setTimeLeft(120);
+          else setTimeLeft(task.recordingTime ?? 15);
+        }
         // Small pause after audio before next phase
         setTimeout(() => {
           if (isCancelled) return;
@@ -7638,7 +7646,7 @@ function TaskModal({
                         {phase === 'prep' ? (
                           task.category === 'Repeat Sentence' ? `Beginning in ${timeLeft} sec` : `Recording starts in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
@@ -7770,7 +7778,7 @@ function TaskModal({
                         {phase === 'prep' ? (
                           `Beginning in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
