@@ -140,8 +140,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 fetch('/api/ensure-admin-role', {
                   method: 'POST',
                   headers: { 'Authorization': `Bearer ${idToken}` },
-                }).catch(() => {});
-              }).catch(() => {});
+                }).catch((err) => console.error('Failed to ensure admin role:', err));
+              }).catch((err) => console.error('Failed to get ID token for admin role check:', err));
             }
           } else {
             // New user or guest
@@ -221,7 +221,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           // Record a visit once per browser session
           if (!hasRecordedVisitRef.current) {
             hasRecordedVisitRef.current = true;
-            fetch('/api/record-visit', { method: 'POST' }).catch(() => {});
+            fetch('/api/record-visit', { method: 'POST' }).catch((err) => console.error('Failed to record visit:', err));
           }
         }, (err: any) => {
           // If we're anonymous and get a permission error, it's likely the same root cause

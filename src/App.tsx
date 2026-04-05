@@ -5095,7 +5095,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                                   : "bg-app-bg border-app-primary/20 text-app-text-muted",
                                 isToday && !isLogged && "border-dashed border-orange-500/50"
                               )}>
-                                {isLogged ? <Check size={12} strokeWidth={3} /> : <span className="text-[9px] font-bold">{date.getDate()}</span>}
+                                {isLogged ? <Check size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">{date.getDate()}</span>}
                               </div>
                               <span className="text-[8px] uppercase font-bold text-app-text-muted">
                                 {date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}

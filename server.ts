@@ -1083,7 +1083,7 @@ app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
 // Rate-limited to prevent abuse. No auth required.
 const visitLimiter = rateLimit({
   windowMs: 60_000,
-  max: 5,
+  max: 2,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip ?? "unknown",
