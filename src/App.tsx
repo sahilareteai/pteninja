@@ -48,13 +48,15 @@ import {
   Moon,
   Database,
   Menu,
-  MessageCircle
+  MessageCircle,
+  Save,
+  RotateCcw
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { DatePicker } from './components/DatePicker';
-import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, UserData } from './types';
+import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, DailyGoal, ScheduledTask, TaskCompletion, MockTest, MockTestResult, MockTestSavedSession, UserData } from './types';
 import { CurrencyService } from './services/currencyService';
 import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
@@ -65,7 +67,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { SupportBot } from './components/SupportBot';
-import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
+import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
 import { seedTasksToFirestore } from './services/taskService';
 
 // Module-level mic stream cache — shared across TaskModal instances so the browser
@@ -1223,6 +1225,8 @@ function AppContent() {
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [selectedTask, setSelectedTask] = useState<PTETask | null>(null);
   const [activeMockTest, setActiveMockTest] = useState<MockTest | null>(null);
+  // When resuming a test, this holds the saved session to restore from.
+  const [resumeSession, setResumeSession] = useState<MockTestSavedSession | null>(null);
   const [currentCategoryTasks, setCurrentCategoryTasks] = useState<PTETask[]>([]);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [isSyncingPortal, setIsSyncingPortal] = useState(false);
@@ -1604,8 +1608,25 @@ function AppContent() {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
-    setActiveMockTest(null);
-    setActiveTab('mock-tests');
+    // Do NOT close the session here. The scorecard inside MockTestSession is still
+    // visible. The user will dismiss it via the "Back to Dojo" button, which calls
+    // onClose() and sets activeMockTest to null.
+  };
+
+  const handleSaveMockSession = async (session: MockTestSavedSession | null, testId?: string) => {
+    if (!user?.uid) return;
+    const userRef = doc(db, 'users', user.uid);
+    try {
+      if (session !== null) {
+        // Save/update this specific test's session in the map
+        await updateDoc(userRef, { [`savedMockSessions.${session.testId}`]: session });
+      } else if (testId) {
+        // Clear only this test's session from the map
+        await updateDoc(userRef, { [`savedMockSessions.${testId}`]: deleteField() });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
   };
 
   if (loading) {
@@ -1807,7 +1828,9 @@ function AppContent() {
                 key="mock-tests"
                 user={user}
                 onBack={() => setActiveTab('dashboard')}
-                onStartTest={(test) => setActiveMockTest(test)}
+                onStartTest={(test) => { setResumeSession(null); setActiveMockTest(test); }}
+                savedSessions={user?.savedMockSessions ?? null}
+                onResumeTest={(test, session) => { setResumeSession(session); setActiveMockTest(test); }}
               />
             ) : activeTab === 'roadmap' ? (
               <RoadmapView 
@@ -1952,11 +1975,13 @@ function AppContent() {
         )}
         {activeMockTest && (
           <MockTestSession 
-            key={activeMockTest.id}
+            key={activeMockTest.id + (resumeSession?.savedAt ?? '')}
             test={activeMockTest}
             allTasks={tasks}
             onFinish={handleMockTestFinish}
-            onClose={() => setActiveMockTest(null)}
+            onClose={() => { setActiveMockTest(null); setResumeSession(null); setActiveTab('mock-tests'); }}
+            onSaveAndExit={handleSaveMockSession}
+            savedSession={resumeSession}
           />
         )}
         {selectedTask && (
@@ -3928,7 +3953,12 @@ function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: st
     </button>
   );
 }
-function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void }) {
+function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void, savedSessions?: Record<string, MockTestSavedSession> | null, onResumeTest: (test: MockTest, session: MockTestSavedSession) => void }) {
+  // Also include legacy single-session for backward compat
+  const allSavedSessions: Record<string, MockTestSavedSession> = {
+    ...(user.savedMockSession ? { [user.savedMockSession.testId]: user.savedMockSession } : {}),
+    ...(savedSessions ?? {}),
+  };
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
@@ -3945,10 +3975,46 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
         </button>
       </div>
 
+      {/* Resume banners for all in-progress tests */}
+      {Object.values(allSavedSessions).map((savedSession) => {
+        const savedTest = MOCK_TESTS.find(t => t.id === savedSession.testId);
+        if (!savedTest) return null;
+        const totalTasks = savedTest.sections.reduce((s, sec) => s + sec.taskIds.length, 0);
+        const completedTasks = Object.keys(savedSession.taskResponses).length;
+        const savedAt = new Date(savedSession.savedAt).toLocaleString();
+        return (
+          <motion.div
+            key={savedSession.testId}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-app-primary/10 border border-app-primary/30 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-app-primary/20 rounded-xl flex items-center justify-center shrink-0">
+                <RotateCcw className="text-app-primary" size={20} />
+              </div>
+              <div>
+                <p className="font-bold text-app-text text-sm">{savedTest.title} — In Progress</p>
+                <p className="text-xs text-app-text-muted mt-0.5">
+                  {completedTasks} of {totalTasks} tasks completed · Saved {savedAt}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onResumeTest(savedTest, savedSession)}
+              className="shrink-0 w-full sm:w-auto px-5 py-2.5 bg-app-primary text-app-bg rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-app-accent transition-all flex items-center justify-center gap-2"
+            >
+              <Play size={14} fill="currentColor" /> Resume Test
+            </button>
+          </motion.div>
+        );
+      })}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {MOCK_TESTS.map((test, index) => {
           const isCompleted = user.mockTestResults?.some(r => r.testId === test.id);
           const bestScore = user.mockTestResults?.filter(r => r.testId === test.id).reduce((max, r) => Math.max(max, r.overallScore), 0) || 0;
+          const isInProgress = !!allSavedSessions[test.id];
 
           return (
             <motion.div
@@ -3956,10 +4022,18 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.01 }}
-              className="group relative bg-app-surface border border-app-primary/10 rounded-3xl p-6 hover:border-app-primary/30 transition-all overflow-hidden"
+              className={cn(
+                "group relative bg-app-surface border rounded-3xl p-6 transition-all overflow-hidden",
+                isInProgress ? "border-app-primary/40 ring-1 ring-app-primary/20" : "border-app-primary/10 hover:border-app-primary/30"
+              )}
             >
               <div className="absolute top-0 right-0 p-4">
-                {isCompleted ? (
+                {isInProgress ? (
+                  <div className="flex items-center gap-1 text-app-primary bg-app-primary/10 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                    <Save size={12} />
+                    In Progress
+                  </div>
+                ) : isCompleted ? (
                   <div className="flex items-center gap-1 text-green-500 bg-green-500/10 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
                     <Check size={12} />
                     Completed
@@ -4005,10 +4079,15 @@ function MockTestView({ user, onStartTest, onBack }: { user: UserData, onStartTe
                 )}
 
                 <button
-                  onClick={() => onStartTest(test)}
-                  className="w-full py-3 bg-app-primary text-app-bg rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
+                  onClick={() => isInProgress ? onResumeTest(test, allSavedSessions[test.id]) : onStartTest(test)}
+                  className={cn(
+                    "w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all shadow-lg",
+                    isInProgress
+                      ? "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10 flex items-center justify-center gap-2"
+                      : "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10"
+                  )}
                 >
-                  {isCompleted ? 'Retake Test' : 'Start Mock Test'}
+                  {isInProgress ? <><RotateCcw size={14} /> Resume Test</> : isCompleted ? 'Retake Test' : 'Start Mock Test'}
                 </button>
               </div>
             </motion.div>
@@ -4023,22 +4102,41 @@ function MockTestSession({
   test, 
   allTasks,
   onFinish, 
-  onClose 
+  onClose,
+  onSaveAndExit,
+  savedSession,
 }: { 
   test: MockTest, 
   allTasks: PTETask[],
   onFinish: (result: MockTestResult) => void, 
-  onClose: () => void 
+  onClose: () => void,
+  onSaveAndExit: (session: MockTestSavedSession | null, testId?: string) => Promise<void>,
+  savedSession?: MockTestSavedSession | null,
 }) {
-  const [phase, setPhase] = useState<'instructions' | 'personal-intro' | 'section-instructions' | 'testing' | 'calculating'>('instructions');
-  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-  const [sectionTimeLeft, setSectionTimeLeft] = useState(test.sections[0].duration * 60);
-  const [taskResponses, setTaskResponses] = useState<Record<string, string>>({});
+  const [phase, setPhase] = useState<'instructions' | 'personal-intro' | 'section-instructions' | 'testing' | 'calculating'>(
+    savedSession ? 'section-instructions' : 'instructions'
+  );
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(savedSession?.sectionIndex ?? 0);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(savedSession?.taskIndex ?? 0);
+  const [sectionTimeLeft, setSectionTimeLeft] = useState(
+    savedSession?.sectionTimeLeft ?? (test.sections[savedSession?.sectionIndex ?? 0]?.duration ?? 60) * 60
+  );
+  const [taskResponses, setTaskResponses] = useState<Record<string, string>>(savedSession?.taskResponses ?? {});
+  // Ref mirrors taskResponses so handleCompleteTest always reads the latest value,
+  // avoiding a stale-closure bug when the last task's setState hasn't flushed yet.
+  const taskResponsesRef = useRef<Record<string, string>>(savedSession?.taskResponses ?? {});
   const [taskScores, setTaskScores] = useState<Record<string, number>>({});
   const [calculationProgress, setCalculationProgress] = useState(0);
   const [finalResult, setFinalResult] = useState<MockTestResult | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  // Ref flag set by the section timer so we can call handleNextSection outside the
+  // setSectionTimeLeft updater (side-effects in state updaters are not safe).
+  const timerExpiredRef = useRef(false);
+  // Guard against double invocations of handleCompleteTest (e.g. timer + user click race).
+  const isCompletingRef = useRef(false);
+  // Debounce ref for auto-save
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentSection = test.sections[currentSectionIndex];
   const currentTaskId = currentSection.taskIds[currentTaskIndex];
@@ -4057,19 +4155,62 @@ function MockTestSession({
   };
 
   useEffect(() => {
-    if (phase === 'testing') {
-      const timer = setInterval(() => {
-        setSectionTimeLeft(prev => {
-          if (prev <= 1) {
-            handleNextSection();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
+    if (phase !== 'testing') return;
+    timerExpiredRef.current = false;
+    const timer = setInterval(() => {
+      setSectionTimeLeft(prev => {
+        if (prev <= 1) {
+          // Mark expiry via ref so the effect below can advance the section safely.
+          timerExpiredRef.current = true;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
   }, [currentSectionIndex, phase]);
+
+  // Advance to the next section when the timer hits zero.
+  // Keeping this in a separate effect avoids calling handleNextSection() inside the
+  // setSectionTimeLeft updater, which is not safe for side-effects.
+  // `phase` is included in deps so the check `phase === 'testing'` always reflects
+  // the latest value.
+  useEffect(() => {
+    if (timerExpiredRef.current && sectionTimeLeft === 0 && phase === 'testing') {
+      timerExpiredRef.current = false;
+      handleNextSection();
+    }
+  // `handleNextSection` and `currentSectionIndex` are omitted because their values
+  // are always in sync with the render that last set sectionTimeLeft to 0 — the
+  // timer can only fire once per section (guarded by timerExpiredRef).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionTimeLeft, phase]);
+
+  // Auto-save progress after every task or section change so the user can resume.
+  useEffect(() => {
+    if (isCompletingRef.current) return;
+    if (phase !== 'testing' && phase !== 'section-instructions') return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      const session: MockTestSavedSession = {
+        testId: test.id,
+        sectionIndex: currentSectionIndex,
+        taskIndex: currentTaskIndex,
+        taskResponses: taskResponsesRef.current,
+        sectionTimeLeft,
+        savedAt: new Date().toISOString(),
+      };
+      onSaveAndExit(session).catch(() => {});
+    }, 800);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  // Auto-save progress after every task or section change so the user can resume.
+  // `test.id` and `onSaveAndExit` never change for a mounted session instance, so
+  // omitting them from deps is safe. `sectionTimeLeft` is intentionally excluded —
+  // we don't want to re-save on every timer tick, only on meaningful navigation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTaskIndex, currentSectionIndex]);
 
   const handleNextSection = () => {
     if (currentSectionIndex < test.sections.length - 1) {
@@ -4088,11 +4229,15 @@ function MockTestSession({
       return;
     }
 
-    // Store response for later analysis if it's a mock test
-    // If score is passed as a string (from my previous edit), handle it
-    const actualResponse = typeof score === 'string' ? score : response;
-    setTaskResponses(prev => ({ ...prev, [currentTaskId]: String(actualResponse || '') }));
-    
+    // score may actually be a response string when TaskModal passes the raw text/audio
+    // (it uses `onFinish(response as any)` for mock-test objective tasks).
+    const actualResponse = typeof score === 'string' ? score : (response ?? '');
+
+    // Update the ref first (synchronous) so handleCompleteTest always has the very
+    // latest responses even when it is invoked before the setState flush completes.
+    taskResponsesRef.current = { ...taskResponsesRef.current, [currentTaskId]: actualResponse };
+    setTaskResponses({ ...taskResponsesRef.current });
+
     if (currentTaskIndex < currentSection.taskIds.length - 1) {
       setCurrentTaskIndex(prev => prev + 1);
     } else {
@@ -4109,7 +4254,35 @@ function MockTestSession({
     setShowExitConfirm(true);
   };
 
+  const handleSaveAndExit = async () => {
+    setIsSavingSession(true);
+    try {
+      const session: MockTestSavedSession = {
+        testId: test.id,
+        sectionIndex: currentSectionIndex,
+        taskIndex: currentTaskIndex,
+        taskResponses: taskResponsesRef.current,
+        sectionTimeLeft,
+        savedAt: new Date().toISOString(),
+      };
+      await onSaveAndExit(session);
+      toast.success('Progress saved! You can resume this test anytime.');
+    } catch {
+      toast.error('Could not save progress. Please try again.');
+    } finally {
+      setIsSavingSession(false);
+    }
+    releaseGlobalMicStream();
+    setShowExitConfirm(false);
+    onClose();
+  };
+
   const handleCompleteTest = async (isPartial = false) => {
+    // Guard against double invocations (e.g. simultaneous timer expiry + user click).
+    if (isCompletingRef.current) return;
+    isCompletingRef.current = true;
+    // Cancel any pending auto-save debounce; we'll clear the session properly below.
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setPhase('calculating');
     const sectionScores: Record<PTESection, number> = {
       speaking: 0,
@@ -4125,7 +4298,9 @@ function MockTestSession({
     for (let i = 0; i < totalTasks; i++) {
       const taskId = allTaskIds[i];
       const task = allTasks.find(t => t.id === taskId)!;
-      const response = taskResponses[taskId];
+      // Use the ref instead of the stale `taskResponses` state value so the last
+      // submitted task response is always included.
+      const response = taskResponsesRef.current[taskId];
       
       setCalculationProgress(Math.round((i / totalTasks) * 100));
 
@@ -4197,13 +4372,19 @@ function MockTestSession({
       completedAt: new Date().toISOString(),
       sectionScores,
       overallScore,
-      taskResponses,
+      taskResponses: taskResponsesRef.current,
       ...(isPartial && { partial: true })
     };
 
-    setFinalResult(result);
     releaseGlobalMicStream();
+    // Clear the saved session now that the test is complete.
+    onSaveAndExit(null, test.id).catch(() => {});
+    // Save the result to the database (fire-and-forget; toast fires from onFinish).
     onFinish(result);
+    // Show the scorecard. This must happen AFTER onFinish is called so that the
+    // parent's handleMockTestFinish no longer closes the session on its own — the
+    // user dismisses the scorecard themselves via the "Back to Dojo" button.
+    setFinalResult(result);
   };
 
   if (finalResult) {
@@ -4344,7 +4525,7 @@ function MockTestSession({
               onClick={() => setPhase('personal-intro')}
               className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Start Personal Intro <ArrowRight size={18} />
+              Start Test <ArrowRight size={18} />
             </button>
           </div>
         </motion.div>
@@ -4367,6 +4548,47 @@ function MockTestSession({
 
     return (
       <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
+        {/* Exit / Save Confirmation Modal — must be included here since this is an early return */}
+        {showExitConfirm && (
+          <div className="absolute inset-0 z-[110] bg-app-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-app-surface rounded-3xl p-8 border border-app-primary/20 max-w-sm w-full text-center space-y-6 shadow-2xl"
+            >
+              <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                <LogOut className="text-app-primary" size={28} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">Pause Test?</h3>
+                <p className="text-app-text-muted text-sm leading-relaxed">
+                  Choose how you'd like to proceed. You can save your progress and resume later, or end the test now and view your results.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setShowExitConfirm(false)}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
+                >
+                  Keep Going
+                </button>
+                <button
+                  onClick={handleSaveAndExit}
+                  disabled={isSavingSession}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-app-primary text-app-bg hover:bg-app-accent transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {isSavingSession ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> Save &amp; Exit (Resume Later)</>}
+                </button>
+                <button
+                  onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                >
+                  End Test &amp; See Results
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -4383,29 +4605,36 @@ function MockTestSession({
           </div>
 
           <div className="overflow-y-auto flex-1 space-y-3 sm:space-y-4 text-app-text-muted text-sm leading-relaxed pr-1">
+            {savedSession && (
+              <div className="bg-app-primary/10 border border-app-primary/20 rounded-xl p-3 flex items-center gap-2 text-xs text-app-primary font-bold">
+                <RotateCcw size={14} /> Resuming from task {currentTaskIndex + 1} of {currentSection.taskIds.length}
+              </div>
+            )}
             <p className="text-base font-bold text-app-text mb-2">Instructions:</p>
             <p>{sectionDetails[currentSection.section]}</p>
             <div className="bg-app-bg p-3 sm:p-4 rounded-xl border border-app-primary/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock size={16} className="text-app-primary" />
-                <span className="font-bold uppercase tracking-widest text-[10px]">Duration</span>
+                <span className="font-bold uppercase tracking-widest text-[10px]">Time Remaining</span>
               </div>
-              <span className="text-app-text font-black">{currentSection.duration} Minutes</span>
+              <span className="text-app-text font-black">
+                {Math.floor(sectionTimeLeft / 60)}:{(sectionTimeLeft % 60).toString().padStart(2, '0')}
+              </span>
             </div>
           </div>
 
           <div className="flex gap-3 mt-5 sm:mt-6 sm:gap-4 shrink-0">
             <button
               onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
-              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
+              className="flex items-center gap-2 px-4 py-3.5 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
             >
-              <LogOut size={14} /> End Test
+              <Save size={14} /> Save &amp; Exit
             </button>
             <button 
               onClick={() => setPhase('testing')}
               className="flex-1 py-3.5 sm:py-5 bg-app-primary text-app-bg rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2"
             >
-              Begin Section <Play size={18} />
+              {savedSession ? <>Resume from Task {currentTaskIndex + 1} <RotateCcw size={18} /></> : <>Begin Section <Play size={18} /></>}
             </button>
           </div>
         </motion.div>
@@ -4415,7 +4644,7 @@ function MockTestSession({
 
   return (
     <div className="fixed inset-0 z-[100] bg-app-bg flex flex-col">
-      {/* Exit Confirmation Modal */}
+      {/* Exit / Save Confirmation Modal */}
       {showExitConfirm && (
         <div className="absolute inset-0 z-[110] bg-app-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
@@ -4423,27 +4652,34 @@ function MockTestSession({
             animate={{ opacity: 1, scale: 1 }}
             className="bg-app-surface rounded-3xl p-8 border border-app-primary/20 max-w-sm w-full text-center space-y-6 shadow-2xl"
           >
-            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
-              <LogOut className="text-red-400" size={28} />
+            <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+              <LogOut className="text-app-primary" size={28} />
             </div>
             <div>
-              <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">End Test?</h3>
+              <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">Pause Test?</h3>
               <p className="text-app-text-muted text-sm leading-relaxed">
-                Your attempted tasks will be evaluated and results will be shown. Unattempted tasks receive the minimum score (10 out of 90 on the PTE scale).
+                Choose how you'd like to proceed. You can save your progress and resume later, or end the test now and view your results.
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3">
               <button
                 onClick={() => setShowExitConfirm(false)}
-                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
+                className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
               >
                 Keep Going
               </button>
               <button
-                onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
-                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500 text-white hover:bg-red-400 transition-all"
+                onClick={handleSaveAndExit}
+                disabled={isSavingSession}
+                className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-app-primary text-app-bg hover:bg-app-accent transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Exit & Results
+                {isSavingSession ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> Save &amp; Exit (Resume Later)</>}
+              </button>
+              <button
+                onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
+                className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+              >
+                End Test &amp; See Results
               </button>
             </div>
           </motion.div>
@@ -4484,9 +4720,9 @@ function MockTestSession({
           )}
           <button 
             onClick={() => { releaseGlobalMicStream(); handleExitClick(); }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-red-400 hover:bg-red-400/10 hover:border-red-400/30 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
           >
-            <LogOut size={14} /> Exit Test
+            <Save size={14} /> Save &amp; Exit
           </button>
         </div>
       </div>
@@ -4498,6 +4734,7 @@ function MockTestSession({
           onClose={onClose}
           onFinish={handleNextTask}
           isMockTest={true}
+          onMockExit={handleExitClick}
         />
       </div>
     </div>
@@ -4565,7 +4802,14 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   const highPriorityTasks = allTasks.filter(t => weakestSectionIds.includes(t.section) && !user?.completedTasks?.includes(t.id)).slice(0, 2);
   const recommendedTasks = highPriorityTasks.length > 0 ? highPriorityTasks : allTasks.slice(0, 4);
 
-  // Calculate current belt based on score
+  // Per-section task counts and completed counts
+  const sectionData = (['speaking', 'writing', 'reading', 'listening'] as PTESection[]).map(s => {
+    const sectionTasks = allTasks.filter(t => t.section === s);
+    const completedCount = sectionTasks.filter(t => (user?.completedTasks || []).includes(t.id)).length;
+    return { section: s, total: sectionTasks.length, completed: completedCount };
+  });
+  const completedMockTests = (user?.mockTestResults || []).length;
+  const totalMockTests = MOCK_TESTS.length;
   const getBelt = (score: number) => {
     if (score >= 79) return { title: 'Black Belt', next: 'Mastery' };
     if (score >= 65) return { title: 'Blue Belt', next: 'Black Belt' };
@@ -4853,44 +5097,139 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
             </div>
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/5">
               <p className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest mb-1">Available</p>
-              <p className="text-2xl font-black text-app-primary">{totalTasks - attemptedTasks}</p>
+              <p className="text-2xl font-black text-app-primary">{totalTasks}</p>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-app-text-muted/50 uppercase tracking-widest">Section Performance</h4>
-            <div className="space-y-2">
-              {[...sectionAverages]
-                .sort((a, b) => a.average - b.average)
-                .map((s) => (
-                  <button
-                    key={s.section}
-                    onClick={() => onSelectSection(s.section)}
-                    className="w-full text-left group p-3 bg-app-bg hover:bg-app-primary/10 border border-app-primary/5 hover:border-app-primary/30 rounded-2xl transition-all duration-200 cursor-pointer"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-bold text-app-text capitalize group-hover:text-app-primary transition-colors">{s.section}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-app-text-muted">
-                          {s.attempts > 0 ? `${Math.round(s.average)}/90` : 'No attempts'}
-                        </span>
-                        <ChevronRight size={12} className="text-app-text-muted/40 group-hover:text-app-primary transition-colors" />
-                      </div>
-                    </div>
-                    <div className="h-1.5 w-full bg-app-surface rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${s.attempts > 0 ? Math.max((s.average / 90) * 100, 5) : 0}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className={cn(
-                          "h-full rounded-full",
-                          s.average === 0 ? "bg-gray-700" : s.average < 50 ? "bg-red-500" : s.average < 79 ? "bg-orange-500" : "bg-app-accent"
-                        )}
-                      />
-                    </div>
-                  </button>
-                ))}
-            </div>
+            {/* Speaking */}
+            <button
+              onClick={() => onSelectSection('speaking')}
+              className="w-full text-left group p-3 bg-teal-500/5 hover:bg-teal-500/10 border border-teal-500/20 hover:border-teal-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-teal-400 uppercase tracking-wide">Speaking</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'speaking')!.completed}/{sectionData.find(d => d.section === 'speaking')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-teal-500">
+                    {sectionAverages.find(s => s.section === 'speaking')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'speaking')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-teal-500/40 group-hover:text-teal-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-teal-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'speaking')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'speaking')!.completed / sectionData.find(d => d.section === 'speaking')!.total) * 100, sectionData.find(d => d.section === 'speaking')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-teal-500"
+                />
+              </div>
+            </button>
+            {/* Writing */}
+            <button
+              onClick={() => onSelectSection('writing')}
+              className="w-full text-left group p-3 bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wide">Writing</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'writing')!.completed}/{sectionData.find(d => d.section === 'writing')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-orange-500">
+                    {sectionAverages.find(s => s.section === 'writing')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'writing')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-orange-500/40 group-hover:text-orange-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-orange-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'writing')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'writing')!.completed / sectionData.find(d => d.section === 'writing')!.total) * 100, sectionData.find(d => d.section === 'writing')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-orange-500"
+                />
+              </div>
+            </button>
+            {/* Reading */}
+            <button
+              onClick={() => onSelectSection('reading')}
+              className="w-full text-left group p-3 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">Reading</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'reading')!.completed}/{sectionData.find(d => d.section === 'reading')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-blue-400">
+                    {sectionAverages.find(s => s.section === 'reading')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'reading')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-blue-400/40 group-hover:text-blue-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-blue-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'reading')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'reading')!.completed / sectionData.find(d => d.section === 'reading')!.total) * 100, sectionData.find(d => d.section === 'reading')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-blue-500"
+                />
+              </div>
+            </button>
+            {/* Listening */}
+            <button
+              onClick={() => onSelectSection('listening')}
+              className="w-full text-left group p-3 bg-purple-500/5 hover:bg-purple-500/10 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-purple-400 uppercase tracking-wide">Listening</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {sectionData.find(d => d.section === 'listening')!.completed}/{sectionData.find(d => d.section === 'listening')!.total} done
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-400">
+                    {sectionAverages.find(s => s.section === 'listening')!.attempts > 0 ? `${Math.round(sectionAverages.find(s => s.section === 'listening')!.average)}/90` : 'No attempts'}
+                  </span>
+                  <ChevronRight size={12} className="text-purple-400/40 group-hover:text-purple-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-purple-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${sectionData.find(d => d.section === 'listening')!.total > 0 ? Math.max((sectionData.find(d => d.section === 'listening')!.completed / sectionData.find(d => d.section === 'listening')!.total) * 100, sectionData.find(d => d.section === 'listening')!.completed > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-purple-500"
+                />
+              </div>
+            </button>
+            {/* Mock Tests */}
+            <button
+              onClick={onViewMockTests}
+              className="w-full text-left group p-3 bg-yellow-500/5 hover:bg-yellow-500/10 border border-yellow-500/20 hover:border-yellow-500/40 rounded-2xl transition-all duration-200"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">Mock Tests</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-app-text-muted">
+                    {completedMockTests}/{totalMockTests} done
+                  </span>
+                  <ChevronRight size={12} className="text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-yellow-500/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${totalMockTests > 0 ? Math.max((completedMockTests / totalMockTests) * 100, completedMockTests > 0 ? 2 : 0) : 0}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full rounded-full bg-yellow-500"
+                />
+              </div>
+            </button>
           </div>
 
           <div className="p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-center gap-4">
@@ -5748,14 +6087,16 @@ function TaskModal({
   onFinish,
   onPrev,
   onNext,
-  isMockTest = false
+  isMockTest = false,
+  onMockExit,
 }: { 
   task: PTETask, 
   onClose: () => void, 
   onFinish: (score: number, response?: string) => void | Promise<void>,
   onPrev?: () => void,
   onNext?: () => void,
-  isMockTest?: boolean
+  isMockTest?: boolean,
+  onMockExit?: () => void,
 }) {
   const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(() => {
     const isListeningPrep = task.section === 'listening' || 
@@ -5794,6 +6135,7 @@ function TaskModal({
   const [isPreparingAudio, setIsPreparingAudio] = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
   const [volume, setVolume] = useState(0);
+  const [recordingStopped, setRecordingStopped] = useState(false);
   const recordingAnalyzerRef = useRef<AnalyserNode | null>(null);
   const recordingAnimationFrameRef = useRef<number | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
@@ -5971,6 +6313,7 @@ function TaskModal({
     setSelectedOptions([]);
     setBlankAnswers({});
     setUserInput('');
+    setRecordingStopped(false);
   }, [task.id, task.category, task.paragraphs, task.section, task.hasAudio, task.prepTime, task.recordingTime]);
 
   // Audio logic
@@ -6447,6 +6790,12 @@ function TaskModal({
               // Audio finished, handleAudioEnd will take care of phase transition
               return 0;
             } else {
+              if (isMockTest) {
+                // In mock test mode, don't auto-advance when time runs out.
+                // The sticky footer "Next" button lets the user submit when ready.
+                // The recorder will be stopped by the useEffect below.
+                return 0;
+              }
               handleFinish();
               return 0;
             }
@@ -6457,6 +6806,21 @@ function TaskModal({
     }
     return () => clearInterval(timer);
   }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
+
+  // In mock test mode, stop the MediaRecorder when the recording timer expires
+  // (the user submits manually via the "Next" button).
+  // `task.section` and `mediaRecorder` are intentionally omitted: task.section is stable for a
+  // given TaskModal instance, and mediaRecorder changing mid-recording would be a separate concern.
+  useEffect(() => {
+    if (isMockTest && phase === 'recording' && timeLeft === 0 && task.section === 'speaking') {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        cleanupRecordingAnalysis();
+      }
+      setRecordingStopped(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMockTest, phase, timeLeft]);
 
   const handleFinish = async () => {
     try {
@@ -6488,7 +6852,15 @@ function TaskModal({
         await new Promise(resolve => setTimeout(resolve, 100));
         
         if (isMockTest) {
-          const base64 = await getAudioBase64();
+          // Wrap in try-catch: if no audio was recorded (user didn't speak),
+          // advance to the next task with an empty response (scores minimum) rather
+          // than crashing into the error/feedback phase.
+          let base64 = '';
+          try {
+            base64 = await getAudioBase64();
+          } catch {
+            // No audio recorded — skip gracefully.
+          }
           onFinish(base64 as any); // Pass base64 for later analysis
           return;
         }
@@ -6822,9 +7194,11 @@ function TaskModal({
               </button>
             )}
             <div className="w-px h-6 bg-app-primary/20 mx-2" />
-            <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
-              <X size={20} />
-            </button>
+            {!isMockTest && (
+              <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
+                <X size={20} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -6939,7 +7313,15 @@ function TaskModal({
                       </div>
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-center">
+                      {isMockTest && onMockExit ? (
+                        <button
+                          onClick={onMockExit}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+                        >
+                          <Save size={14} /> Save &amp; Exit
+                        </button>
+                      ) : <div />}
                       <button 
                         onClick={async () => {
                           try {
@@ -6950,7 +7332,7 @@ function TaskModal({
                         }}
                         className="bg-app-primary text-app-bg px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
                       >
-                        {isMockTest ? 'Next Task' : 'Submit Response'}
+                        {isMockTest ? 'Next' : 'Submit Response'}
                       </button>
                     </div>
                   </div>
@@ -7024,7 +7406,7 @@ function TaskModal({
                         ) : phase === 'audio' ? (
                           isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : `Beginning in ${timeLeft} sec`)
                         ) : phase === 'recording' ? (
-                          'Recording...'
+                          recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
                       </span>
                     </div>
@@ -7033,8 +7415,19 @@ function TaskModal({
                       {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && <button 
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
-                          else if (phase === 'recording') handleFinish();
-                          else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
+                          else if (phase === 'recording') {
+                            if (isMockTest) {
+                              // In mock test: stop recording but wait for user to click "Next"
+                              if (mediaRecorder && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                                cleanupRecordingAnalysis();
+                              }
+                              setRecordingStopped(true);
+                              setTimeLeft(0);
+                            } else {
+                              handleFinish();
+                            }
+                          } else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
                             if (audioRef.current) {
                               audioRef.current.play().catch(e => console.error("Manual play failed", e));
                               setIsAudioPlaying(true);
@@ -7050,25 +7443,31 @@ function TaskModal({
                             }
                           }
                         }}
-                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
+                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio || recordingStopped}
                         className={cn(
                           "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl shrink-0",
                           phase === 'prep' ? "bg-app-primary text-app-bg hover:scale-105" : 
-                          phase === 'recording' ? "bg-red-500 text-white hover:scale-105" :
+                          (phase === 'recording' && !recordingStopped) ? "bg-red-500 text-white hover:scale-105" :
+                          recordingStopped ? "bg-gray-400 text-white cursor-default opacity-60" :
                           "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           isPreparingAudio && "cursor-wait"
                         )}
-                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : phase === 'recording' ? 'Stop' : 'Play')}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : 'Play')}
                       >
                         {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
-                          phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                          (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                          recordingStopped ? <CheckCircle size={28} /> :
                           (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
                       </button>}
 
                       <div className="flex-1 overflow-hidden">
-                        {/* Wave Animation when active */}
-                        {(isAudioPlaying || phase === 'recording' || isPreparingAudio) ? (
+                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
+                        {isPreparingAudio ? (
+                          <div className="w-full h-12 flex items-center justify-center">
+                            <Loader2 size={28} className="text-blue-400 animate-spin" />
+                          </div>
+                        ) : (isAudioPlaying || phase === 'recording') ? (
                           <div className="w-full h-12 flex items-center justify-center gap-1">
                             {[...Array(20)].map((_, i) => (
                               <motion.div 
@@ -7125,12 +7524,12 @@ function TaskModal({
                   animate={{ opacity: 1, y: 0 }}
                   className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10 mb-8"
                 >
-                  {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
+                  {(phase === 'recording' && !recordingStopped && task.section === 'speaking') || isAudioPlaying ? (
                     <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
                       {[...Array(20)].map((_, i) => (
                         <motion.div 
                           key={i}
-                          animate={(isAudioPlaying || (phase === 'recording' && task.section === 'speaking')) 
+                          animate={(isAudioPlaying || (phase === 'recording' && !recordingStopped && task.section === 'speaking')) 
                             ? { height: [8, Math.random() * 24 + 8, 8] } 
                             : { height: 8 }
                           }
@@ -7173,14 +7572,25 @@ function TaskModal({
                             setTimeLeft(task.recordingTime ?? 40);
                           }
                         } else if (phase === 'recording') {
-                          handleFinish();
+                          if (isMockTest) {
+                            // In mock test: stop recording but wait for user to click "Next"
+                            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                              mediaRecorder.stop();
+                              cleanupRecordingAnalysis();
+                            }
+                            setRecordingStopped(true);
+                            setTimeLeft(0);
+                          } else {
+                            handleFinish();
+                          }
                         } else if (phase === 'prep') {
                           skipPrep();
                         }
                       }}
                       className={cn(
                         "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl",
-                        phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
+                        (phase === 'recording' && !recordingStopped) ? "bg-red-500 shadow-red-500/20" : 
+                        recordingStopped ? "bg-gray-400 opacity-60 cursor-default" :
                         (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
                         (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
                         isPreparingAudio && "bg-blue-500/50 cursor-wait",
@@ -7188,15 +7598,16 @@ function TaskModal({
                       )}
                     >
                       {isPreparingAudio ? <Loader2 size={24} className="text-white animate-spin" /> : 
+                       (recordingStopped ? <CheckCircle size={24} className="text-white" /> :
                        (phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> : 
                        (phase === 'audio' ? (isAudioPlaying ? <Headphones size={24} className="text-white" /> : <Play size={24} className="text-white ml-1" />) : 
-                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />)))}
+                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />))))}
                     </button>
                     
                     <div className="flex flex-col">
                       <p className="text-xs font-bold text-app-text uppercase tracking-wider">
                         {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : (isAudioPlaying ? "Playing Audio" : "Ready to Play")) : 
-                         (phase === 'prep' ? "Preparing..." : "Recording...")}
+                         (phase === 'prep' ? "Preparing..." : (recordingStopped ? "Recorded" : "Recording..."))}
                       </p>
                       {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
                         <p className="text-[10px] text-app-primary font-medium animate-pulse">Click to start audio</p>
@@ -7602,7 +8013,15 @@ function TaskModal({
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                  {isMockTest && onMockExit && (
+                    <button
+                      onClick={onMockExit}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+                    >
+                      <Save size={14} /> Save &amp; Exit
+                    </button>
+                  )}
                   {task.category !== 'Re-order Paragraphs' && !task.category.includes('Multiple Choice') && !task.category.includes('Fill in the Blanks') && (
                     <span className="text-xs text-app-text-muted">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
                   )}
@@ -7620,7 +8039,7 @@ function TaskModal({
                   }}
                   className="bg-app-primary text-app-bg px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all"
                 >
-                  {isMockTest ? 'Next Task' : 'Submit Response'}
+                  {isMockTest ? 'Next' : 'Submit Response'}
                 </button>
               </div>
             </div>
@@ -7956,13 +8375,38 @@ function TaskModal({
                     }}
                     className="flex-1 py-4 border border-app-primary/20 text-app-text rounded-2xl font-bold uppercase tracking-widest hover:bg-app-surface/50 transition-all"
                   >
-                    {isMockTest ? 'Next Task' : onNext ? 'Next Task' : 'Close'}
+                    {isMockTest ? 'Next' : onNext ? 'Next' : 'Close'}
                   </button>
                 </div>
               </motion.div>
             ) : null}
           </AnimatePresence>
         </div>
+
+        {/* Mock-test sticky footer: always-visible Next + Save & Exit buttons (speaking tasks only) */}
+        {isMockTest && task.section === 'speaking' && (phase === 'prep' || phase === 'audio' || phase === 'recording' || recordingStopped) && (
+          <div className="border-t border-app-primary/10 px-6 py-4 flex items-center justify-between gap-3 bg-app-surface shrink-0">
+            {onMockExit && (
+              <button
+                onClick={onMockExit}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+              >
+                <Save size={14} /> Save &amp; Exit
+              </button>
+            )}
+            <button
+              onClick={async () => {
+                try { await handleFinish(); } catch (e) {
+                  console.error("Finish failed:", e);
+                  toast.error("Could not submit task. Please try again.");
+                }
+              }}
+              className="ml-auto flex items-center gap-2 px-6 py-2.5 bg-app-primary text-app-bg rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
+            >
+              Next <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

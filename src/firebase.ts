@@ -7,7 +7,7 @@ import {
   onAuthStateChanged, 
   User as FirebaseUser 
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc, deleteField } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
@@ -81,5 +81,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where, setDoc, addDoc };
+export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where, setDoc, addDoc, deleteField };
 export type { FirebaseUser };
