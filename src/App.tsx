@@ -6710,6 +6710,7 @@ function TaskModal({
         mediaRecorder.stop();
         cleanupRecordingAnalysis();
       }
+      setRecordingStopped(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMockTest, phase, timeLeft]);
@@ -7408,12 +7409,12 @@ function TaskModal({
                   animate={{ opacity: 1, y: 0 }}
                   className="flex flex-col items-center py-4 bg-app-surface/20 rounded-2xl border border-app-primary/10 mb-8"
                 >
-                  {(phase === 'recording' && task.section === 'speaking') || isAudioPlaying ? (
+                  {(phase === 'recording' && !recordingStopped && task.section === 'speaking') || isAudioPlaying ? (
                     <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
                       {[...Array(20)].map((_, i) => (
                         <motion.div 
                           key={i}
-                          animate={(isAudioPlaying || (phase === 'recording' && task.section === 'speaking')) 
+                          animate={(isAudioPlaying || (phase === 'recording' && !recordingStopped && task.section === 'speaking')) 
                             ? { height: [8, Math.random() * 24 + 8, 8] } 
                             : { height: 8 }
                           }
