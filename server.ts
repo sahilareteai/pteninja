@@ -265,7 +265,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
       const periodText = periodStart && periodEnd ? `${periodStart} – ${periodEnd}` : null;
 
       const invoiceNumber = invoice.number ? escapeHtml(invoice.number) : null;
-      const invoiceUrl = invoice.hosted_invoice_url ? escapeHtml(invoice.hosted_invoice_url) : null;
+      const rawInvoiceUrl = invoice.hosted_invoice_url ?? null;
+      const invoiceUrl = rawInvoiceUrl ? escapeHtml(rawInvoiceUrl) : null;
       const safeEmail = escapeHtml(recipientEmail);
       const paymentDate = new Date((invoice.created ?? Date.now() / 1000) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
 
@@ -281,7 +282,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         `Date: ${paymentDate}`,
         ...(periodText ? [`Billing period: ${periodText}`] : []),
         ...(invoiceNumber ? [`Invoice #: ${invoiceNumber}`] : []),
-        ...(invoiceUrl ? [`View invoice: ${invoice.hosted_invoice_url}`] : []),
+        ...(rawInvoiceUrl ? [`View invoice: ${rawInvoiceUrl}`] : []),
         ``,
         `Access your account: ${invoiceAppUrl}`,
         ``,
