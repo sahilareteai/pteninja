@@ -6505,10 +6505,18 @@ function TaskModal({
           
           console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
           setIsPreparingAudio(true);
+
+          // Resume AudioContext early so it's running before async TTS generation completes (mobile requirement)
+          try {
+            const ctx = getAudioContext();
+            if (ctx && ctx.state === 'suspended') await ctx.resume();
+          } catch (resumeErr) {
+            console.warn("[Audio] Early AudioContext resume failed:", resumeErr);
+          }
           
           // Safety timeout to prevent stuck loading - increased to 35s to allow for 30s TTS timeout
           safetyTimeout = setTimeout(() => {
-            if (!isCancelled && isPreparingAudio) {
+            if (!isCancelled) {
               console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
               setIsPreparingAudio(false);
               // Only set error if we don't have a fallback or if it's really stuck
@@ -6553,7 +6561,7 @@ function TaskModal({
             }
             
             if (base64) {
-              // High-performance AudioBuffer pre-decode
+              // Decode into AudioBuffer and play via AudioBufferSourceNode (most reliable on mobile)
               try {
                 const ctx = getAudioContext();
                 if (ctx) {
@@ -6563,11 +6571,42 @@ function TaskModal({
                   if (!isCancelled) {
                     // Cache it globally for future use
                     globalAudioCache[task.id] = { base64, buffer: audioBuffer };
-                    console.log("[Audio] AudioBuffer decoded and cached");
+                    console.log("[Audio] AudioBuffer decoded and cached, playing via AudioBufferSourceNode");
+
+                    if (safetyTimeout) clearTimeout(safetyTimeout);
+                    setIsPreparingAudio(false);
+
+                    const now = ctx.currentTime;
+                    let startTime = now;
+                    if (needsBeep && !beepPlayedRef.current) {
+                      console.log("[Audio] Scheduling beep and audio...");
+                      const osc = ctx.createOscillator();
+                      const gain = ctx.createGain();
+                      osc.connect(gain);
+                      gain.connect(ctx.destination);
+                      osc.frequency.setValueAtTime(1000, now);
+                      gain.gain.setValueAtTime(0, now);
+                      gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+                      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                      osc.start(now);
+                      osc.stop(now + 0.1);
+                      beepPlayedRef.current = true;
+                      startTime = now + 0.1;
+                    }
+
+                    const source = ctx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(ctx.destination);
+                    audioSourceRef.current = source;
+                    source.onended = handleAudioEnd;
+                    source.start(startTime);
+                    setIsAudioPlaying(true);
+                    setTimeLeft(Math.ceil(audioBuffer.duration));
                   }
+                  return;
                 }
               } catch (decodeErr) {
-                console.error("[Audio] Decoding failed", decodeErr);
+                console.error("[Audio] AudioBuffer decoding failed, falling back to HTML Audio", decodeErr);
               }
             }
           } catch (prepErr: any) {
@@ -6590,7 +6629,7 @@ function TaskModal({
           if (isCancelled) return;
 
           if (base64) {
-            console.log("[Audio] Creating new Audio object from base64");
+            console.log("[Audio] Creating new Audio object from base64 (HTML Audio fallback)");
             audio = new Audio(`data:audio/wav;base64,${base64}`);
             audio.load();
           } else {
