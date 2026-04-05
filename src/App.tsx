@@ -4812,6 +4812,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onUpgrade: () => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const averageScore = calculateAverageScore();
   const studyPlan = calculateStudyPlan();
   const [tempTarget, setTempTarget] = useState<string | number>(79);
@@ -5028,25 +5029,31 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                           setIsSaving(true);
                           try {
                             await onSaveToSchedule();
+                            setIsSaved(true);
                           } finally {
                             setIsSaving(false);
                           }
                         }}
-                        disabled={isSaving}
+                        disabled={isSaving || isSaved}
                         className={cn(
                           "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
-                          isSaving 
-                            ? "bg-app-primary/50 text-app-bg/50 cursor-not-allowed" 
+                          isSaving || isSaved
+                            ? "bg-app-primary/30 text-app-bg/40 cursor-not-allowed" 
                             : "bg-app-accent text-app-bg hover:bg-app-primary"
                         )}
                       >
                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
-                        {isSaving ? 'Saving...' : 'Save to Schedule'}
+                        {isSaving ? 'Saving...' : isSaved ? 'Saved to Schedule' : 'Save to Schedule'}
                       </button>
-                      {user.schedule && user.schedule.length > 0 && (
+                      {(isSaved || (user.schedule && user.schedule.length > 0)) && (
                         <button
                           onClick={onViewRoadmap}
-                          className="mt-2 w-full py-2 bg-app-surface text-app-primary text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-app-primary/10 transition-all flex items-center justify-center gap-2 border border-app-primary/20"
+                          className={cn(
+                            "mt-2 w-full py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
+                            isSaved
+                              ? "bg-app-accent text-app-bg hover:bg-app-primary border border-transparent"
+                              : "bg-app-surface text-app-primary hover:bg-app-primary/10 border border-app-primary/20"
+                          )}
                         >
                           <Map size={14} />
                           View Full Schedule
