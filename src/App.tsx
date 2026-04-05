@@ -60,7 +60,7 @@ import { PTE_TASKS, PTESection, PTETask, UserProgress, SUBSCRIPTION_PLANS, Daily
 import { CurrencyService } from './services/currencyService';
 import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
-import { analyzeSpeaking, analyzeWriting, generateTTS } from './services/geminiService';
+import { analyzeSpeaking, analyzeWriting, generateTTS, WritingAnalysisResult } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
 import { PromoService, PromoCode } from './services/promoService';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -1465,13 +1465,21 @@ function AppContent() {
   const handleSelectTask = (task: PTETask, allTasks: PTETask[]) => {
     setSelectedTask(task);
     setCurrentCategoryTasks(allTasks);
+    // Kick off TTS generation now so audio is cached and ready by the time the
+    // prep-phase countdown finishes.  Also pre-fetch the next task in the list
+    // so back-to-back practice feels seamless.
+    if (task.hasAudio) {
+      preFetchAudio(task);
+    }
+    const nextTask = allTasks[allTasks.indexOf(task) + 1];
+    if (nextTask?.hasAudio) {
+      preFetchAudio(nextTask);
+    }
   };
 
-  const handleHoverTask = (task: PTETask) => {
-    // Disabled pre-fetch on hover to avoid GEMINI_QUOTA_EXCEEDED
-    // if (task.hasAudio) {
-    //   preFetchAudio(task);
-    // }
+  const handleHoverTask = (_task: PTETask) => {
+    // Pre-fetching on hover was moved to handleSelectTask to avoid flooding the
+    // Gemini quota while the user is still browsing the task list.
   };
 
   const currentStreak = calculateStreak(user?.activityLog);
@@ -4326,27 +4334,19 @@ function MockTestSession({
     const totalTasks = allTaskIds.length;
     const scores: Record<string, number> = {};
 
-    for (let i = 0; i < totalTasks; i++) {
-      const taskId = allTaskIds[i];
+    // Score a single task and return its numeric score.
+    const scoreOneTask = async (taskId: string): Promise<number> => {
       const task = taskMap[taskId]!;
-      // Use the ref instead of the stale `taskResponses` state value so the last
-      // submitted task response is always included.
       const response = taskResponsesRef.current[taskId];
-      
-      setCalculationProgress(Math.round((i / totalTasks) * 100));
-
-      if (!response) {
-        scores[taskId] = 10;
-        continue;
-      }
+      if (!response) return 10;
 
       try {
         if (task.section === 'speaking') {
           const result = await analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]);
-          scores[taskId] = result.overall ?? 70;
+          return result.overall ?? 70;
         } else if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
           const result = await analyzeWriting(response, task.title);
-          scores[taskId] = result.overall ?? 70;
+          return result.overall ?? 70;
         } else {
           // Local scoring for objective tasks
           let score = 10;
@@ -4367,25 +4367,36 @@ function MockTestSession({
             const maxScore = isMultiple ? Math.max(correct.length, 1) : 1;
             let correctSelected = 0;
             let incorrectSelected = 0;
-            
             selectedOptions.forEach((opt: string) => {
               if (correct.includes(opt)) correctSelected++;
               else incorrectSelected++;
             });
-            
             const netCorrect = Math.max(0, correctSelected - (isMultiple ? incorrectSelected : 0));
             score = netCorrect === 0 ? 10 : Math.max(10, Math.min(90, Math.round((netCorrect / maxScore) * 80) + 10));
           }
-          scores[taskId] = score;
+          return score;
         }
       } catch (err) {
         console.error(`Analysis failed for task ${taskId}:`, err);
-        scores[taskId] = 10;
+        return 10;
       }
-      
-      // Small delay to avoid quota issues
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
+    };
+
+    // Run up to 3 scoring tasks concurrently.  Each worker pulls from a shared
+    // queue until it is empty — this gives ~3× speedup over the previous
+    // sequential approach while staying well within Gemini's rate limits.
+    let completedCount = 0;
+    const taskQueue = [...allTaskIds];
+    const worker = async () => {
+      while (taskQueue.length > 0) {
+        const taskId = taskQueue.shift();
+        if (!taskId) break;
+        scores[taskId] = await scoreOneTask(taskId);
+        completedCount++;
+        setCalculationProgress(Math.round((completedCount / totalTasks) * 100));
+      }
+    };
+    await Promise.all(Array.from({ length: 3 }, worker));
 
     setCalculationProgress(100);
     setTaskScores(scores);
@@ -6250,6 +6261,18 @@ function TaskModal({
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(getAudioContext());
 
+  // Speculative writing analysis: start a background Gemini call once the user
+  // pauses typing for 5 s so that clicking "Submit" shows the result instantly.
+  // Only used for practice mode (not mock tests which batch-score at the end).
+  const speculativeWritingRef = useRef<{
+    text: string;
+    promise: Promise<WritingAnalysisResult | null>;
+    result: WritingAnalysisResult | null;
+  } | null>(null);
+  const speculativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isWritingTask = task.section === 'writing' || task.category === 'Summarize Spoken Text';
+
   // Helper to play a beep sound using a persistent AudioContext
   const playBeep = () => {
     return new Promise<void>((resolve) => {
@@ -6710,6 +6733,34 @@ function TaskModal({
     };
   }, [phase]);
 
+  // Speculative writing analysis: while the user is writing, fire off a
+  // background Gemini call after 5 s of idle time.  When the user clicks Submit
+  // we can serve the result instantly (or await the already-in-flight request)
+  // instead of starting a brand-new API call and showing a 10–15 s spinner.
+  useEffect(() => {
+    if (!isWritingTask || phase !== 'recording' || isMockTest) return;
+    if (!userInput || userInput.trim().length < 30) return;
+
+    if (speculativeTimerRef.current) clearTimeout(speculativeTimerRef.current);
+
+    speculativeTimerRef.current = setTimeout(() => {
+      const textToScore = userInput;
+      const promise = analyzeWriting(textToScore, task.title)
+        .then(r => {
+          if (speculativeWritingRef.current?.text === textToScore) {
+            speculativeWritingRef.current.result = r;
+          }
+          return r;
+        })
+        .catch(() => null);
+      speculativeWritingRef.current = { text: textToScore, promise, result: null };
+    }, 5000);
+
+    return () => {
+      if (speculativeTimerRef.current) clearTimeout(speculativeTimerRef.current);
+    };
+  }, [userInput, isWritingTask, phase, isMockTest, task.title]);
+
   const startRecording = async () => {
     try {
       // Play beep before recording starts
@@ -7070,7 +7121,16 @@ function TaskModal({
             onFinish(finalInput as any);
             return;
           }
-          result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
+          // Use speculative result if the text hasn't changed since the background
+          // call was fired (instant), await the in-flight request if it's still
+          // running (partial speedup), or start a fresh call as a last resort.
+          const spec = speculativeWritingRef.current;
+          if (spec && spec.text === finalInput) {
+            const speculativeResult = spec.result ?? await spec.promise;
+            result = speculativeResult ?? await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
+          } else {
+            result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
+          }
         }
       }
       
