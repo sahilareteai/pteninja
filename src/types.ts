@@ -120,6 +120,7 @@ export interface UserData {
   favoriteWords?: string[];
   mockTestResults?: MockTestResult[];
   savedMockSession?: MockTestSavedSession | null;
+  savedMockSessions?: Record<string, MockTestSavedSession> | null;
   currentSessionId?: string;
   role?: 'admin' | 'user';
 }

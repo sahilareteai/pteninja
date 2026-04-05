@@ -67,7 +67,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { SupportBot } from './components/SupportBot';
-import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection } from './firebase';
+import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
 import { seedTasksToFirestore } from './services/taskService';
 
 // Module-level mic stream cache — shared across TaskModal instances so the browser
@@ -1613,11 +1613,17 @@ function AppContent() {
     // onClose() and sets activeMockTest to null.
   };
 
-  const handleSaveMockSession = async (session: MockTestSavedSession | null) => {
+  const handleSaveMockSession = async (session: MockTestSavedSession | null, testId?: string) => {
     if (!user?.uid) return;
     const userRef = doc(db, 'users', user.uid);
     try {
-      await updateDoc(userRef, { savedMockSession: session });
+      if (session !== null) {
+        // Save/update this specific test's session in the map
+        await updateDoc(userRef, { [`savedMockSessions.${session.testId}`]: session });
+      } else if (testId) {
+        // Clear only this test's session from the map
+        await updateDoc(userRef, { [`savedMockSessions.${testId}`]: deleteField() });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
@@ -1823,7 +1829,7 @@ function AppContent() {
                 user={user}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTest={(test) => { setResumeSession(null); setActiveMockTest(test); }}
-                savedSession={user?.savedMockSession ?? null}
+                savedSessions={user?.savedMockSessions ?? null}
                 onResumeTest={(test, session) => { setResumeSession(session); setActiveMockTest(test); }}
               />
             ) : activeTab === 'roadmap' ? (
@@ -2512,7 +2518,7 @@ function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, se
       <section className="relative z-10 py-32 px-6 border-y border-app-border">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
           <StatItem value="98%" label="Accuracy Rate" />
-          <StatItem value="22k+" label="Practice Tasks" />
+          <StatItem value="25k+" label="Practice Tasks" />
           <StatItem value="15k+" label="Active Ninjas" />
           <StatItem value="24/7" label="AI Support" />
         </div>
@@ -3954,7 +3960,12 @@ function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: st
     </button>
   );
 }
-function MockTestView({ user, onStartTest, onBack, savedSession, onResumeTest }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void, savedSession?: MockTestSavedSession | null, onResumeTest: (test: MockTest, session: MockTestSavedSession) => void }) {
+function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void, savedSessions?: Record<string, MockTestSavedSession> | null, onResumeTest: (test: MockTest, session: MockTestSavedSession) => void }) {
+  // Also include legacy single-session for backward compat
+  const allSavedSessions: Record<string, MockTestSavedSession> = {
+    ...(user.savedMockSession ? { [user.savedMockSession.testId]: user.savedMockSession } : {}),
+    ...(savedSessions ?? {}),
+  };
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
@@ -3971,8 +3982,8 @@ function MockTestView({ user, onStartTest, onBack, savedSession, onResumeTest }:
         </button>
       </div>
 
-      {/* Resume banner */}
-      {savedSession && (() => {
+      {/* Resume banners for all in-progress tests */}
+      {Object.values(allSavedSessions).map((savedSession) => {
         const savedTest = MOCK_TESTS.find(t => t.id === savedSession.testId);
         if (!savedTest) return null;
         const totalTasks = savedTest.sections.reduce((s, sec) => s + sec.taskIds.length, 0);
@@ -3980,6 +3991,7 @@ function MockTestView({ user, onStartTest, onBack, savedSession, onResumeTest }:
         const savedAt = new Date(savedSession.savedAt).toLocaleString();
         return (
           <motion.div
+            key={savedSession.testId}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-app-primary/10 border border-app-primary/30 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2"
@@ -4003,13 +4015,13 @@ function MockTestView({ user, onStartTest, onBack, savedSession, onResumeTest }:
             </button>
           </motion.div>
         );
-      })()}
+      })}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {MOCK_TESTS.map((test, index) => {
           const isCompleted = user.mockTestResults?.some(r => r.testId === test.id);
           const bestScore = user.mockTestResults?.filter(r => r.testId === test.id).reduce((max, r) => Math.max(max, r.overallScore), 0) || 0;
-          const isInProgress = savedSession?.testId === test.id;
+          const isInProgress = !!allSavedSessions[test.id];
 
           return (
             <motion.div
@@ -4074,7 +4086,7 @@ function MockTestView({ user, onStartTest, onBack, savedSession, onResumeTest }:
                 )}
 
                 <button
-                  onClick={() => isInProgress ? onResumeTest(test, savedSession!) : onStartTest(test)}
+                  onClick={() => isInProgress ? onResumeTest(test, allSavedSessions[test.id]) : onStartTest(test)}
                   className={cn(
                     "w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all shadow-lg",
                     isInProgress
@@ -4105,7 +4117,7 @@ function MockTestSession({
   allTasks: PTETask[],
   onFinish: (result: MockTestResult) => void, 
   onClose: () => void,
-  onSaveAndExit: (session: MockTestSavedSession | null) => Promise<void>,
+  onSaveAndExit: (session: MockTestSavedSession | null, testId?: string) => Promise<void>,
   savedSession?: MockTestSavedSession | null,
 }) {
   const [phase, setPhase] = useState<'instructions' | 'personal-intro' | 'section-instructions' | 'testing' | 'calculating'>(
@@ -4373,7 +4385,7 @@ function MockTestSession({
 
     releaseGlobalMicStream();
     // Clear the saved session now that the test is complete.
-    onSaveAndExit(null).catch(() => {});
+    onSaveAndExit(null, test.id).catch(() => {});
     // Save the result to the database (fire-and-forget; toast fires from onFinish).
     onFinish(result);
     // Show the scorecard. This must happen AFTER onFinish is called so that the
@@ -7206,7 +7218,15 @@ function TaskModal({
                       </div>
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-center">
+                      {isMockTest && onMockExit ? (
+                        <button
+                          onClick={onMockExit}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+                        >
+                          <Save size={14} /> Save &amp; Exit
+                        </button>
+                      ) : <div />}
                       <button 
                         onClick={async () => {
                           try {
@@ -7898,7 +7918,15 @@ function TaskModal({
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                  {isMockTest && onMockExit && (
+                    <button
+                      onClick={onMockExit}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+                    >
+                      <Save size={14} /> Save &amp; Exit
+                    </button>
+                  )}
                   {task.category !== 'Re-order Paragraphs' && !task.category.includes('Multiple Choice') && !task.category.includes('Fill in the Blanks') && (
                     <span className="text-xs text-app-text-muted">Word count: {userInput.trim().split(/\s+/).filter(Boolean).length}</span>
                   )}
