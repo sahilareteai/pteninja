@@ -4867,7 +4867,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
               <Trophy size={180} className="text-app-primary" />
             </div>
           </div>
-          <div className="relative z-10 max-w-[280px]">
+          <div className="relative z-10">
             {progress.targetScore === 0 ? (
               <div>
                 <h2 className="text-xs md:text-sm font-bold text-app-primary uppercase tracking-[0.2em] mb-4">Set Your Goal</h2>
@@ -4968,7 +4968,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                 </div>
 
                 {studyPlan && studyPlan.daysLeft > 0 && (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 bg-app-accent/5 border border-app-accent/20 rounded-2xl">
                       <div className="flex items-center gap-3 mb-2">
                         <Calendar className="text-app-accent" size={18} />
