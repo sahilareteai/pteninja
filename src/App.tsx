@@ -6028,6 +6028,7 @@ function TaskModal({
   const [isPreparingAudio, setIsPreparingAudio] = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
   const [volume, setVolume] = useState(0);
+  const [recordingStopped, setRecordingStopped] = useState(false);
   const recordingAnalyzerRef = useRef<AnalyserNode | null>(null);
   const recordingAnimationFrameRef = useRef<number | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
@@ -6205,6 +6206,7 @@ function TaskModal({
     setSelectedOptions([]);
     setBlankAnswers({});
     setUserInput('');
+    setRecordingStopped(false);
   }, [task.id, task.category, task.paragraphs, task.section, task.hasAudio, task.prepTime, task.recordingTime]);
 
   // Audio logic
@@ -6683,7 +6685,7 @@ function TaskModal({
             } else {
               if (isMockTest) {
                 // In mock test mode, don't auto-advance when time runs out.
-                // The sticky footer "Next Task" button lets the user submit when ready.
+                // The sticky footer "Next" button lets the user submit when ready.
                 // The recorder will be stopped by the useEffect below.
                 return 0;
               }
@@ -6699,7 +6701,7 @@ function TaskModal({
   }, [phase, task.recordingTime, task.hasAudio, task.category, isAudioPlaying]);
 
   // In mock test mode, stop the MediaRecorder when the recording timer expires
-  // (the user submits manually via the "Next Task" button).
+  // (the user submits manually via the "Next" button).
   // `task.section` and `mediaRecorder` are intentionally omitted: task.section is stable for a
   // given TaskModal instance, and mediaRecorder changing mid-recording would be a separate concern.
   useEffect(() => {
@@ -7214,7 +7216,7 @@ function TaskModal({
                         }}
                         className="bg-app-primary text-app-bg px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
                       >
-                        {isMockTest ? 'Next Task' : 'Submit Response'}
+                        {isMockTest ? 'Next' : 'Submit Response'}
                       </button>
                     </div>
                   </div>
@@ -7297,8 +7299,19 @@ function TaskModal({
                       {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && <button 
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
-                          else if (phase === 'recording') handleFinish();
-                          else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
+                          else if (phase === 'recording') {
+                            if (isMockTest) {
+                              // In mock test: stop recording but wait for user to click "Next"
+                              if (mediaRecorder && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                                cleanupRecordingAnalysis();
+                              }
+                              setRecordingStopped(true);
+                              setTimeLeft(0);
+                            } else {
+                              handleFinish();
+                            }
+                          } else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
                             if (audioRef.current) {
                               audioRef.current.play().catch(e => console.error("Manual play failed", e));
                               setIsAudioPlaying(true);
@@ -7314,19 +7327,21 @@ function TaskModal({
                             }
                           }
                         }}
-                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio}
+                        disabled={(phase === 'audio' && isAudioPlaying) || isPreparingAudio || recordingStopped}
                         className={cn(
                           "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl shrink-0",
                           phase === 'prep' ? "bg-app-primary text-app-bg hover:scale-105" : 
-                          phase === 'recording' ? "bg-red-500 text-white hover:scale-105" :
+                          (phase === 'recording' && !recordingStopped) ? "bg-red-500 text-white hover:scale-105" :
+                          recordingStopped ? "bg-gray-400 text-white cursor-default opacity-60" :
                           "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           isPreparingAudio && "cursor-wait"
                         )}
-                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : phase === 'recording' ? 'Stop' : 'Play')}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : 'Play')}
                       >
                         {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
-                          phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                          (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
+                          recordingStopped ? <CheckCircle size={28} /> :
                           (isAudioPlaying ? <Headphones size={28} /> : <Volume2 size={28} />))}
                       </button>}
 
@@ -7441,14 +7456,25 @@ function TaskModal({
                             setTimeLeft(task.recordingTime ?? 40);
                           }
                         } else if (phase === 'recording') {
-                          handleFinish();
+                          if (isMockTest) {
+                            // In mock test: stop recording but wait for user to click "Next"
+                            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                              mediaRecorder.stop();
+                              cleanupRecordingAnalysis();
+                            }
+                            setRecordingStopped(true);
+                            setTimeLeft(0);
+                          } else {
+                            handleFinish();
+                          }
                         } else if (phase === 'prep') {
                           skipPrep();
                         }
                       }}
                       className={cn(
                         "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl",
-                        phase === 'recording' ? "bg-red-500 shadow-red-500/20" : 
+                        (phase === 'recording' && !recordingStopped) ? "bg-red-500 shadow-red-500/20" : 
+                        recordingStopped ? "bg-gray-400 opacity-60 cursor-default" :
                         (phase === 'audio' ? (isAudioPlaying ? "bg-blue-500/50 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400") : 
                         (task.hasAudio ? "bg-blue-500 hover:bg-blue-400 shadow-blue-500/20" : "bg-app-primary shadow-app-primary/20")),
                         isPreparingAudio && "bg-blue-500/50 cursor-wait",
@@ -7456,15 +7482,16 @@ function TaskModal({
                       )}
                     >
                       {isPreparingAudio ? <Loader2 size={24} className="text-white animate-spin" /> : 
+                       (recordingStopped ? <CheckCircle size={24} className="text-white" /> :
                        (phase === 'recording' ? <div className="w-6 h-6 bg-white rounded-sm" /> : 
                        (phase === 'audio' ? (isAudioPlaying ? <Headphones size={24} className="text-white" /> : <Play size={24} className="text-white ml-1" />) : 
-                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />)))}
+                       (task.hasAudio ? <Play size={24} className="text-white ml-1" /> : <Play size={24} className="text-app-bg ml-1" />))))}
                     </button>
                     
                     <div className="flex flex-col">
                       <p className="text-xs font-bold text-app-text uppercase tracking-wider">
                         {phase === 'audio' ? (isPreparingAudio ? "Preparing Audio" : (isAudioPlaying ? "Playing Audio" : "Ready to Play")) : 
-                         (phase === 'prep' ? "Preparing..." : "Recording...")}
+                         (phase === 'prep' ? "Preparing..." : (recordingStopped ? "Recorded" : "Recording..."))}
                       </p>
                       {phase === 'audio' && !isAudioPlaying && !isPreparingAudio && !hasAudioError && (
                         <p className="text-[10px] text-app-primary font-medium animate-pulse">Click to start audio</p>
@@ -7888,7 +7915,7 @@ function TaskModal({
                   }}
                   className="bg-app-primary text-app-bg px-6 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-app-accent transition-all"
                 >
-                  {isMockTest ? 'Next Task' : 'Submit Response'}
+                  {isMockTest ? 'Next' : 'Submit Response'}
                 </button>
               </div>
             </div>
@@ -8224,7 +8251,7 @@ function TaskModal({
                     }}
                     className="flex-1 py-4 border border-app-primary/20 text-app-text rounded-2xl font-bold uppercase tracking-widest hover:bg-app-surface/50 transition-all"
                   >
-                    {isMockTest ? 'Next Task' : onNext ? 'Next Task' : 'Close'}
+                    {isMockTest ? 'Next' : onNext ? 'Next' : 'Close'}
                   </button>
                 </div>
               </motion.div>
@@ -8232,8 +8259,8 @@ function TaskModal({
           </AnimatePresence>
         </div>
 
-        {/* Mock-test sticky footer: always-visible Next Task + Save & Exit buttons */}
-        {isMockTest && (phase === 'prep' || phase === 'audio' || phase === 'recording') && (
+        {/* Mock-test sticky footer: always-visible Next + Save & Exit buttons */}
+        {isMockTest && (phase === 'prep' || phase === 'audio' || phase === 'recording' || recordingStopped) && (
           <div className="border-t border-app-primary/10 px-6 py-4 flex items-center justify-between gap-3 bg-app-surface shrink-0">
             {onMockExit && (
               <button
@@ -8252,7 +8279,7 @@ function TaskModal({
               }}
               className="ml-auto flex items-center gap-2 px-6 py-2.5 bg-app-primary text-app-bg rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
             >
-              Next Task <ChevronRight size={16} />
+              Next <ChevronRight size={16} />
             </button>
           </div>
         )}
