@@ -4231,7 +4231,7 @@ function MockTestSession({
     // Update the ref first (synchronous) so handleCompleteTest always has the very
     // latest responses even when it is invoked before the setState flush completes.
     taskResponsesRef.current = { ...taskResponsesRef.current, [currentTaskId]: actualResponse };
-    setTaskResponses(taskResponsesRef.current);
+    setTaskResponses({ ...taskResponsesRef.current });
 
     if (currentTaskIndex < currentSection.taskIds.length - 1) {
       setCurrentTaskIndex(prev => prev + 1);
@@ -4543,6 +4543,47 @@ function MockTestSession({
 
     return (
       <div className="fixed inset-0 z-[100] bg-app-bg flex items-center justify-center p-3 sm:p-4">
+        {/* Exit / Save Confirmation Modal — must be included here since this is an early return */}
+        {showExitConfirm && (
+          <div className="absolute inset-0 z-[110] bg-app-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-app-surface rounded-3xl p-8 border border-app-primary/20 max-w-sm w-full text-center space-y-6 shadow-2xl"
+            >
+              <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                <LogOut className="text-app-primary" size={28} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-app-text uppercase tracking-tight mb-2">Pause Test?</h3>
+                <p className="text-app-text-muted text-sm leading-relaxed">
+                  Choose how you'd like to proceed. You can save your progress and resume later, or end the test now and view your results.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setShowExitConfirm(false)}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest border border-app-border text-app-text-muted hover:bg-app-bg transition-all"
+                >
+                  Keep Going
+                </button>
+                <button
+                  onClick={handleSaveAndExit}
+                  disabled={isSavingSession}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-app-primary text-app-bg hover:bg-app-accent transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {isSavingSession ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> Save &amp; Exit (Resume Later)</>}
+                </button>
+                <button
+                  onClick={() => { setShowExitConfirm(false); handleCompleteTest(true); }}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                >
+                  End Test &amp; See Results
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -4688,6 +4729,7 @@ function MockTestSession({
           onClose={onClose}
           onFinish={handleNextTask}
           isMockTest={true}
+          onMockExit={handleExitClick}
         />
       </div>
     </div>
@@ -5938,14 +5980,16 @@ function TaskModal({
   onFinish,
   onPrev,
   onNext,
-  isMockTest = false
+  isMockTest = false,
+  onMockExit,
 }: { 
   task: PTETask, 
   onClose: () => void, 
   onFinish: (score: number, response?: string) => void | Promise<void>,
   onPrev?: () => void,
   onNext?: () => void,
-  isMockTest?: boolean
+  isMockTest?: boolean,
+  onMockExit?: () => void,
 }) {
   const [phase, setPhase] = useState<'prep' | 'audio' | 'recording' | 'analyzing' | 'feedback'>(() => {
     const isListeningPrep = task.section === 'listening' || 
@@ -8163,6 +8207,31 @@ function TaskModal({
             ) : null}
           </AnimatePresence>
         </div>
+
+        {/* Mock-test sticky footer: always-visible Next Task + Save & Exit buttons */}
+        {isMockTest && (phase === 'prep' || phase === 'audio' || phase === 'recording') && (
+          <div className="border-t border-app-primary/10 px-6 py-4 flex items-center justify-between gap-3 bg-app-surface shrink-0">
+            {onMockExit && (
+              <button
+                onClick={onMockExit}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-app-border text-app-text-muted hover:text-app-primary hover:bg-app-primary/10 hover:border-app-primary/30 transition-all"
+              >
+                <Save size={14} /> Save &amp; Exit
+              </button>
+            )}
+            <button
+              onClick={async () => {
+                try { await handleFinish(); } catch (e) {
+                  console.error("Finish failed:", e);
+                  toast.error("Could not submit task. Please try again.");
+                }
+              }}
+              className="ml-auto flex items-center gap-2 px-6 py-2.5 bg-app-primary text-app-bg rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/10"
+            >
+              Next Task <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
