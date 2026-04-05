@@ -4,7 +4,8 @@ import { auth } from '../firebase';
 async function getIdToken(): Promise<string | null> {
   try {
     return (await auth.currentUser?.getIdToken()) ?? null;
-  } catch {
+  } catch (err) {
+    console.warn('[geminiService] Could not retrieve auth token:', err);
     return null;
   }
 }

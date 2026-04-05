@@ -4357,7 +4357,7 @@ function MockTestSession({
       try {
         if (task.section === 'speaking') {
           const result = await analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]);
-          return (result as any).overall ?? 70;
+          return (result as { overall?: number }).overall ?? 70;
         } else if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
           const result = await analyzeWriting(response, task.title);
           return result.overall ?? 70;

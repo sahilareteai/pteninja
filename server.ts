@@ -276,6 +276,15 @@ const deleteUserLimiter = rateLimit({
   message: { error: "Too many requests. Please try again later." },
 });
 
+// Rate limiter for authenticated subscription/payment endpoints
+const subscriptionLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 type AdminAppInstance = NonNullable<ReturnType<typeof getAdminApp>>;
@@ -439,7 +448,7 @@ app.get("/api/health", (req, res) => {
 // Creates a Stripe Customer (if needed) and a Subscription.
 // Card details are stored securely by Stripe (PCI DSS Level 1 certified).
 // We never receive or store raw card data.
-app.post("/api/create-subscription", async (req, res) => {
+app.post("/api/create-subscription", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -561,7 +570,7 @@ app.post("/api/create-subscription", async (req, res) => {
 // ─── Stripe Customer Portal ────────────────────────────────────────────────────
 // Opens the Stripe-hosted portal so users can update payment methods, view
 // invoices, and manage their subscription.  No card data touches our servers.
-app.post("/api/customer-portal", async (req, res) => {
+app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -611,7 +620,7 @@ app.post("/api/customer-portal", async (req, res) => {
 // ─── Apply Retention Discount ─────────────────────────────────────────────────
 // Applies a 10% off "once" coupon to the subscription as a retention offer.
 // The coupon PTENINJA_RETENTION_10 is created on first use and reused thereafter.
-app.post("/api/apply-retention-discount", async (req, res) => {
+app.post("/api/apply-retention-discount", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -661,7 +670,7 @@ app.post("/api/apply-retention-discount", async (req, res) => {
 // The user keeps access until that date; no further charges are made.
 // If subscriptionId is not provided, customerId can be used to locate the
 // active subscription automatically (handles stale Firestore records).
-app.post("/api/cancel-subscription", async (req, res) => {
+app.post("/api/cancel-subscription", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -716,7 +725,7 @@ app.post("/api/cancel-subscription", async (req, res) => {
 
 // ─── Reactivate Subscription ──────────────────────────────────────────────────
 // Reverses a "cancel at period end" so the subscription continues to renew.
-app.post("/api/reactivate-subscription", async (req, res) => {
+app.post("/api/reactivate-subscription", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -753,7 +762,7 @@ app.post("/api/reactivate-subscription", async (req, res) => {
 // Switches an existing active Stripe subscription to a different plan
 // (upgrade or downgrade).  Prorations are created so the customer is
 // credited or charged fairly within the current billing period.
-app.post("/api/change-plan", async (req, res) => {
+app.post("/api/change-plan", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -820,7 +829,7 @@ app.post("/api/change-plan", async (req, res) => {
 // ─── Sync Subscription Status ─────────────────────────────────────────────────
 // Returns the latest subscription state from Stripe so the client can keep
 // Firestore in sync (e.g. after returning from the Customer Portal).
-app.post("/api/sync-subscription", async (req, res) => {
+app.post("/api/sync-subscription", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -873,7 +882,7 @@ app.post("/api/sync-subscription", async (req, res) => {
 });
 
 // ─── Legacy: one-time Payment Intent (kept for backward compatibility) ────────
-app.post("/api/create-payment-intent", async (req, res) => {
+app.post("/api/create-payment-intent", subscriptionLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
 
@@ -1568,9 +1577,10 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
   }
 
   try {
+    const safeText = sanitizePromptValue(text.trim(), 500);
     const response = await serverCallGemini({
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Say clearly and naturally: ${text.trim()}` }] }],
+      contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
@@ -1670,11 +1680,13 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   }
 
   const safeTaskType = sanitizePromptValue(taskType, 200);
+  // Sanitize control characters while preserving the essay text (limit to 5000 chars)
+  const safeText = sanitizePromptValue(text, 5000);
 
   try {
     const response = await serverCallGemini({
       model: "gemini-2.5-flash",
-      contents: `Analyze this PTE ${safeTaskType} response: "${text}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
+      contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
