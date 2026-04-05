@@ -5931,7 +5931,15 @@ function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTas
               return (
                 <button 
                   key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => {
+                    setSelectedCategory(category);
+                    // Precache audio for the first 3 tasks in this category so playback
+                    // is instant by the time the user opens a task.
+                    // preFetchAudio handles its own errors internally.
+                    categoryTasks.slice(0, 3).forEach(t => {
+                      if (t.hasAudio) preFetchAudio(t);
+                    });
+                  }}
                   className="flex items-center gap-4 p-6 bg-app-surface border border-app-primary/5 rounded-2xl hover:border-app-primary/40 transition-all group text-left relative overflow-hidden"
                 >
                   <div className="w-12 h-12 rounded-xl bg-app-bg flex items-center justify-center group-hover:bg-app-primary transition-colors shrink-0">
@@ -7671,6 +7679,10 @@ function TaskModal({
                           )}
                         />
                       ))}
+                    </div>
+                  ) : isPreparingAudio ? (
+                    <div className="w-full h-12 flex items-center justify-center mb-2">
+                      <Loader2 size={28} className="text-blue-400 animate-spin" />
                     </div>
                   ) : (
                     <div className="w-full h-12 flex items-center justify-center gap-1 mb-2">
