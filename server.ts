@@ -18,6 +18,8 @@ const __dirname = path.dirname(__filename);
 export const app = express();
 
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
+const QUOTA_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per exhausted key
+
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
@@ -39,9 +41,12 @@ function getAvailableServerKeys(): ServerKeyState[] {
   return serverGeminiKeys.filter((k) => now >= k.exhaustedUntil);
 }
 
+type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
+type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
+
 // Returns the result of a Gemini generateContent call, rotating through keys on quota errors.
-// Throws an error with code "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
-async function serverCallGemini(params: Parameters<GoogleGenAI["models"]["generateContent"]>[0]): Promise<ReturnType<GoogleGenAI["models"]["generateContent"]>> {
+// Throws an error with message "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
+async function serverCallGemini(params: GeminiGenerateContentParams): Promise<GeminiGenerateContentResult> {
   const available = getAvailableServerKeys();
 
   if (available.length === 0) {
@@ -61,7 +66,7 @@ async function serverCallGemini(params: Parameters<GoogleGenAI["models"]["genera
         e.error?.code === 429;
 
       if (isQuotaError) {
-        keyState.exhaustedUntil = Date.now() + 5 * 60 * 1000;
+        keyState.exhaustedUntil = Date.now() + QUOTA_COOLDOWN_MS;
         console.warn("[Gemini] Server key quota exceeded. Switching to next key...");
         continue;
       }
@@ -81,7 +86,7 @@ let serverAllKeysAlertUntil = 0;
 async function sendAllKeysExhaustedAlert() {
   const now = Date.now();
   if (now < serverAllKeysAlertUntil) return;
-  serverAllKeysAlertUntil = now + 5 * 60 * 1000;
+  serverAllKeysAlertUntil = now + QUOTA_COOLDOWN_MS;
 
   console.error("[Gemini] ALL API KEYS EXHAUSTED — sending alert email.");
 
@@ -907,7 +912,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
 
 // ─── Gemini Quota Alert (called by frontend when all client-side keys exhausted) ──
 const geminiQuotaAlertLimiter = rateLimit({
-  windowMs: 5 * 60_000, // 5 minutes
+  windowMs: QUOTA_COOLDOWN_MS,
   max: 1,
   standardHeaders: true,
   legacyHeaders: false,

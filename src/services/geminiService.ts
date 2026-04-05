@@ -42,7 +42,9 @@ function triggerAllKeysAlert() {
   allKeysAlertUntil = now + 5 * 60 * 1000;
 
   // Fire-and-forget POST to server; server sends the alert email
-  fetch("/api/gemini-quota-alert", { method: "POST" }).catch(() => {});
+  fetch("/api/gemini-quota-alert", { method: "POST" }).catch((err) => {
+    console.warn("[Gemini] Failed to send quota-exhausted alert to server:", err);
+  });
 }
 
 function addWavHeader(base64Pcm: string, sampleRate: number = 24000): string {
