@@ -8,7 +8,7 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { rateLimit } from "express-rate-limit";
 import nodemailer from "nodemailer";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -16,6 +16,37 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const app = express();
+
+// ─── Security headers + CORS ──────────────────────────────────────────────────
+// Allowed origins: defaults cover production deployments; override via ALLOWED_ORIGINS env var.
+const ALLOWED_ORIGINS: string[] = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (ALLOWED_ORIGINS.length === 0) {
+  ALLOWED_ORIGINS.push("https://pteninja.vercel.app", "https://pteninja.com");
+}
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else if (process.env.NODE_ENV !== "production") {
+    res.setHeader("Access-Control-Allow-Origin", origin ?? "*");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  // Security hardening headers
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+});
 
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
 const QUOTA_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per exhausted key
@@ -204,7 +235,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
   res.json({ received: true });
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // Lazy Stripe initialization
 let stripe: Stripe | null = null;
@@ -244,6 +275,70 @@ const deleteUserLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
 });
+
+// Rate limiter for authenticated subscription/payment endpoints
+const subscriptionLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+// ─── Auth helpers ─────────────────────────────────────────────────────────────
+
+type AdminAppInstance = NonNullable<ReturnType<typeof getAdminApp>>;
+
+/** Verifies the Bearer token in the Authorization header.
+ *  Returns the decoded token + admin instance, or sends an error and returns null. */
+async function requireAuth(
+  req: import("express").Request,
+  res: import("express").Response,
+): Promise<{ decodedToken: import("firebase-admin/auth").DecodedIdToken; adminInstance: AdminAppInstance } | null> {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+    return null;
+  }
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    res.status(401).json({ error: "Authorization token required." });
+    return null;
+  }
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+    return { decodedToken, adminInstance };
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token." });
+    return null;
+  }
+}
+
+/** Checks that the given Stripe IDs belong to the authenticated user's Firestore record.
+ *  Only verifies the IDs that are already set in the document (allows new/first-time operations).
+ *  Returns false if the document doesn't exist or if an existing stored ID doesn't match. */
+async function verifySubscriptionOwnership(
+  adminInstance: AdminAppInstance,
+  uid: string,
+  opts: { subscriptionId?: string; customerId?: string },
+): Promise<boolean> {
+  if (!opts.subscriptionId && !opts.customerId) return true; // nothing to check
+  try {
+    const userDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(uid)
+      .get();
+    if (!userDoc.exists) return false;
+    const data = userDoc.data()!;
+    // Reject only when the user document already has the ID stored AND it doesn't match.
+    if (opts.subscriptionId && data.stripeSubscriptionId && data.stripeSubscriptionId !== opts.subscriptionId) return false;
+    if (opts.customerId && data.stripeCustomerId && data.stripeCustomerId !== opts.customerId) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Map planId → Stripe recurring interval
 const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number }> = {
@@ -353,7 +448,10 @@ app.get("/api/health", (req, res) => {
 // Creates a Stripe Customer (if needed) and a Subscription.
 // Card details are stored securely by Stripe (PCI DSS Level 1 certified).
 // We never receive or store raw card data.
-app.post("/api/create-subscription", async (req, res) => {
+app.post("/api/create-subscription", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
@@ -370,12 +468,24 @@ app.post("/api/create-subscription", async (req, res) => {
     return res.status(400).json({ error: "Unknown plan ID" });
   }
 
+  // If an existing customer ID is provided, verify it belongs to the authenticated user.
+  if (existingCustomerId) {
+    const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, {
+      customerId: existingCustomerId,
+    });
+    if (!owns) {
+      return res.status(403).json({ error: "Forbidden: customer does not belong to this user." });
+    }
+  }
+
   try {
     // Reuse an existing Stripe Customer or create a new one
     let customerId: string = existingCustomerId ?? "";
     if (!customerId) {
+      // Use the email from the verified token when available, otherwise fall back to client-supplied email.
+      const resolvedEmail = authResult.decodedToken.email ?? (typeof email === "string" ? email.trim() : undefined);
       const customer = await stripeInstance.customers.create({
-        ...(email ? { email } : {}),
+        ...(resolvedEmail ? { email: resolvedEmail } : {}),
         metadata: { planId },
       });
       customerId = customer.id;
@@ -460,7 +570,10 @@ app.post("/api/create-subscription", async (req, res) => {
 // ─── Stripe Customer Portal ────────────────────────────────────────────────────
 // Opens the Stripe-hosted portal so users can update payment methods, view
 // invoices, and manage their subscription.  No card data touches our servers.
-app.post("/api/customer-portal", async (req, res) => {
+app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
@@ -471,10 +584,31 @@ app.post("/api/customer-portal", async (req, res) => {
     return res.status(400).json({ error: "customerId is required" });
   }
 
+  // Validate that the customerId belongs to the authenticated user.
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, { customerId });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: customer does not belong to this user." });
+  }
+
+  // Validate the returnUrl against the allowlist to prevent open-redirect abuse.
+  const resolvedReturnUrl = (() => {
+    if (!returnUrl) return "https://pteninja.vercel.app";
+    try {
+      const parsed = new URL(returnUrl as string);
+      const allowedHostnames = ALLOWED_ORIGINS.map((o) => new URL(o).hostname);
+      if (allowedHostnames.includes(parsed.hostname) || (parsed.hostname === "localhost" && process.env.NODE_ENV !== "production")) {
+        return returnUrl as string;
+      }
+    } catch {
+      // fall through to default
+    }
+    return "https://pteninja.vercel.app";
+  })();
+
   try {
     const session = await stripeInstance.billingPortal.sessions.create({
       customer: customerId,
-      return_url: returnUrl ?? "https://pteninja.vercel.app",
+      return_url: resolvedReturnUrl,
     });
     res.json({ url: session.url });
   } catch (error: any) {
@@ -486,7 +620,10 @@ app.post("/api/customer-portal", async (req, res) => {
 // ─── Apply Retention Discount ─────────────────────────────────────────────────
 // Applies a 10% off "once" coupon to the subscription as a retention offer.
 // The coupon PTENINJA_RETENTION_10 is created on first use and reused thereafter.
-app.post("/api/apply-retention-discount", async (req, res) => {
+app.post("/api/apply-retention-discount", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
@@ -495,6 +632,11 @@ app.post("/api/apply-retention-discount", async (req, res) => {
   const { subscriptionId } = req.body;
   if (!subscriptionId) {
     return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, { subscriptionId });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: subscription does not belong to this user." });
   }
 
   const COUPON_ID = "PTENINJA_RETENTION_10";
@@ -528,13 +670,25 @@ app.post("/api/apply-retention-discount", async (req, res) => {
 // The user keeps access until that date; no further charges are made.
 // If subscriptionId is not provided, customerId can be used to locate the
 // active subscription automatically (handles stale Firestore records).
-app.post("/api/cancel-subscription", async (req, res) => {
+app.post("/api/cancel-subscription", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
   const { subscriptionId, customerId } = req.body;
+
+  // Verify the subscription/customer belongs to the authenticated user.
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, {
+    subscriptionId: subscriptionId ?? undefined,
+    customerId: customerId ?? undefined,
+  });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: subscription does not belong to this user." });
+  }
 
   try {
     let resolvedSubscriptionId: string = subscriptionId ?? "";
@@ -571,7 +725,10 @@ app.post("/api/cancel-subscription", async (req, res) => {
 
 // ─── Reactivate Subscription ──────────────────────────────────────────────────
 // Reverses a "cancel at period end" so the subscription continues to renew.
-app.post("/api/reactivate-subscription", async (req, res) => {
+app.post("/api/reactivate-subscription", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
@@ -580,6 +737,11 @@ app.post("/api/reactivate-subscription", async (req, res) => {
   const { subscriptionId } = req.body;
   if (!subscriptionId) {
     return res.status(400).json({ error: "subscriptionId is required" });
+  }
+
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, { subscriptionId });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: subscription does not belong to this user." });
   }
 
   try {
@@ -600,7 +762,10 @@ app.post("/api/reactivate-subscription", async (req, res) => {
 // Switches an existing active Stripe subscription to a different plan
 // (upgrade or downgrade).  Prorations are created so the customer is
 // credited or charged fairly within the current billing period.
-app.post("/api/change-plan", async (req, res) => {
+app.post("/api/change-plan", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
@@ -615,6 +780,11 @@ app.post("/api/change-plan", async (req, res) => {
   const recurring = PLAN_INTERVALS[planId];
   if (!recurring) {
     return res.status(400).json({ error: "Unknown plan ID" });
+  }
+
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, { subscriptionId });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: subscription does not belong to this user." });
   }
 
   try {
@@ -659,13 +829,24 @@ app.post("/api/change-plan", async (req, res) => {
 // ─── Sync Subscription Status ─────────────────────────────────────────────────
 // Returns the latest subscription state from Stripe so the client can keep
 // Firestore in sync (e.g. after returning from the Customer Portal).
-app.post("/api/sync-subscription", async (req, res) => {
+app.post("/api/sync-subscription", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ error: "Stripe is not configured on the server." });
   }
 
   const { subscriptionId, customerId } = req.body;
+
+  const owns = await verifySubscriptionOwnership(authResult.adminInstance, authResult.decodedToken.uid, {
+    subscriptionId: subscriptionId ?? undefined,
+    customerId: customerId ?? undefined,
+  });
+  if (!owns) {
+    return res.status(403).json({ error: "Forbidden: subscription does not belong to this user." });
+  }
 
   try {
     let resolvedSubscriptionId: string = subscriptionId ?? "";
@@ -701,7 +882,10 @@ app.post("/api/sync-subscription", async (req, res) => {
 });
 
 // ─── Legacy: one-time Payment Intent (kept for backward compatibility) ────────
-app.post("/api/create-payment-intent", async (req, res) => {
+app.post("/api/create-payment-intent", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
   const stripeInstance = getStripe();
   if (!stripeInstance) {
     return res.status(500).json({ 
@@ -728,6 +912,7 @@ app.post("/api/create-payment-intent", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 // ─── Delete User ──────────────────────────────────────────────────────────────
 // Deletes a user's Firestore document and Firebase Auth account.
@@ -833,12 +1018,18 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Simple, ReDoS-safe email format check. */
+/** ReDoS-safe email format check. */
 function isValidEmail(email: string): boolean {
+  if (typeof email !== "string" || email.length > 254) return false;
   const atIndex = email.indexOf("@");
   if (atIndex <= 0 || atIndex !== email.lastIndexOf("@")) return false;
+  const local = email.slice(0, atIndex);
   const domain = email.slice(atIndex + 1);
-  return domain.length > 0 && domain.includes(".");
+  if (local.length === 0 || local.length > 64) return false;
+  // Domain must have at least one dot, no leading/trailing dots or hyphens per label
+  if (domain.length < 3 || !domain.includes(".")) return false;
+  const domainParts = domain.split(".");
+  return domainParts.every((part) => part.length > 0 && /^[A-Za-z0-9-]+$/.test(part) && !part.startsWith("-") && !part.endsWith("-"));
 }
 
 /** Validate a single history entry has the expected shape. */
@@ -1358,6 +1549,169 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   } catch (error) {
     console.error("Failed to send support ticket email:", error);
     res.status(500).json({ error: "Failed to send ticket. Please try again." });
+  }
+});
+
+// ─── Gemini AI Proxy Endpoints ────────────────────────────────────────────────
+// All Gemini calls are proxied through the server so API keys are never sent to
+// the browser.  Each endpoint requires a valid Firebase ID token.
+
+const geminiProxyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many AI requests. Please try again later." },
+});
+
+app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
+  const { text } = req.body as { text: string };
+  if (!text || typeof text !== "string" || text.trim().length === 0) {
+    return res.status(400).json({ error: "text is required." });
+  }
+  if (serverGeminiKeys.length === 0) {
+    return res.status(503).json({ error: "AI service is currently unavailable." });
+  }
+
+  try {
+    const safeText = sanitizePromptValue(text.trim(), 500);
+    const response = await serverCallGemini({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+      },
+    });
+
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) {
+      return res.status(500).json({ error: "No audio data returned from AI." });
+    }
+    res.json({ audio: base64 });
+  } catch (error: any) {
+    if (error.message === "GEMINI_QUOTA_EXCEEDED") {
+      return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
+    }
+    console.error("TTS proxy error:", error);
+    res.status(500).json({ error: "Failed to generate audio." });
+  }
+});
+
+app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
+  const { audioData, taskType, mimeType = "audio/webm", correctAnswer } = req.body as {
+    audioData: string;
+    taskType: string;
+    mimeType?: string;
+    correctAnswer?: string;
+  };
+
+  if (!audioData || typeof audioData !== "string") {
+    return res.status(400).json({ error: "audioData is required." });
+  }
+  if (!taskType || typeof taskType !== "string") {
+    return res.status(400).json({ error: "taskType is required." });
+  }
+  if (serverGeminiKeys.length === 0) {
+    return res.status(503).json({ error: "AI service is currently unavailable." });
+  }
+
+  const cleanMimeType = mimeType.split(";")[0].trim();
+  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
+  if (taskType === "Answer Short Question" && correctAnswer) {
+    prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;
+  }
+
+  try {
+    const response = await serverCallGemini({
+      model: "gemini-2.5-flash",
+      contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overall: { type: Type.NUMBER },
+            fluency: { type: Type.NUMBER },
+            pronunciation: { type: Type.NUMBER },
+            content: { type: Type.NUMBER },
+            transcription: { type: Type.STRING },
+            feedback: { type: Type.ARRAY, items: { type: Type.STRING } },
+            mispronounced: { type: Type.ARRAY, items: { type: Type.STRING } },
+            hesitations: { type: Type.NUMBER },
+            pace: { type: Type.STRING },
+            stress: { type: Type.STRING },
+          },
+          required: ["overall", "fluency", "pronunciation", "content", "transcription"],
+        },
+      },
+    });
+
+    res.json(JSON.parse(response.text ?? "{}"));
+  } catch (error: any) {
+    if (error.message === "GEMINI_QUOTA_EXCEEDED") {
+      return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
+    }
+    console.error("Speaking analysis proxy error:", error);
+    res.status(500).json({ error: "Failed to analyze speaking." });
+  }
+});
+
+app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
+  const { text, taskType } = req.body as { text: string; taskType: string };
+
+  if (!text || typeof text !== "string") {
+    return res.status(400).json({ error: "text is required." });
+  }
+  if (!taskType || typeof taskType !== "string") {
+    return res.status(400).json({ error: "taskType is required." });
+  }
+  if (serverGeminiKeys.length === 0) {
+    return res.status(503).json({ error: "AI service is currently unavailable." });
+  }
+
+  const safeTaskType = sanitizePromptValue(taskType, 200);
+  // Sanitize control characters while preserving the essay text (limit to 5000 chars)
+  const safeText = sanitizePromptValue(text, 5000);
+
+  try {
+    const response = await serverCallGemini({
+      model: "gemini-2.5-flash",
+      contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overall: { type: Type.NUMBER },
+            grammar: { type: Type.NUMBER },
+            vocabulary: { type: Type.NUMBER },
+            spelling: { type: Type.NUMBER },
+            content: { type: Type.NUMBER },
+            tips: { type: Type.ARRAY, items: { type: Type.STRING } },
+            mistakes: { type: Type.ARRAY, items: { type: Type.STRING } },
+          },
+          required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"],
+        },
+      },
+    });
+
+    res.json(JSON.parse(response.text ?? "{}"));
+  } catch (error: any) {
+    if (error.message === "GEMINI_QUOTA_EXCEEDED") {
+      return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
+    }
+    console.error("Writing analysis proxy error:", error);
+    res.status(500).json({ error: "Failed to analyze writing." });
   }
 });
 

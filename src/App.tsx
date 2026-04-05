@@ -67,7 +67,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { SupportBot } from './components/SupportBot';
-import { db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
+import { auth, db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
 import { seedTasksToFirestore } from './services/taskService';
 
 // Module-level mic stream cache — shared across TaskModal instances so the browser
@@ -1302,9 +1302,10 @@ function AppContent() {
     setIsSyncingPortal(true);
     (async () => {
       try {
+        const idToken = await auth.currentUser?.getIdToken().catch(() => null);
         const res = await fetch('/api/sync-subscription', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
           body: JSON.stringify({
             subscriptionId: user.stripeSubscriptionId || undefined,
             customerId: user.stripeCustomerId || undefined,
@@ -2692,9 +2693,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       }
 
       const receiptEmail = (emailInput || user?.email || "").trim() || undefined;
+      const _subToken = await auth.currentUser?.getIdToken().catch(() => null);
       const response = await fetch('/api/create-subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(_subToken ? { Authorization: `Bearer ${_subToken}` } : {}) },
         body: JSON.stringify({ 
           planId: plan.id,
           planName: plan.name,
@@ -3396,9 +3398,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     if (!user?.stripeCustomerId) return;
     setIsOpeningPortal(true);
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/customer-portal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({
           customerId: user.stripeCustomerId,
           returnUrl: (() => {
@@ -3425,9 +3428,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     if (!user?.stripeSubscriptionId) return;
     setIsApplyingDiscount(true);
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/apply-retention-discount', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
       });
       const data = await res.json();
@@ -3451,9 +3455,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     }
     setIsCanceling(true);
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/cancel-subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({
           subscriptionId: user.stripeSubscriptionId || undefined,
           customerId: user.stripeCustomerId || undefined,
@@ -3484,9 +3489,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
     if (!user?.stripeSubscriptionId) return;
     setIsReactivating(true);
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/reactivate-subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({ subscriptionId: user.stripeSubscriptionId }),
       });
       const data = await res.json();
@@ -3512,9 +3518,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       const amountInCents = Math.round((convertedAmount ?? basePrice) * 100);
       const currency = CurrencyService.getCurrentCurrency().code.toLowerCase();
 
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/change-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({
           subscriptionId: user.stripeSubscriptionId,
           planId: changePlanTarget.id,
@@ -4350,7 +4357,7 @@ function MockTestSession({
       try {
         if (task.section === 'speaking') {
           const result = await analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]);
-          return result.overall ?? 70;
+          return (result as { overall?: number }).overall ?? 70;
         } else if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
           const result = await analyzeWriting(response, task.title);
           return result.overall ?? 70;
