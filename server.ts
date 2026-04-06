@@ -9,6 +9,7 @@ import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { rateLimit } from "express-rate-limit";
 import nodemailer from "nodemailer";
 import { GoogleGenAI, Modality, Type } from "@google/genai";
+import type { JWTInput } from "google-auth-library";
 
 dotenv.config();
 
@@ -73,9 +74,35 @@ interface ServerKeyState {
 function buildServerKeyStates(): ServerKeyState[] {
   const states: ServerKeyState[] = [];
 
-  // Vertex AI Express Mode key: uses the Vertex AI backend with just an API key
-  // (no project/location needed for Express Mode). Set VERTEX_AI_API_KEY to use
-  // this as the primary key before the regular Gemini Developer API keys.
+  // Vertex AI Service Account JSON key (highest priority).
+  // Set VERTEX_AI_SERVICE_ACCOUNT_JSON to the full contents of your downloaded
+  // service account JSON key file. The project_id is read from the JSON itself.
+  // Optionally set VERTEX_AI_LOCATION (defaults to "us-central1").
+  const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON;
+  if (saJsonRaw) {
+    try {
+      const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
+      const project = saJson.project_id;
+      const location = process.env.VERTEX_AI_LOCATION ?? "us-central1";
+      if (!project) throw new Error("project_id missing from service account JSON");
+      states.push({
+        client: new GoogleGenAI({
+          vertexai: true,
+          project,
+          location,
+          googleAuthOptions: { credentials: saJson },
+        }),
+        exhaustedUntil: 0,
+        consecutiveExhaustions: 0,
+        isVertex: true,
+      });
+    } catch (err) {
+      console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
+    }
+  }
+
+  // Vertex AI Express Mode key: a simple Google Cloud API key restricted to
+  // Vertex AI APIs. No project/location needed. Set VERTEX_AI_API_KEY to use.
   const vertexKey = process.env.VERTEX_AI_API_KEY;
   if (vertexKey) {
     states.push({
