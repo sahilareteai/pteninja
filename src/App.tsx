@@ -7728,6 +7728,7 @@ function TaskModal({
                               }
                               setRecordingStopped(true);
                               setTimeLeft(0);
+
                             } else {
                               handleFinish();
                             }
@@ -7766,8 +7767,8 @@ function TaskModal({
                       </button>}
 
                       <div className="flex-1 overflow-hidden">
-                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
-                        {isPreparingAudio ? (
+                        {/* Spinner when preparing or audio loading, wave when active, progress bar otherwise */}
+                        {(isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
                           <div className="w-full h-12 flex items-center justify-center">
                             <Loader2 size={28} className="text-blue-400 animate-spin" />
                           </div>
@@ -7884,8 +7885,8 @@ function TaskModal({
                       )}
 
                       <div className="flex-1 overflow-hidden">
-                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
-                        {isPreparingAudio ? (
+                        {/* Spinner when preparing or audio loading, wave when active, progress bar otherwise */}
+                        {(isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
                           <div className="w-full h-12 flex items-center justify-center">
                             <Loader2 size={28} className="text-blue-400 animate-spin" />
                           </div>
