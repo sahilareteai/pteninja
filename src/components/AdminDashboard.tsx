@@ -16,7 +16,9 @@ import {
   Mail,
   User as UserIcon,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  ShieldCheck
 } from 'lucide-react';
 import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, query, where, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
@@ -38,6 +40,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [roleChangingUid, setRoleChangingUid] = useState<string | null>(null);
+  const [visitorStats, setVisitorStats] = useState<{ totalVisits: number; todayVisits: number } | null>(null);
   const hasFetchedUsers = useRef(false);
   const hasFetchedPromos = useRef(false);
   const [newPromo, setNewPromo] = useState<PromoCode>({
@@ -50,6 +54,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetchData(false);
     seedInitialCodes();
+    fetchVisitorStats();
   }, [activeTab]);
 
   const seedInitialCodes = async () => {
@@ -70,6 +75,50 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     } catch (error) {
       console.error('Error seeding promo codes:', error);
       // Don't throw here to avoid crashing the dashboard, but log it
+    }
+  };
+
+  const fetchVisitorStats = async () => {
+    try {
+      const visitorDoc = await getDoc(doc(db, 'analytics', 'visitors'));
+      if (visitorDoc.exists()) {
+        const data = visitorDoc.data();
+        const today = new Date().toISOString().slice(0, 10);
+        setVisitorStats({
+          totalVisits: data.totalVisits ?? 0,
+          todayVisits: data.dailyVisits?.[today] ?? 0,
+        });
+      } else {
+        setVisitorStats({ totalVisits: 0, todayVisits: 0 });
+      }
+    } catch (error) {
+      console.error('Error fetching visitor stats:', error);
+    }
+  };
+
+  const handleRoleChange = async (targetUser: AdminUser, newRole: 'admin' | 'user') => {
+    setRoleChangingUid(targetUser.uid);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+      const response = await fetch('/api/set-user-role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ uid: targetUser.uid, role: newRole }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? 'Failed to change role');
+      }
+      setUsers(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, role: newRole } : u));
+      toast.success(`${targetUser.displayName || targetUser.email || targetUser.uid} is now ${newRole === 'admin' ? 'an Admin' : 'a regular user'}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to change role');
+    } finally {
+      setRoleChangingUid(null);
     }
   };
 
@@ -195,12 +244,32 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
               <p className="text-xs text-app-text-muted">Manage users and promotions</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
-          >
-            <XCircle size={24} />
-          </button>
+          <div className="flex items-center gap-3">
+            {visitorStats && (
+              <div className="hidden sm:flex items-center gap-3">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-app-bg rounded-xl border border-app-primary/10">
+                  <Eye size={14} className="text-app-primary" />
+                  <div className="text-right">
+                    <div className="text-[10px] text-app-text-muted uppercase font-bold tracking-wider">Today</div>
+                    <div className="text-sm font-black text-app-text">{visitorStats.todayVisits.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-app-bg rounded-xl border border-app-primary/10">
+                  <Eye size={14} className="text-app-accent" />
+                  <div className="text-right">
+                    <div className="text-[10px] text-app-text-muted uppercase font-bold tracking-wider">Total Visits</div>
+                    <div className="text-sm font-black text-app-text">{visitorStats.totalVisits.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -348,12 +417,29 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               </div>
                             </td>
                             <td className="px-4 py-4">
-                              <span className={cn(
-                                "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                user.role === 'admin' ? "bg-purple-500/10 text-purple-500" : "bg-app-text-muted/10 text-app-text-muted"
-                              )}>
-                                {user.role || 'user'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                  user.role === 'admin' ? "bg-purple-500/10 text-purple-500" : "bg-app-text-muted/10 text-app-text-muted"
+                                )}>
+                                  {user.role || 'user'}
+                                </span>
+                                <button
+                                  onClick={() => handleRoleChange(user, user.role === 'admin' ? 'user' : 'admin')}
+                                  disabled={roleChangingUid === user.uid}
+                                  className={cn(
+                                    "p-1 rounded-lg transition-all text-[10px]",
+                                    user.role === 'admin'
+                                      ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20"
+                                      : "bg-app-text-muted/10 text-app-text-muted hover:bg-purple-500/10 hover:text-purple-500"
+                                  )}
+                                  title={user.role === 'admin' ? 'Remove admin role' : 'Make admin'}
+                                >
+                                  {roleChangingUid === user.uid
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : <ShieldCheck size={12} />}
+                                </button>
+                              </div>
                             </td>
                             <td className="px-4 py-4">
                               <button

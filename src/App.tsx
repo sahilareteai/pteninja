@@ -5070,15 +5070,15 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                     </div>
 
                     <div className="p-4 bg-app-primary/5 border border-app-primary/20 rounded-2xl">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <Flame className="text-orange-500" size={18} />
-                          <p className="text-sm font-bold text-app-text">Study Streak</p>
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Flame className="text-orange-500 shrink-0" size={18} />
+                          <p className="text-sm font-bold text-app-text truncate">Study Streak</p>
                         </div>
-                        <span className="text-xs font-bold text-app-primary">{currentStreak} / {studyPlan.daysLeft + currentStreak} Days</span>
+                        <span className="text-xs font-bold text-app-primary shrink-0">{currentStreak} / {studyPlan.daysLeft + currentStreak} Days</span>
                       </div>
                       
-                      <div className="flex gap-1.5 justify-between">
+                      <div className="grid grid-cols-7 gap-1">
                         {Array.from({ length: 7 }).map((_, i) => {
                           const date = new Date();
                           date.setDate(date.getDate() - (6 - i));
@@ -5087,15 +5087,15 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                           const isToday = i === 6;
                           
                           return (
-                            <div key={i} className="flex flex-col items-center gap-1.5">
+                            <div key={i} className="flex flex-col items-center gap-1">
                               <div className={cn(
-                                "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
+                                "w-full aspect-square rounded-lg flex items-center justify-center border transition-all",
                                 isLogged 
                                   ? "bg-app-primary border-app-primary text-app-bg" 
                                   : "bg-app-bg border-app-primary/20 text-app-text-muted",
                                 isToday && !isLogged && "border-dashed border-orange-500/50"
                               )}>
-                                {isLogged ? <Check size={14} strokeWidth={3} /> : <span className="text-[10px] font-bold">{date.getDate()}</span>}
+                                {isLogged ? <Check size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">{date.getDate()}</span>}
                               </div>
                               <span className="text-[8px] uppercase font-bold text-app-text-muted">
                                 {date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}

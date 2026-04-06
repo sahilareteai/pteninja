@@ -40,6 +40,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Tracks when a fresh guest write is in-flight so stale Firestore snapshots
   // (from a previous anonymous session) don't trigger the subscription modal.
   const pendingGuestWriteRef = useRef(false);
+  // Ensures we only record one visit per browser session.
+  const hasRecordedVisitRef = useRef(false);
+  // Ensures we only call ensure-admin-role once per auth session.
+  const hasEnsuredAdminRoleRef = useRef(false);
 
   useEffect(() => {
     const initCurrency = async () => {
@@ -58,6 +62,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         unsubDoc();
         unsubDoc = null;
       }
+      // Reset per-auth-session flags on user change
+      hasEnsuredAdminRoleRef.current = false;
 
       if (firebaseUser) {
         setLoading(true);
@@ -126,6 +132,17 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
 
             setUser(userData);
+
+            // Ensure admin role for protected accounts (once per auth session)
+            if (!firebaseUser.isAnonymous && !hasEnsuredAdminRoleRef.current) {
+              hasEnsuredAdminRoleRef.current = true;
+              firebaseUser.getIdToken().then(idToken => {
+                fetch('/api/ensure-admin-role', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${idToken}` },
+                }).catch((err) => console.error('Failed to ensure admin role:', err));
+              }).catch((err) => console.error('Failed to get ID token for admin role check:', err));
+            }
           } else {
             // New user or guest
             const isGuest = firebaseUser.isAnonymous;
@@ -160,8 +177,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             });
 
             // Only attempt to create the user document if we are authenticated
-            // and don't have a pending auth error
-            setDoc(userRef, firestoreData).catch(err => {
+            // and don't have a pending auth error.
+            // Use merge:true so any manually-set fields (e.g. role:'admin') are
+            // preserved even if this snapshot fires before the document is fully loaded.
+            setDoc(userRef, firestoreData, { merge: true }).catch(err => {
               const isPermissionError = err.code === 'permission-denied' || 
                                        (err.message && err.message.toLowerCase().includes('insufficient permissions'));
               
@@ -198,6 +217,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
           setLoading(false);
           setIsAuthenticating(false);
+
+          // Record a visit once per browser session
+          if (!hasRecordedVisitRef.current) {
+            hasRecordedVisitRef.current = true;
+            fetch('/api/record-visit', { method: 'POST' }).catch((err) => console.error('Failed to record visit:', err));
+          }
         }, (err: any) => {
           // If we're anonymous and get a permission error, it's likely the same root cause
           const isPermissionError = err.code === 'permission-denied' || 
