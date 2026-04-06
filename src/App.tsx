@@ -6206,10 +6206,16 @@ const preFetchAudio = (task: PTETask): Promise<void> => {
       if (base64) {
         const ctx = getAudioContext();
         if (ctx) {
-          const arrayBuffer = base64ToArrayBuffer(base64);
-          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-          globalAudioCache[task.id] = { base64, buffer: audioBuffer };
-          console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
+          try {
+            const arrayBuffer = base64ToArrayBuffer(base64);
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+            globalAudioCache[task.id] = { base64, buffer: audioBuffer };
+            console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
+          } catch (decodeErr) {
+            // The stored base64 is corrupt — evict it so future loads don't re-use it.
+            console.warn(`[Audio] Global Cache: Corrupt audio for task ${task.id}, evicting from localStorage`, decodeErr);
+            try { localStorage.removeItem(LS_AUDIO_PREFIX + task.id); } catch { /* ignore */ }
+          }
         }
       }
     } catch (err) {
@@ -6610,6 +6616,19 @@ function TaskModal({
 
           let audio = null;
           
+          // If a background prefetch is already in-flight for this task, wait for it
+          // before starting a second concurrent TTS call — the prefetch may populate
+          // the cache and make the on-demand call unnecessary entirely.
+          if (preFetchInFlight[task.id]) {
+            console.log("[Audio] Background prefetch in-flight, awaiting before on-demand generation...");
+            await preFetchInFlight[task.id].catch(() => {});
+            if (isCancelled) return;
+            // If the prefetch succeeded the cache is now populated — re-enter from top.
+            if (globalAudioCache[task.id]) {
+              return playAudio();
+            }
+          }
+
           console.log("[Audio] Audio not ready, setting isPreparingAudio = true");
           setIsPreparingAudio(true);
 
