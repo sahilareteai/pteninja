@@ -70,12 +70,30 @@ interface ServerKeyState {
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
-  const keys = [
+  const states: ServerKeyState[] = [];
+
+  // Vertex AI Express Mode key: uses the Vertex AI backend with just an API key
+  // (no project/location needed for Express Mode). Set VERTEX_AI_API_KEY to use
+  // this as the primary key before the regular Gemini Developer API keys.
+  const vertexKey = process.env.VERTEX_AI_API_KEY;
+  if (vertexKey) {
+    states.push({
+      client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
+      exhaustedUntil: 0,
+      consecutiveExhaustions: 0,
+    });
+  }
+
+  const geminiKeys = [
     process.env.GEMINI_API_KEY,
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
-  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 }));
+  for (const key of geminiKeys) {
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 });
+  }
+
+  return states;
 }
 
 // Text endpoints (analyze-speaking, analyze-writing, support-chat) use this pool.
