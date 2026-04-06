@@ -73,12 +73,11 @@ function buildServerKeyStates(): ServerKeyState[] {
   return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 }));
 }
 
+// Text endpoints (analyze-speaking, analyze-writing, support-chat) use this pool.
 const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
-
-function getAvailableServerKeys(): ServerKeyState[] {
-  const now = Date.now();
-  return serverGeminiKeys.filter((k) => now >= k.exhaustedUntil);
-}
+// TTS endpoint uses a separate pool so its preview-model quota exhaustions do not
+// block text endpoints and vice versa.
+const serverTTSGeminiKeys: ServerKeyState[] = buildServerKeyStates();
 
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
@@ -90,8 +89,10 @@ type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["gen
 // key that another instance has already found to be quota-exceeded.
 //
 // A short in-memory cache avoids reading Firestore on every single request.
+// Each key pool (text vs TTS) tracks its own sync timestamp to avoid
+// cross-contamination of exhaustion state.
 const KEY_STATE_CACHE_TTL_MS = 30_000; // Refresh from Firestore at most every 30 s
-let keyStateSyncedAt = 0;
+const keyStateSyncedAtMap: Record<string, number> = {};
 
 function getKeyStateDoc() {
   const adminInstance = getAdminApp();
@@ -101,42 +102,44 @@ function getKeyStateDoc() {
   return getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID).collection("config").doc("geminiKeyState");
 }
 
-// Reads Firestore and applies any newer exhaustion state to serverGeminiKeys.
-// Uses the cached timestamp to avoid Firestore reads more often than every 30 s.
-async function syncKeyStateFromFirestore(): Promise<void> {
-  if (Date.now() - keyStateSyncedAt < KEY_STATE_CACHE_TTL_MS) return;
+// Reads Firestore and applies any newer exhaustion state to the given key pool.
+// Uses the cached timestamp (keyed by stateField) to avoid Firestore reads more
+// often than every 30 s per pool.
+async function syncKeyStateFromFirestore(keys: ServerKeyState[], stateField: string): Promise<void> {
+  const syncedAt = keyStateSyncedAtMap[stateField] ?? 0;
+  if (Date.now() - syncedAt < KEY_STATE_CACHE_TTL_MS) return;
   const doc = getKeyStateDoc();
   if (!doc) return;
   try {
     const snap = await doc.get();
     if (snap.exists) {
-      const data = snap.data() as { keys?: Array<{ exhaustedUntil: number; consecutiveExhaustions: number }> };
-      data?.keys?.forEach((entry, i) => {
-        if (!serverGeminiKeys[i]) return;
+      const data = snap.data() as Record<string, Array<{ exhaustedUntil: number; consecutiveExhaustions: number }>>;
+      data?.[stateField]?.forEach((entry, i) => {
+        if (!keys[i]) return;
         // Only advance exhaustedUntil — never roll it back using stale remote data.
-        if ((entry.exhaustedUntil ?? 0) > serverGeminiKeys[i].exhaustedUntil) {
-          serverGeminiKeys[i].exhaustedUntil = entry.exhaustedUntil;
+        if ((entry.exhaustedUntil ?? 0) > keys[i].exhaustedUntil) {
+          keys[i].exhaustedUntil = entry.exhaustedUntil;
         }
-        if ((entry.consecutiveExhaustions ?? 0) > serverGeminiKeys[i].consecutiveExhaustions) {
-          serverGeminiKeys[i].consecutiveExhaustions = entry.consecutiveExhaustions;
+        if ((entry.consecutiveExhaustions ?? 0) > keys[i].consecutiveExhaustions) {
+          keys[i].consecutiveExhaustions = entry.consecutiveExhaustions;
         }
       });
     }
-    keyStateSyncedAt = Date.now();
+    keyStateSyncedAtMap[stateField] = Date.now();
   } catch (err) {
     console.warn("[Gemini] Failed to sync key state from Firestore:", err);
   }
 }
 
-// Writes the current in-memory exhaustion state to Firestore so other
-// instances can pick it up on their next sync.
-async function persistKeyStateToFirestore(): Promise<void> {
+// Writes the current in-memory exhaustion state for the given key pool to Firestore
+// so other instances can pick it up on their next sync.
+async function persistKeyStateToFirestore(keys: ServerKeyState[], stateField: string): Promise<void> {
   const doc = getKeyStateDoc();
   if (!doc) return;
   try {
     await doc.set(
       {
-        keys: serverGeminiKeys.map((k) => ({
+        [stateField]: keys.map((k) => ({
           exhaustedUntil: k.exhaustedUntil,
           consecutiveExhaustions: k.consecutiveExhaustions,
         })),
@@ -144,7 +147,7 @@ async function persistKeyStateToFirestore(): Promise<void> {
       },
       { merge: true },
     );
-    keyStateSyncedAt = Date.now();
+    keyStateSyncedAtMap[stateField] = Date.now();
   } catch (err) {
     console.warn("[Gemini] Failed to persist key state to Firestore:", err);
   }
@@ -154,14 +157,21 @@ async function persistKeyStateToFirestore(): Promise<void> {
 // Uses exponential backoff per key: 1 min → 2 min → 4 min → … up to 1 hour.
 // Syncs exhaustion state with Firestore so all serverless instances share the same view.
 // Throws an error with message "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
-async function serverCallGemini(params: GeminiGenerateContentParams): Promise<GeminiGenerateContentResult> {
+// Pass serverTTSGeminiKeys / "ttsKeys" for the TTS endpoint to keep its quota tracking
+// independent from the text-model endpoints.
+async function serverCallGemini(
+  params: GeminiGenerateContentParams,
+  keys: ServerKeyState[] = serverGeminiKeys,
+  firestoreStateField: string = "keys",
+): Promise<GeminiGenerateContentResult> {
   // Pull in exhaustion state from other instances before deciding which key to use.
-  await syncKeyStateFromFirestore();
+  await syncKeyStateFromFirestore(keys, firestoreStateField);
 
-  const available = getAvailableServerKeys();
+  const now = Date.now();
+  const available = keys.filter((k) => now >= k.exhaustedUntil);
 
   if (available.length === 0) {
-    await sendAllKeysExhaustedAlert();
+    await sendAllKeysExhaustedAlert(firestoreStateField);
     const err = new Error("GEMINI_QUOTA_EXCEEDED");
     (err as any).status = 429;
     throw err;
@@ -177,6 +187,7 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
       const isQuotaError =
         e.message?.includes("429") ||
         e.message?.includes("RESOURCE_EXHAUSTED") ||
+        e.message?.toLowerCase().includes("quota") ||
         e.status === 429 ||
         e.error?.code === 429;
 
@@ -193,28 +204,34 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
           `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
         );
         // Persist the new exhaustion state so other instances skip this key immediately.
-        void persistKeyStateToFirestore();
+        void persistKeyStateToFirestore(keys, firestoreStateField);
         continue;
       }
       throw e;
     }
   }
 
-  await sendAllKeysExhaustedAlert();
+  await sendAllKeysExhaustedAlert(firestoreStateField);
   const err = new Error("GEMINI_QUOTA_EXCEEDED");
   (err as any).status = 429;
   throw err;
 }
 
-// Deduplication: only send one alert email per exhaustion window
-let serverAllKeysAlertUntil = 0;
+// Deduplication: only send one alert email per exhaustion window, tracked per pool.
+const serverAllKeysAlertUntilMap: Record<string, number> = {};
 
-async function sendAllKeysExhaustedAlert() {
+const POOL_LABEL: Record<string, string> = {
+  keys: "text",
+  ttsKeys: "TTS",
+};
+
+async function sendAllKeysExhaustedAlert(stateField: string = "keys") {
   const now = Date.now();
-  if (now < serverAllKeysAlertUntil) return;
-  serverAllKeysAlertUntil = now + ALERT_COOLDOWN_MS;
+  if (now < (serverAllKeysAlertUntilMap[stateField] ?? 0)) return;
+  serverAllKeysAlertUntilMap[stateField] = now + ALERT_COOLDOWN_MS;
 
-  console.error("[Gemini] ALL API KEYS EXHAUSTED — sending alert email.");
+  const label = POOL_LABEL[stateField] ?? stateField;
+  console.error(`[Gemini] ALL ${label.toUpperCase()} API KEYS EXHAUSTED — sending alert email.`);
 
   const supportEmail = process.env.SUPPORT_EMAIL;
   if (!supportEmail) {
@@ -236,15 +253,15 @@ async function sendAllKeysExhaustedAlert() {
     await transport.sendMail({
       from,
       to: supportEmail,
-      subject: "[PTE Ninja] ⚠️ All Gemini API Keys Quota Exhausted",
+      subject: `[PTE Ninja] ⚠️ All Gemini ${label.toUpperCase()} API Keys Quota Exhausted`,
       text: [
-        "⚠️  PTE Ninja — All Gemini API Keys Exhausted",
+        `⚠️  PTE Ninja — All Gemini ${label.toUpperCase()} API Keys Exhausted`,
         "",
-        `All ${keyCount} configured Gemini API key(s) have hit their quota limits.`,
+        `All ${keyCount} configured Gemini API key(s) have hit their quota limits for the ${label} endpoint pool.`,
         `Time: ${timestamp}`,
         "",
         "Please rotate or add new API keys (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3) immediately.",
-        "Keys will automatically resume after their 5-minute cooldown resets.",
+        "Keys will automatically resume after their cooldown resets.",
       ].join("\n"),
     });
     console.warn("[Gemini] Alert email sent to support team.");
@@ -1398,7 +1415,17 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
   }
 
   const now = Date.now();
-  const keys = serverGeminiKeys.map((k, i) => {
+  const textKeys = serverGeminiKeys.map((k, i) => {
+    const remainingMs = Math.max(0, k.exhaustedUntil - now);
+    return {
+      index: i,
+      available: remainingMs === 0,
+      exhaustedUntil: k.exhaustedUntil || null,
+      cooldownRemainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
+      consecutiveExhaustions: k.consecutiveExhaustions,
+    };
+  });
+  const ttsKeys = serverTTSGeminiKeys.map((k, i) => {
     const remainingMs = Math.max(0, k.exhaustedUntil - now);
     return {
       index: i,
@@ -1411,9 +1438,14 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
 
   res.json({
     totalKeys: serverGeminiKeys.length,
-    availableKeys: keys.filter((k) => k.available).length,
-    lastSyncedAt: keyStateSyncedAt || null,
-    keys,
+    availableKeys: textKeys.filter((k) => k.available).length,
+    lastSyncedAt: keyStateSyncedAtMap["keys"] || null,
+    keys: textKeys,
+    tts: {
+      availableKeys: ttsKeys.filter((k) => k.available).length,
+      lastSyncedAt: keyStateSyncedAtMap["ttsKeys"] || null,
+      keys: ttsKeys,
+    },
   });
 });
 
@@ -2053,20 +2085,24 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return res.status(400).json({ error: "text is required." });
   }
-  if (serverGeminiKeys.length === 0) {
+  if (serverTTSGeminiKeys.length === 0) {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
   try {
     const safeText = sanitizePromptValue(text.trim(), 500);
-    const response = await serverCallGemini({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+    const response = await serverCallGemini(
+      {
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+        },
       },
-    });
+      serverTTSGeminiKeys,
+      "ttsKeys",
+    );
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64) {
@@ -2104,7 +2140,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   }
 
   const cleanMimeType = mimeType.split(";")[0].trim();
-  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
+  let prompt = `You are a strict PTE Academic Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, score strictly on PTE Academic criteria (10-90 scale): Content — relevance and completeness of ideas addressing the task; Oral Fluency — naturalness of speech rhythm, smooth pacing, minimal unnatural hesitations or false starts; Pronunciation — clarity, accurate sound production, and intelligibility for a competent English speaker. Apply genuine PTE standards: a mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Identify specific weaknesses in pauses, rhythm, and mispronounced words.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
     prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;
   }
@@ -2186,7 +2222,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   try {
     const response = await serverCallGemini({
       model: "gemini-2.5-flash-lite",
-      contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
+      contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {

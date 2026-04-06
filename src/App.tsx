@@ -6285,6 +6285,7 @@ function TaskModal({
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const beepPlayedRef = useRef(false);
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
   // Always-current ref to handleFinish so the RAF silence-detection can call it
   const handleFinishRef = useRef<(() => void) | null>(null);
 
@@ -6944,6 +6945,10 @@ function TaskModal({
       // Values below 5 correspond to near-total silence or background noise floor.
       const SILENCE_AMPLITUDE_THRESHOLD = 5;
       const SILENCE_AUTO_STOP_MS = 7000; // stop after 7 s of continuous silence
+      // Minimum time to record before silence auto-stop can trigger.
+      // This prevents premature termination for tasks (e.g. Respond to a Situation)
+      // where the user needs a few seconds to formulate their response after the beep.
+      const MIN_RECORDING_BEFORE_SILENCE_STOP_MS = 12000;
 
       const updateVolume = () => {
         // Guard: if the analyser was already disconnected (recording stopped externally),
@@ -6960,9 +6965,11 @@ function TaskModal({
 
         // --- Silence auto-stop (not in mock test) ---
         if (!isMockTest) {
+          const elapsedMs = Date.now() - recordingStartTimeRef.current;
           if (average < SILENCE_AMPLITUDE_THRESHOLD) {
-            // Start silence timer if not already running
-            if (!silenceTimeoutRef.current) {
+            // Only start the silence timer after the minimum recording window has passed,
+            // so users have time to begin speaking before the auto-stop can fire.
+            if (elapsedMs >= MIN_RECORDING_BEFORE_SILENCE_STOP_MS && !silenceTimeoutRef.current) {
               silenceTimeoutRef.current = setTimeout(() => {
                 silenceTimeoutRef.current = null;
                 handleFinishRef.current?.();
@@ -6984,6 +6991,7 @@ function TaskModal({
 
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
+      recordingStartTimeRef.current = Date.now();
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
