@@ -264,7 +264,7 @@ async function serverCallGemini(
         lastNonQuotaError = e;
         console.warn(
           `[Gemini] Non-quota error on key, switching to next key. ` +
-          `Error: ${e.message ?? e.status}`
+          `Error: ${e.message || `Status: ${e.status}`}`
         );
         continue keyLoop;
       }
