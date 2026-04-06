@@ -49,11 +49,19 @@ app.use((req, res, next) => {
 });
 
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
-const QUOTA_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per exhausted key
+// Base per-key cooldown for the first quota hit. Subsequent consecutive hits on
+// the same key use exponential backoff (doubles each time) up to MAX_KEY_COOLDOWN_MS.
+// This handles both per-minute rate limits (short cooldown is enough) and daily
+// quota exhaustion (key stays cooled down longer so it isn't wastefully retried).
+const KEY_COOLDOWN_BASE_MS = 60 * 1000; // 1 minute initial cooldown
+const KEY_COOLDOWN_MAX_MS = 60 * 60 * 1000; // 1 hour maximum cooldown
+// Alert-email deduplication window — kept longer to avoid inbox spam.
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
+  consecutiveExhaustions: number; // tracks backoff level per key
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -62,7 +70,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
-  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0 }));
+  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 }));
 }
 
 const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
@@ -75,9 +83,81 @@ function getAvailableServerKeys(): ServerKeyState[] {
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
+// ─── Firestore-backed shared key state ───────────────────────────────────────
+// In serverless environments (e.g. Vercel), each cold-start instance has its
+// own in-memory key state. We persist exhaustion timestamps to a Firestore
+// document so that all instances share the same cooldowns and don't retry a
+// key that another instance has already found to be quota-exceeded.
+//
+// A short in-memory cache avoids reading Firestore on every single request.
+const KEY_STATE_CACHE_TTL_MS = 30_000; // Refresh from Firestore at most every 30 s
+let keyStateSyncedAt = 0;
+
+function getKeyStateDoc() {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) return null;
+  // FIREBASE_DATABASE_ID is a module-level const defined after this function;
+  // it is always initialized before any request handler runs.
+  return getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID).collection("config").doc("geminiKeyState");
+}
+
+// Reads Firestore and applies any newer exhaustion state to serverGeminiKeys.
+// Uses the cached timestamp to avoid Firestore reads more often than every 30 s.
+async function syncKeyStateFromFirestore(): Promise<void> {
+  if (Date.now() - keyStateSyncedAt < KEY_STATE_CACHE_TTL_MS) return;
+  const doc = getKeyStateDoc();
+  if (!doc) return;
+  try {
+    const snap = await doc.get();
+    if (snap.exists) {
+      const data = snap.data() as { keys?: Array<{ exhaustedUntil: number; consecutiveExhaustions: number }> };
+      data?.keys?.forEach((entry, i) => {
+        if (!serverGeminiKeys[i]) return;
+        // Only advance exhaustedUntil — never roll it back using stale remote data.
+        if ((entry.exhaustedUntil ?? 0) > serverGeminiKeys[i].exhaustedUntil) {
+          serverGeminiKeys[i].exhaustedUntil = entry.exhaustedUntil;
+        }
+        if ((entry.consecutiveExhaustions ?? 0) > serverGeminiKeys[i].consecutiveExhaustions) {
+          serverGeminiKeys[i].consecutiveExhaustions = entry.consecutiveExhaustions;
+        }
+      });
+    }
+    keyStateSyncedAt = Date.now();
+  } catch (err) {
+    console.warn("[Gemini] Failed to sync key state from Firestore:", err);
+  }
+}
+
+// Writes the current in-memory exhaustion state to Firestore so other
+// instances can pick it up on their next sync.
+async function persistKeyStateToFirestore(): Promise<void> {
+  const doc = getKeyStateDoc();
+  if (!doc) return;
+  try {
+    await doc.set(
+      {
+        keys: serverGeminiKeys.map((k) => ({
+          exhaustedUntil: k.exhaustedUntil,
+          consecutiveExhaustions: k.consecutiveExhaustions,
+        })),
+        updatedAt: Date.now(),
+      },
+      { merge: true },
+    );
+    keyStateSyncedAt = Date.now();
+  } catch (err) {
+    console.warn("[Gemini] Failed to persist key state to Firestore:", err);
+  }
+}
+
 // Returns the result of a Gemini generateContent call, rotating through keys on quota errors.
+// Uses exponential backoff per key: 1 min → 2 min → 4 min → … up to 1 hour.
+// Syncs exhaustion state with Firestore so all serverless instances share the same view.
 // Throws an error with message "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
 async function serverCallGemini(params: GeminiGenerateContentParams): Promise<GeminiGenerateContentResult> {
+  // Pull in exhaustion state from other instances before deciding which key to use.
+  await syncKeyStateFromFirestore();
+
   const available = getAvailableServerKeys();
 
   if (available.length === 0) {
@@ -89,16 +169,31 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
 
   for (const keyState of available) {
     try {
-      return await keyState.client.models.generateContent(params);
+      const result = await keyState.client.models.generateContent(params);
+      // Success — reset the backoff counter for this key.
+      keyState.consecutiveExhaustions = 0;
+      return result;
     } catch (e: any) {
       const isQuotaError =
         e.message?.includes("429") ||
         e.message?.includes("RESOURCE_EXHAUSTED") ||
+        e.status === 429 ||
         e.error?.code === 429;
 
       if (isQuotaError) {
-        keyState.exhaustedUntil = Date.now() + QUOTA_COOLDOWN_MS;
-        console.warn("[Gemini] Server key quota exceeded. Switching to next key...");
+        // Exponential backoff: each consecutive exhaustion doubles the cooldown.
+        const backoffMs = Math.min(
+          KEY_COOLDOWN_BASE_MS * Math.pow(2, keyState.consecutiveExhaustions),
+          KEY_COOLDOWN_MAX_MS,
+        );
+        keyState.consecutiveExhaustions += 1;
+        keyState.exhaustedUntil = Date.now() + backoffMs;
+        console.warn(
+          `[Gemini] Key quota exceeded (exhaustion #${keyState.consecutiveExhaustions}). ` +
+          `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
+        );
+        // Persist the new exhaustion state so other instances skip this key immediately.
+        void persistKeyStateToFirestore();
         continue;
       }
       throw e;
@@ -117,7 +212,7 @@ let serverAllKeysAlertUntil = 0;
 async function sendAllKeysExhaustedAlert() {
   const now = Date.now();
   if (now < serverAllKeysAlertUntil) return;
-  serverAllKeysAlertUntil = now + QUOTA_COOLDOWN_MS;
+  serverAllKeysAlertUntil = now + ALERT_COOLDOWN_MS;
 
   console.error("[Gemini] ALL API KEYS EXHAUSTED — sending alert email.");
 
@@ -228,6 +323,190 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
       });
       break;
     }
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as Stripe.Invoice;
+      // Only send for subscription invoices with a positive amount charged
+      const isSubscriptionInvoice = !!(invoice.parent?.subscription_details?.subscription);
+      if (!isSubscriptionInvoice || (invoice.amount_paid ?? 0) <= 0) break;
+
+      const recipientEmail = invoice.customer_email;
+      if (!recipientEmail || !isValidEmail(recipientEmail)) break;
+
+      const transport = createMailTransport();
+      if (!transport) {
+        console.warn("No SMTP config — invoice email not sent for invoice:", invoice.id);
+        break;
+      }
+
+      const invoiceAppUrl = process.env.APP_URL ?? "https://pteninja.com";
+      const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+
+      // Format amount: Stripe stores amounts in the smallest currency unit (cents)
+      const currencyUpper = (invoice.currency ?? "aud").toUpperCase();
+      const amountFormatted = ((invoice.amount_paid ?? 0) / 100).toFixed(2);
+      const amountDisplay = `${currencyUpper} $${amountFormatted}`;
+
+      // Plan description from the first line item
+      const planDescription = invoice.lines?.data?.[0]?.description ?? "PTE Ninja Subscription";
+      const safePlanDescription = escapeHtml(planDescription);
+
+      // Billing period
+      const periodStart = invoice.lines?.data?.[0]?.period?.start
+        ? new Date((invoice.lines.data[0].period.start as number) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+        : null;
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end
+        ? new Date((invoice.lines.data[0].period.end as number) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+        : null;
+      const periodText = periodStart && periodEnd ? `${periodStart} – ${periodEnd}` : null;
+
+      const invoiceNumber = invoice.number ? escapeHtml(invoice.number) : null;
+      const rawInvoiceUrl = invoice.hosted_invoice_url ?? null;
+      const invoiceUrl = rawInvoiceUrl ? escapeHtml(rawInvoiceUrl) : null;
+      const safeEmail = escapeHtml(recipientEmail);
+      const paymentDate = new Date((invoice.created ?? Date.now() / 1000) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+
+      const subject = `Payment Confirmed — ${amountDisplay} for PTE Ninja`;
+
+      const textLines = [
+        `Hi,`,
+        ``,
+        `Your payment of ${amountDisplay} for PTE Ninja has been received. Thank you!`,
+        ``,
+        `Plan: ${planDescription}`,
+        `Amount: ${amountDisplay}`,
+        `Date: ${paymentDate}`,
+        ...(periodText ? [`Billing period: ${periodText}`] : []),
+        ...(invoiceNumber ? [`Invoice #: ${invoiceNumber}`] : []),
+        ...(rawInvoiceUrl ? [`View invoice: ${rawInvoiceUrl}`] : []),
+        ``,
+        `Access your account: ${invoiceAppUrl}`,
+        ``,
+        `Happy studying,`,
+        `The PTE Ninja Team`,
+      ];
+      const textBody = textLines.join("\n");
+
+      const htmlBody = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(108,99,255,0.10);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:40px 40px 32px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 20px;margin-bottom:20px;">
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
+                <span style="font-size:22px;color:rgba(255,255,255,0.7);margin-left:2px;">⚡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;line-height:1.3;">Payment Confirmed! ✅</h1>
+              <p style="margin:12px 0 0;color:rgba(255,255,255,0.85);font-size:16px;line-height:1.6;">Thank you for your payment. Your subscription is active.</p>
+            </td>
+          </tr>
+
+          <!-- Invoice Summary -->
+          <tr>
+            <td style="padding:36px 40px 28px;">
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">Hi,</p>
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
+                We've successfully received your payment. Here's a summary of your purchase:
+              </p>
+
+              <!-- Details Table -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:28px;">
+                <tr style="background:#f9fafb;">
+                  <td style="padding:14px 20px;font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e5e7eb;" colspan="2">Invoice Details</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #f3f4f6;width:40%;">Plan</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;border-bottom:1px solid #f3f4f6;">${safePlanDescription}</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #f3f4f6;">Amount Paid</td>
+                  <td style="padding:14px 20px;font-size:16px;color:#6c63ff;font-weight:800;border-bottom:1px solid #f3f4f6;">${amountDisplay}</td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;${periodText || invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">Payment Date</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;${periodText || invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">${paymentDate}</td>
+                </tr>
+                ${periodText ? `<tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;${invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">Billing Period</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;${invoiceNumber ? "border-bottom:1px solid #f3f4f6;" : ""}">${periodText}</td>
+                </tr>` : ""}
+                ${invoiceNumber ? `<tr>
+                  <td style="padding:14px 20px;font-size:14px;color:#6b7280;">Invoice #</td>
+                  <td style="padding:14px 20px;font-size:14px;color:#1a1a2e;font-weight:600;">${invoiceNumber}</td>
+                </tr>` : ""}
+              </table>
+
+              ${invoiceUrl ? `<!-- View Invoice CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center">
+                    <a href="${invoiceUrl}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:13px 40px;border-radius:50px;letter-spacing:0.5px;">
+                      View Invoice &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>` : ""}
+
+              <!-- Access Account -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(invoiceAppUrl)}" style="display:inline-block;border:2px solid #6c63ff;color:#6c63ff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 40px;border-radius:50px;">
+                      Go to My Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:14px;color:#6b7280;text-align:center;line-height:1.6;">
+                Have questions? Reply to this email or visit our
+                <a href="${escapeHtml(invoiceAppUrl)}" style="color:#6c63ff;text-decoration:none;">support centre</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">
+                This receipt was sent to <a href="mailto:${safeEmail}" style="color:#9ca3af;">${safeEmail}</a>.
+              </p>
+              <p style="margin:0;font-size:12px;color:#d1d5db;">
+                &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+      try {
+        await transport.sendMail({
+          from: `PTE Ninja <${fromAddress}>`,
+          to: recipientEmail,
+          subject,
+          text: textBody,
+          html: htmlBody,
+        });
+      } catch (emailErr) {
+        console.error("Failed to send invoice email for invoice:", invoice.id, emailErr);
+      }
+      break;
+    }
     default:
       break;
   }
@@ -271,6 +550,15 @@ const getAdminApp = () => {
 const deleteUserLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+// Rate limiter for read-only admin status endpoints
+const adminStatusLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
@@ -591,8 +879,9 @@ app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
   }
 
   // Validate the returnUrl against the allowlist to prevent open-redirect abuse.
+  const portalFallbackUrl = process.env.APP_URL ?? "https://pteninja.com";
   const resolvedReturnUrl = (() => {
-    if (!returnUrl) return "https://pteninja.vercel.app";
+    if (!returnUrl) return portalFallbackUrl;
     try {
       const parsed = new URL(returnUrl as string);
       const allowedHostnames = ALLOWED_ORIGINS.map((o) => new URL(o).hostname);
@@ -602,7 +891,7 @@ app.post("/api/customer-portal", subscriptionLimiter, async (req, res) => {
     } catch {
       // fall through to default
     }
-    return "https://pteninja.vercel.app";
+    return portalFallbackUrl;
   })();
 
   try {
@@ -1078,6 +1367,56 @@ app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
   }
 });
 
+// ─── Gemini Key Status (admin only) ──────────────────────────────────────────
+// Returns current in-memory exhaustion state for all configured Gemini keys.
+// Useful for diagnosing quota issues without leaking key values.
+app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) return res.status(401).json({ error: "Authorization token required" });
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch {
+        // deny access if we can't verify
+      }
+    }
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden: Admin access required" });
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+
+  const now = Date.now();
+  const keys = serverGeminiKeys.map((k, i) => {
+    const remainingMs = Math.max(0, k.exhaustedUntil - now);
+    return {
+      index: i,
+      available: remainingMs === 0,
+      exhaustedUntil: k.exhaustedUntil || null,
+      cooldownRemainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
+      consecutiveExhaustions: k.consecutiveExhaustions,
+    };
+  });
+
+  res.json({
+    totalKeys: serverGeminiKeys.length,
+    availableKeys: keys.filter((k) => k.available).length,
+    lastSyncedAt: keyStateSyncedAt || null,
+    keys,
+  });
+});
+
 // ─── Record Visit ─────────────────────────────────────────────────────────────
 // Called on app load to increment the visitor counter in Firestore.
 // Rate-limited to prevent abuse. No auth required.
@@ -1227,7 +1566,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     ];
 
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents,
       config: { systemInstruction },
     });
@@ -1245,7 +1584,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
 
 // ─── Gemini Quota Alert (called by frontend when all client-side keys exhausted) ──
 const geminiQuotaAlertLimiter = rateLimit({
-  windowMs: QUOTA_COOLDOWN_MS,
+  windowMs: ALERT_COOLDOWN_MS,
   max: 1,
   standardHeaders: true,
   legacyHeaders: false,
@@ -1765,14 +2104,14 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   }
 
   const cleanMimeType = mimeType.split(";")[0].trim();
-  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
+  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
     prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;
   }
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
       config: {
         responseMimeType: "application/json",
@@ -1795,7 +2134,26 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
       },
     });
 
-    res.json(JSON.parse(response.text ?? "{}"));
+    const parsed = JSON.parse(response.text ?? "{}");
+
+    // Server-side guard: if Gemini returned empty/blank transcription despite the
+    // prompt instruction, it means no speech was detected. Override all scores to the
+    // minimum to avoid giving unearned high marks for silence.
+    const transcription: string = parsed.transcription ?? "";
+    if (transcription.trim().length < 5) {
+      parsed.overall = 10;
+      parsed.fluency = 10;
+      parsed.pronunciation = 10;
+      parsed.content = 10;
+      parsed.transcription = "";
+      parsed.feedback = ["No speech detected. Please record yourself speaking clearly."];
+      parsed.mispronounced = [];
+      parsed.hesitations = 0;
+      parsed.pace = "N/A";
+      parsed.stress = "N/A";
+    }
+
+    res.json(parsed);
   } catch (error: any) {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {
       return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
@@ -1827,7 +2185,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
       config: {
         responseMimeType: "application/json",

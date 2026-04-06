@@ -7059,7 +7059,7 @@ function TaskModal({
                 // The recorder will be stopped by the useEffect below.
                 return 0;
               }
-              handleFinish();
+              handleFinishRef.current?.();
               return 0;
             }
           }
