@@ -1962,7 +1962,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   }
 
   const cleanMimeType = mimeType.split(";")[0].trim();
-  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
+  let prompt = `You are a strict PTE Academic Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, score strictly on PTE Academic criteria (10-90 scale): Content — relevance and completeness of ideas addressing the task; Oral Fluency — naturalness of speech rhythm, smooth pacing, minimal unnatural hesitations or false starts; Pronunciation — clarity, accurate sound production, and intelligibility for a competent English speaker. Apply genuine PTE standards: a mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Identify specific weaknesses in pauses, rhythm, and mispronounced words.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
     prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;
   }
@@ -2044,7 +2044,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   try {
     const response = await serverCallGemini({
       model: "gemini-2.5-flash-lite",
-      contents: `Analyze this PTE ${safeTaskType} response: "${safeText}". Score it (10-90) on Grammar, Vocabulary, Spelling, and Content. Provide specific improvement tips and list any grammatical or other mistakes found in the text. Return JSON.`,
+      contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
