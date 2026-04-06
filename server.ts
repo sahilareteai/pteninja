@@ -67,6 +67,7 @@ interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
   consecutiveExhaustions: number; // tracks backoff level per key
+  isVertex: boolean; // true for Vertex AI Express Mode keys, false for Gemini Developer API keys
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -81,6 +82,7 @@ function buildServerKeyStates(): ServerKeyState[] {
       client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
       exhaustedUntil: 0,
       consecutiveExhaustions: 0,
+      isVertex: true,
     });
   }
 
@@ -90,7 +92,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 });
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false });
   }
 
   return states;
@@ -186,6 +188,7 @@ async function serverCallGemini(
   params: GeminiGenerateContentParams,
   keys: ServerKeyState[] = serverGeminiKeys,
   firestoreStateField: string = "keys",
+  vertexModel?: string,
 ): Promise<GeminiGenerateContentResult> {
   // Pull in exhaustion state from other instances before deciding which key to use.
   await syncKeyStateFromFirestore(keys, firestoreStateField);
@@ -205,7 +208,16 @@ async function serverCallGemini(
   keyLoop: for (const keyState of available) {
     for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
       try {
-        const result = await keyState.client.models.generateContent(params);
+        // When a Vertex AI key is active and a vertex-specific model has been
+        // provided, substitute it. This is necessary because some models
+        // (e.g. gemini-2.5-flash-preview-tts) are only available on the Gemini
+        // Developer API; Vertex AI supports different model names for the same
+        // capability (e.g. gemini-2.0-flash for native audio output).
+        const effectiveParams =
+          keyState.isVertex && vertexModel
+            ? { ...params, model: vertexModel }
+            : params;
+        const result = await keyState.client.models.generateContent(effectiveParams);
         // Success — reset the backoff counter for this key.
         keyState.consecutiveExhaustions = 0;
         return result;
@@ -2173,6 +2185,9 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       },
       serverTTSGeminiKeys,
       "ttsKeys",
+      // Vertex AI does not have gemini-2.5-flash-preview-tts; use gemini-2.0-flash
+      // which supports native audio output on the Vertex AI backend.
+      "gemini-2.0-flash",
     );
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
