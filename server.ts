@@ -83,10 +83,81 @@ function getAvailableServerKeys(): ServerKeyState[] {
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
+// ─── Firestore-backed shared key state ───────────────────────────────────────
+// In serverless environments (e.g. Vercel), each cold-start instance has its
+// own in-memory key state. We persist exhaustion timestamps to a Firestore
+// document so that all instances share the same cooldowns and don't retry a
+// key that another instance has already found to be quota-exceeded.
+//
+// A short in-memory cache avoids reading Firestore on every single request.
+const KEY_STATE_CACHE_TTL_MS = 30_000; // Refresh from Firestore at most every 30 s
+let keyStateSyncedAt = 0;
+
+function getKeyStateDoc() {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) return null;
+  // FIREBASE_DATABASE_ID is a module-level const defined after this function;
+  // it is always initialized before any request handler runs.
+  return getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID).collection("config").doc("geminiKeyState");
+}
+
+// Reads Firestore and applies any newer exhaustion state to serverGeminiKeys.
+// Uses the cached timestamp to avoid Firestore reads more often than every 30 s.
+async function syncKeyStateFromFirestore(): Promise<void> {
+  if (Date.now() - keyStateSyncedAt < KEY_STATE_CACHE_TTL_MS) return;
+  const doc = getKeyStateDoc();
+  if (!doc) return;
+  try {
+    const snap = await doc.get();
+    if (snap.exists) {
+      const data = snap.data() as { keys?: Array<{ exhaustedUntil: number; consecutiveExhaustions: number }> };
+      data?.keys?.forEach((entry, i) => {
+        if (!serverGeminiKeys[i]) return;
+        // Only advance exhaustedUntil — never roll it back using stale remote data.
+        if ((entry.exhaustedUntil ?? 0) > serverGeminiKeys[i].exhaustedUntil) {
+          serverGeminiKeys[i].exhaustedUntil = entry.exhaustedUntil;
+        }
+        if ((entry.consecutiveExhaustions ?? 0) > serverGeminiKeys[i].consecutiveExhaustions) {
+          serverGeminiKeys[i].consecutiveExhaustions = entry.consecutiveExhaustions;
+        }
+      });
+    }
+    keyStateSyncedAt = Date.now();
+  } catch (err) {
+    console.warn("[Gemini] Failed to sync key state from Firestore:", err);
+  }
+}
+
+// Writes the current in-memory exhaustion state to Firestore so other
+// instances can pick it up on their next sync.
+async function persistKeyStateToFirestore(): Promise<void> {
+  const doc = getKeyStateDoc();
+  if (!doc) return;
+  try {
+    await doc.set(
+      {
+        keys: serverGeminiKeys.map((k) => ({
+          exhaustedUntil: k.exhaustedUntil,
+          consecutiveExhaustions: k.consecutiveExhaustions,
+        })),
+        updatedAt: Date.now(),
+      },
+      { merge: true },
+    );
+    keyStateSyncedAt = Date.now();
+  } catch (err) {
+    console.warn("[Gemini] Failed to persist key state to Firestore:", err);
+  }
+}
+
 // Returns the result of a Gemini generateContent call, rotating through keys on quota errors.
 // Uses exponential backoff per key: 1 min → 2 min → 4 min → … up to 1 hour.
+// Syncs exhaustion state with Firestore so all serverless instances share the same view.
 // Throws an error with message "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
 async function serverCallGemini(params: GeminiGenerateContentParams): Promise<GeminiGenerateContentResult> {
+  // Pull in exhaustion state from other instances before deciding which key to use.
+  await syncKeyStateFromFirestore();
+
   const available = getAvailableServerKeys();
 
   if (available.length === 0) {
@@ -121,6 +192,8 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
           `[Gemini] Key quota exceeded (exhaustion #${keyState.consecutiveExhaustions}). ` +
           `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
         );
+        // Persist the new exhaustion state so other instances skip this key immediately.
+        void persistKeyStateToFirestore();
         continue;
       }
       throw e;
@@ -477,6 +550,15 @@ const getAdminApp = () => {
 const deleteUserLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+// Rate limiter for read-only admin status endpoints
+const adminStatusLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
@@ -1181,6 +1263,56 @@ app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
     console.error("Delete user error:", error);
     res.status(400).json({ error: "Failed to delete user" });
   }
+});
+
+// ─── Gemini Key Status (admin only) ──────────────────────────────────────────
+// Returns current in-memory exhaustion state for all configured Gemini keys.
+// Useful for diagnosing quota issues without leaking key values.
+app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) return res.status(401).json({ error: "Authorization token required" });
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch {
+        // deny access if we can't verify
+      }
+    }
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden: Admin access required" });
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+
+  const now = Date.now();
+  const keys = serverGeminiKeys.map((k, i) => {
+    const remainingMs = Math.max(0, k.exhaustedUntil - now);
+    return {
+      index: i,
+      available: remainingMs === 0,
+      exhaustedUntil: k.exhaustedUntil || null,
+      cooldownRemainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
+      consecutiveExhaustions: k.consecutiveExhaustions,
+    };
+  });
+
+  res.json({
+    totalKeys: serverGeminiKeys.length,
+    availableKeys: keys.filter((k) => k.available).length,
+    lastSyncedAt: keyStateSyncedAt || null,
+    keys,
+  });
 });
 
 // ─── Support Bot: PTE-restricted Gemini chat ─────────────────────────────────
