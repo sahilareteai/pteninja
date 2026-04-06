@@ -57,6 +57,11 @@ const KEY_COOLDOWN_BASE_MS = 60 * 1000; // 1 minute initial cooldown
 const KEY_COOLDOWN_MAX_MS = 60 * 60 * 1000; // 1 hour maximum cooldown
 // Alert-email deduplication window — kept longer to avoid inbox spam.
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
+// Transient (5xx) error retry: retry the same key up to this many times before
+// propagating the error. Short linear backoff (1 s, 2 s) is enough to ride out
+// momentary model overloads without adding meaningful latency on real failures.
+const TRANSIENT_RETRY_MAX = 2;
+const TRANSIENT_RETRY_BASE_MS = 1000;
 
 interface ServerKeyState {
   client: GoogleGenAI;
@@ -177,37 +182,62 @@ async function serverCallGemini(
     throw err;
   }
 
-  for (const keyState of available) {
-    try {
-      const result = await keyState.client.models.generateContent(params);
-      // Success — reset the backoff counter for this key.
-      keyState.consecutiveExhaustions = 0;
-      return result;
-    } catch (e: any) {
-      const isQuotaError =
-        e.message?.includes("429") ||
-        e.message?.includes("RESOURCE_EXHAUSTED") ||
-        e.message?.toLowerCase().includes("quota") ||
-        e.status === 429 ||
-        e.error?.code === 429;
+  keyLoop: for (const keyState of available) {
+    for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
+      try {
+        const result = await keyState.client.models.generateContent(params);
+        // Success — reset the backoff counter for this key.
+        keyState.consecutiveExhaustions = 0;
+        return result;
+      } catch (e: any) {
+        const isQuotaError =
+          e.message?.includes("429") ||
+          e.message?.includes("RESOURCE_EXHAUSTED") ||
+          e.message?.toLowerCase().includes("quota") ||
+          e.status === 429 ||
+          e.error?.code === 429;
 
-      if (isQuotaError) {
-        // Exponential backoff: each consecutive exhaustion doubles the cooldown.
-        const backoffMs = Math.min(
-          KEY_COOLDOWN_BASE_MS * Math.pow(2, keyState.consecutiveExhaustions),
-          KEY_COOLDOWN_MAX_MS,
-        );
-        keyState.consecutiveExhaustions += 1;
-        keyState.exhaustedUntil = Date.now() + backoffMs;
-        console.warn(
-          `[Gemini] Key quota exceeded (exhaustion #${keyState.consecutiveExhaustions}). ` +
-          `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
-        );
-        // Persist the new exhaustion state so other instances skip this key immediately.
-        void persistKeyStateToFirestore(keys, firestoreStateField);
-        continue;
+        if (isQuotaError) {
+          // Exponential backoff: each consecutive exhaustion doubles the cooldown.
+          const backoffMs = Math.min(
+            KEY_COOLDOWN_BASE_MS * Math.pow(2, keyState.consecutiveExhaustions),
+            KEY_COOLDOWN_MAX_MS,
+          );
+          keyState.consecutiveExhaustions += 1;
+          keyState.exhaustedUntil = Date.now() + backoffMs;
+          console.warn(
+            `[Gemini] Key quota exceeded (exhaustion #${keyState.consecutiveExhaustions}). ` +
+            `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
+          );
+          // Persist the new exhaustion state so other instances skip this key immediately.
+          void persistKeyStateToFirestore(keys, firestoreStateField);
+          continue keyLoop; // try the next key
+        }
+
+        // Retry transient 5xx errors (model overloads, momentary outages) on the
+        // same key before giving up or moving on.
+        const isTransientError =
+          e.message?.includes("500") ||
+          e.message?.includes("503") ||
+          e.status === 500 ||
+          e.status === 503 ||
+          e.error?.code === 500 ||
+          e.error?.code === 503 ||
+          e.message?.toLowerCase().includes("overloaded") ||
+          e.message?.toLowerCase().includes("internal server error");
+
+        if (isTransientError && attempt < TRANSIENT_RETRY_MAX) {
+          const retryDelayMs = TRANSIENT_RETRY_BASE_MS * (attempt + 1);
+          console.warn(
+            `[Gemini] Transient error on attempt ${attempt + 1}/${TRANSIENT_RETRY_MAX + 1} — ` +
+            `retrying in ${retryDelayMs}ms. Error: ${e.message ?? e.status}`
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue; // retry same key
+        }
+
+        throw e;
       }
-      throw e;
     }
   }
 
@@ -1949,6 +1979,9 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
 
   try {
     const safeText = sanitizePromptValue(text.trim(), 500);
+    if (safeText.length === 0) {
+      return res.status(400).json({ error: "text content is required." });
+    }
     const response = await serverCallGemini(
       {
         model: "gemini-2.5-flash-preview-tts",
@@ -1964,6 +1997,8 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64) {
+      const finishReason = response.candidates?.[0]?.finishReason ?? "unknown";
+      console.error(`[TTS] No audio data in response. finishReason=${finishReason}`);
       return res.status(500).json({ error: "No audio data returned from AI." });
     }
     res.json({ audio: base64 });
@@ -1971,7 +2006,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {
       return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
     }
-    console.error("TTS proxy error:", error);
+    console.error(`[TTS] Proxy error (status=${error.status ?? "n/a"})`, error);
     res.status(500).json({ error: "Failed to generate audio." });
   }
 });
