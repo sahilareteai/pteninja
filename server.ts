@@ -49,16 +49,19 @@ app.use((req, res, next) => {
 });
 
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
-// Per-key cooldown: 60 s is enough for a paid key to recover from a per-minute
-// rate-limit. Free keys (daily quota) will simply fail again and stay marked
-// exhausted until their daily window resets.
-const KEY_COOLDOWN_MS = 60 * 1000; // 1 minute per exhausted key
+// Base per-key cooldown for the first quota hit. Subsequent consecutive hits on
+// the same key use exponential backoff (doubles each time) up to MAX_KEY_COOLDOWN_MS.
+// This handles both per-minute rate limits (short cooldown is enough) and daily
+// quota exhaustion (key stays cooled down longer so it isn't wastefully retried).
+const KEY_COOLDOWN_BASE_MS = 60 * 1000; // 1 minute initial cooldown
+const KEY_COOLDOWN_MAX_MS = 60 * 60 * 1000; // 1 hour maximum cooldown
 // Alert-email deduplication window — kept longer to avoid inbox spam.
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
+  consecutiveExhaustions: number; // tracks backoff level per key
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -67,7 +70,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
-  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0 }));
+  return keys.map((key) => ({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 }));
 }
 
 const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
@@ -81,6 +84,7 @@ type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateCon
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
 // Returns the result of a Gemini generateContent call, rotating through keys on quota errors.
+// Uses exponential backoff per key: 1 min → 2 min → 4 min → … up to 1 hour.
 // Throws an error with message "GEMINI_QUOTA_EXCEEDED" when all keys are exhausted.
 async function serverCallGemini(params: GeminiGenerateContentParams): Promise<GeminiGenerateContentResult> {
   const available = getAvailableServerKeys();
@@ -94,7 +98,10 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
 
   for (const keyState of available) {
     try {
-      return await keyState.client.models.generateContent(params);
+      const result = await keyState.client.models.generateContent(params);
+      // Success — reset the backoff counter for this key.
+      keyState.consecutiveExhaustions = 0;
+      return result;
     } catch (e: any) {
       const isQuotaError =
         e.message?.includes("429") ||
@@ -103,8 +110,17 @@ async function serverCallGemini(params: GeminiGenerateContentParams): Promise<Ge
         e.error?.code === 429;
 
       if (isQuotaError) {
-        keyState.exhaustedUntil = Date.now() + KEY_COOLDOWN_MS;
-        console.warn("[Gemini] Server key quota exceeded. Switching to next key...");
+        // Exponential backoff: each consecutive exhaustion doubles the cooldown.
+        const backoffMs = Math.min(
+          KEY_COOLDOWN_BASE_MS * Math.pow(2, keyState.consecutiveExhaustions),
+          KEY_COOLDOWN_MAX_MS,
+        );
+        keyState.consecutiveExhaustions += 1;
+        keyState.exhaustedUntil = Date.now() + backoffMs;
+        console.warn(
+          `[Gemini] Key quota exceeded (exhaustion #${keyState.consecutiveExhaustions}). ` +
+          `Cooling down for ${Math.round(backoffMs / 1000)}s. Switching to next key...`
+        );
         continue;
       }
       throw e;
@@ -1814,7 +1830,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   }
 
   const cleanMimeType = mimeType.split(";")[0].trim();
-  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. Provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
+  let prompt = `You are a PTE Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, provide a score (10-90) for Fluency, Pronunciation, and Content. Give specific feedback on pauses, rhythm, and mispronounced words. Be lenient with minor speaking glitches such as brief hesitations (um/uh), quick self-corrections, slight mispronunciations that do not impede understanding, and occasional word repetitions — these are normal in spontaneous speech and should not heavily penalize the score. Focus on overall communicative effectiveness rather than perfection.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
     prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;
   }
@@ -1844,7 +1860,26 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
       },
     });
 
-    res.json(JSON.parse(response.text ?? "{}"));
+    const parsed = JSON.parse(response.text ?? "{}");
+
+    // Server-side guard: if Gemini returned empty/blank transcription despite the
+    // prompt instruction, it means no speech was detected. Override all scores to the
+    // minimum to avoid giving unearned high marks for silence.
+    const transcription: string = parsed.transcription ?? "";
+    if (transcription.trim().length < 5) {
+      parsed.overall = 10;
+      parsed.fluency = 10;
+      parsed.pronunciation = 10;
+      parsed.content = 10;
+      parsed.transcription = "";
+      parsed.feedback = ["No speech detected. Please record yourself speaking clearly."];
+      parsed.mispronounced = [];
+      parsed.hesitations = 0;
+      parsed.pace = "N/A";
+      parsed.stress = "N/A";
+    }
+
+    res.json(parsed);
   } catch (error: any) {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {
       return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
