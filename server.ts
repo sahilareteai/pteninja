@@ -200,6 +200,8 @@ async function serverCallGemini(
     throw err;
   }
 
+  let lastNonQuotaError: any = null;
+
   keyLoop: for (const keyState of available) {
     for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
       try {
@@ -254,9 +256,27 @@ async function serverCallGemini(
           continue; // retry same key
         }
 
-        throw e;
+        // Non-quota error (e.g. 400 model-not-found, 403 permission-denied) or
+        // transient error that exhausted per-key retries: record it and try the
+        // next key in the pool instead of throwing immediately. This lets regular
+        // Gemini keys serve the request when, for example, the Vertex AI key does
+        // not have access to a particular model.
+        lastNonQuotaError = e;
+        console.warn(
+          `[Gemini] Non-quota error on key, switching to next key. ` +
+          `Error: ${e.message ?? e.status}`
+        );
+        continue keyLoop;
       }
     }
+  }
+
+  // All available keys failed. If every failure was a quota error the error
+  // variable is null and we signal GEMINI_QUOTA_EXCEEDED so callers return 503.
+  // If at least one key returned a real (non-quota) error, re-throw it so the
+  // caller can surface the underlying problem rather than a misleading 503.
+  if (lastNonQuotaError) {
+    throw lastNonQuotaError;
   }
 
   await sendAllKeysExhaustedAlert(firestoreStateField);
