@@ -64,6 +64,16 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 const TRANSIENT_RETRY_MAX = 2;
 const TRANSIENT_RETRY_BASE_MS = 1000;
 
+// Model names used across text endpoints (analyze-speaking, analyze-writing, support-chat).
+// The same model ID works on both Gemini Developer API and Vertex AI.
+const TEXT_MODEL = "gemini-2.5-flash-lite";
+
+// TTS model. gemini-2.5-flash-tts is the production-stable TTS model that works on BOTH
+// the Gemini Developer API and Vertex AI Express Mode / service-account backends.
+// (The older gemini-2.5-flash-preview-tts was Gemini Developer API-only; gemini-2.0-flash
+// supported audio output but is not a dedicated TTS model.)
+const TTS_MODEL = "gemini-2.5-flash-tts";
+
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
@@ -72,6 +82,7 @@ interface ServerKeyState {
   callCount: number; // total successful calls made with this key (resets on server restart)
   totalInputTokens: number; // total prompt tokens consumed (resets on server restart)
   totalOutputTokens: number; // total candidate tokens generated (resets on server restart)
+  nonQuotaErrorCount: number; // non-quota failures (auth errors, model-not-found, etc.)
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -86,7 +97,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     try {
       const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
       const project = saJson.project_id;
-      const location = process.env.VERTEX_AI_LOCATION ?? "us-central1";
+      const location = process.env.VERTEX_AI_LOCATION?.trim() || "us-central1";
       if (!project) throw new Error("project_id missing from service account JSON");
       states.push({
         client: new GoogleGenAI({
@@ -101,6 +112,7 @@ function buildServerKeyStates(): ServerKeyState[] {
         callCount: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        nonQuotaErrorCount: 0,
       });
     } catch (err) {
       console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
@@ -111,15 +123,20 @@ function buildServerKeyStates(): ServerKeyState[] {
   // Vertex AI APIs. No project/location needed. Set VERTEX_AI_API_KEY to use.
   const vertexKey = process.env.VERTEX_AI_API_KEY;
   if (vertexKey) {
-    states.push({
-      client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
-      exhaustedUntil: 0,
-      consecutiveExhaustions: 0,
-      isVertex: true,
-      callCount: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-    });
+    try {
+      states.push({
+        client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
+        exhaustedUntil: 0,
+        consecutiveExhaustions: 0,
+        isVertex: true,
+        callCount: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        nonQuotaErrorCount: 0,
+      });
+    } catch (err) {
+      console.error("[Vertex] Failed to initialize VERTEX_AI_API_KEY client — skipping:", err);
+    }
   }
 
   const geminiKeys = [
@@ -128,7 +145,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0 });
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0, nonQuotaErrorCount: 0 });
   }
 
   return states;
@@ -139,6 +156,39 @@ const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
 // TTS endpoint uses a separate pool so its preview-model quota exhaustions do not
 // block text endpoints and vice versa.
 const serverTTSGeminiKeys: ServerKeyState[] = buildServerKeyStates();
+
+// Log key pool composition at startup so it's easy to verify Vertex AI keys are loaded.
+{
+  const vtx = serverGeminiKeys.filter((k) => k.isVertex).length;
+  const dev = serverGeminiKeys.filter((k) => !k.isVertex).length;
+  if (vtx > 0) {
+    console.log(`[Gemini] Key pool: ${vtx} Vertex AI key(s) + ${dev} Gemini Developer key(s) (text endpoints).`);
+  } else {
+    console.warn(
+      `[Gemini] Key pool: ${dev} Gemini Developer key(s) only — no Vertex AI keys loaded. ` +
+      `Set VERTEX_AI_API_KEY (Express Mode) or VERTEX_AI_SERVICE_ACCOUNT_JSON (service account) ` +
+      `to enable Vertex AI as the primary provider.`
+    );
+  }
+
+  // Warn if VERTEX_AI_API_KEY looks like a Gemini Developer API key (same value as any
+  // GEMINI_API_KEY). Vertex AI requires a Google Cloud API key, not a Gemini API key.
+  const vertexApiKey = process.env.VERTEX_AI_API_KEY;
+  if (vertexApiKey) {
+    const geminiKeyValues = [
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_API_KEY_2,
+      process.env.GEMINI_API_KEY_3,
+    ].filter(Boolean);
+    if (geminiKeyValues.includes(vertexApiKey)) {
+      console.error(
+        "[Vertex] VERTEX_AI_API_KEY is the same as one of your GEMINI_API_KEY values. " +
+        "VERTEX_AI_API_KEY must be a Google Cloud API key with the Vertex AI API enabled — " +
+        "not a Gemini Developer API key. Vertex AI calls will fail until this is corrected."
+      );
+    }
+  }
+}
 
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
@@ -245,10 +295,9 @@ async function serverCallGemini(
     for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
       try {
         // When a Vertex AI key is active and a vertex-specific model has been
-        // provided, substitute it. This is necessary because some models
-        // (e.g. gemini-2.5-flash-preview-tts) are only available on the Gemini
-        // Developer API; Vertex AI supports different model names for the same
-        // capability (e.g. gemini-2.0-flash for native audio output).
+        // provided, substitute it. Most model names (TEXT_MODEL, TTS_MODEL) are
+        // identical on both backends. The vertexModel param is kept explicit so
+        // that any future divergence is easy to handle in one place.
         const effectiveParams =
           keyState.isVertex && vertexModel
             ? { ...params, model: vertexModel }
@@ -315,8 +364,9 @@ async function serverCallGemini(
         // Gemini keys serve the request when, for example, the Vertex AI key does
         // not have access to a particular model.
         lastNonQuotaError = e;
+        keyState.nonQuotaErrorCount += 1;
         console.warn(
-          `[Gemini] Non-quota error on key, switching to next key. ` +
+          `[Gemini] Non-quota error on key${keyState.isVertex ? " (Vertex AI)" : ""}, switching to next key. ` +
           `Error: ${e.message || `Status: ${e.status}`}`
         );
         continue keyLoop;
@@ -1549,6 +1599,7 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
       callCount: k.callCount,
       totalInputTokens: k.totalInputTokens,
       totalOutputTokens: k.totalOutputTokens,
+      nonQuotaErrorCount: k.nonQuotaErrorCount,
     };
   };
   const textKeys = serverGeminiKeys.map(mapKey);
@@ -1879,10 +1930,15 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     ];
 
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents,
       config: { systemInstruction },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
+    );
 
     const text = response.text ?? "";
 
@@ -2416,7 +2472,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     }
     const response = await serverCallGemini(
       {
-        model: "gemini-2.5-flash-preview-tts",
+        model: TTS_MODEL,
         contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2425,9 +2481,9 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       },
       serverTTSGeminiKeys,
       "ttsKeys",
-      // Vertex AI does not have gemini-2.5-flash-preview-tts; use gemini-2.0-flash
-      // which supports native audio output on the Vertex AI backend.
-      "gemini-2.0-flash",
+      // TTS_MODEL (gemini-2.5-flash-tts) is the production TTS model available on both
+      // the Gemini Developer API and Vertex AI. Both endpoints share the same model name.
+      TTS_MODEL,
     );
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
@@ -2475,7 +2531,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
       config: {
         responseMimeType: "application/json",
@@ -2496,7 +2552,12 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
           required: ["overall", "fluency", "pronunciation", "content", "transcription"],
         },
       },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
+    );
 
     const parsed = JSON.parse(response.text ?? "{}");
 
@@ -2549,7 +2610,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
       config: {
         responseMimeType: "application/json",
@@ -2567,7 +2628,12 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
           required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"],
         },
       },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
+    );
 
     res.json(JSON.parse(response.text ?? "{}"));
   } catch (error: any) {
