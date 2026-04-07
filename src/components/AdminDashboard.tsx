@@ -77,13 +77,13 @@ interface GeminiKeyStatus {
   vertexKeyCount: number;
   geminiKeyCount: number;
   lastSyncedAt: number | null;
-  keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[];
+  keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number; nonQuotaErrorCount: number }[];
   tts: {
     availableKeys: number;
     vertexKeyCount: number;
     geminiKeyCount: number;
     lastSyncedAt: number | null;
-    keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[];
+    keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number; nonQuotaErrorCount: number }[];
   };
 }
 
@@ -395,6 +395,11 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
         {keyData.consecutiveExhaustions > 0 && (
           <div className="text-[10px] text-app-text-muted">
             Exhaustions: {keyData.consecutiveExhaustions}×
+          </div>
+        )}
+        {keyData.nonQuotaErrorCount > 0 && (
+          <div className="text-[10px] text-orange-400">
+            ⚠ Non-quota errors: {keyData.nonQuotaErrorCount}×
           </div>
         )}
         <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">
@@ -1154,6 +1159,18 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       <p className="text-[10px] text-app-text-muted text-center">
                         ⚠️ Call counts and token usage reset on server restart. Vertex AI keys are prioritised over Gemini Developer API keys.
                       </p>
+
+                      {/* ── No Vertex AI keys warning ── */}
+                      {geminiStatus.vertexKeyCount === 0 && (
+                        <div className="bg-orange-400/5 border border-orange-400/30 rounded-xl p-4 text-[11px] text-orange-300 space-y-1">
+                          <p className="font-bold">⚠ No Vertex AI keys detected</p>
+                          <p>All requests are currently served by Gemini Developer API keys. To enable Vertex AI as the primary provider, set one of these environment variables in your Vercel project settings:</p>
+                          <ul className="list-disc list-inside space-y-0.5 mt-1">
+                            <li><code className="bg-app-bg px-1 rounded">VERTEX_AI_API_KEY</code> — Vertex AI Express Mode API key (simplest option)</li>
+                            <li><code className="bg-app-bg px-1 rounded">VERTEX_AI_SERVICE_ACCOUNT_JSON</code> — full service account JSON + optional <code className="bg-app-bg px-1 rounded">VERTEX_AI_LOCATION</code></li>
+                          </ul>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

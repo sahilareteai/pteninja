@@ -72,6 +72,7 @@ interface ServerKeyState {
   callCount: number; // total successful calls made with this key (resets on server restart)
   totalInputTokens: number; // total prompt tokens consumed (resets on server restart)
   totalOutputTokens: number; // total candidate tokens generated (resets on server restart)
+  nonQuotaErrorCount: number; // non-quota failures (auth errors, model-not-found, etc.)
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -101,6 +102,7 @@ function buildServerKeyStates(): ServerKeyState[] {
         callCount: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        nonQuotaErrorCount: 0,
       });
     } catch (err) {
       console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
@@ -111,15 +113,20 @@ function buildServerKeyStates(): ServerKeyState[] {
   // Vertex AI APIs. No project/location needed. Set VERTEX_AI_API_KEY to use.
   const vertexKey = process.env.VERTEX_AI_API_KEY;
   if (vertexKey) {
-    states.push({
-      client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
-      exhaustedUntil: 0,
-      consecutiveExhaustions: 0,
-      isVertex: true,
-      callCount: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-    });
+    try {
+      states.push({
+        client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
+        exhaustedUntil: 0,
+        consecutiveExhaustions: 0,
+        isVertex: true,
+        callCount: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        nonQuotaErrorCount: 0,
+      });
+    } catch (err) {
+      console.error("[Vertex] Failed to initialize VERTEX_AI_API_KEY client — skipping:", err);
+    }
   }
 
   const geminiKeys = [
@@ -128,7 +135,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0 });
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0, nonQuotaErrorCount: 0 });
   }
 
   return states;
@@ -139,6 +146,21 @@ const serverGeminiKeys: ServerKeyState[] = buildServerKeyStates();
 // TTS endpoint uses a separate pool so its preview-model quota exhaustions do not
 // block text endpoints and vice versa.
 const serverTTSGeminiKeys: ServerKeyState[] = buildServerKeyStates();
+
+// Log key pool composition at startup so it's easy to verify Vertex AI keys are loaded.
+{
+  const vtx = serverGeminiKeys.filter((k) => k.isVertex).length;
+  const dev = serverGeminiKeys.filter((k) => !k.isVertex).length;
+  if (vtx > 0) {
+    console.log(`[Gemini] Key pool: ${vtx} Vertex AI key(s) + ${dev} Gemini Developer key(s) (text endpoints).`);
+  } else {
+    console.warn(
+      `[Gemini] Key pool: ${dev} Gemini Developer key(s) only — no Vertex AI keys loaded. ` +
+      `Set VERTEX_AI_API_KEY (Express Mode) or VERTEX_AI_SERVICE_ACCOUNT_JSON (service account) ` +
+      `to enable Vertex AI as the primary provider.`
+    );
+  }
+}
 
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
@@ -315,8 +337,9 @@ async function serverCallGemini(
         // Gemini keys serve the request when, for example, the Vertex AI key does
         // not have access to a particular model.
         lastNonQuotaError = e;
+        keyState.nonQuotaErrorCount += 1;
         console.warn(
-          `[Gemini] Non-quota error on key, switching to next key. ` +
+          `[Gemini] Non-quota error on key${keyState.isVertex ? " (Vertex AI)" : ""}, switching to next key. ` +
           `Error: ${e.message || `Status: ${e.status}`}`
         );
         continue keyLoop;
@@ -1549,6 +1572,7 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
       callCount: k.callCount,
       totalInputTokens: k.totalInputTokens,
       totalOutputTokens: k.totalOutputTokens,
+      nonQuotaErrorCount: k.nonQuotaErrorCount,
     };
   };
   const textKeys = serverGeminiKeys.map(mapKey);
@@ -1882,7 +1906,12 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
       model: "gemini-2.5-flash-lite",
       contents,
       config: { systemInstruction },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
+    "gemini-2.5-flash-lite",
+    );
 
     const text = response.text ?? "";
 
@@ -2496,7 +2525,12 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
           required: ["overall", "fluency", "pronunciation", "content", "transcription"],
         },
       },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
+    "gemini-2.5-flash-lite",
+    );
 
     const parsed = JSON.parse(response.text ?? "{}");
 
@@ -2567,7 +2601,12 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
           required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"],
         },
       },
-    });
+    },
+    serverGeminiKeys,
+    "keys",
+    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
+    "gemini-2.5-flash-lite",
+    );
 
     res.json(JSON.parse(response.text ?? "{}"));
   } catch (error: any) {
