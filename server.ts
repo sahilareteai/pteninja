@@ -9,6 +9,7 @@ import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { rateLimit } from "express-rate-limit";
 import nodemailer from "nodemailer";
 import { GoogleGenAI, Modality, Type } from "@google/genai";
+import type { JWTInput } from "google-auth-library";
 
 dotenv.config();
 
@@ -67,20 +68,48 @@ interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
   consecutiveExhaustions: number; // tracks backoff level per key
+  isVertex: boolean; // true for Vertex AI Express Mode keys, false for Gemini Developer API keys
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
   const states: ServerKeyState[] = [];
 
-  // Vertex AI Express Mode key: uses the Vertex AI backend with just an API key
-  // (no project/location needed for Express Mode). Set VERTEX_AI_API_KEY to use
-  // this as the primary key before the regular Gemini Developer API keys.
+  // Vertex AI Service Account JSON key (highest priority).
+  // Set VERTEX_AI_SERVICE_ACCOUNT_JSON to the full contents of your downloaded
+  // service account JSON key file. The project_id is read from the JSON itself.
+  // Optionally set VERTEX_AI_LOCATION (defaults to "us-central1").
+  const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON;
+  if (saJsonRaw) {
+    try {
+      const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
+      const project = saJson.project_id;
+      const location = process.env.VERTEX_AI_LOCATION ?? "us-central1";
+      if (!project) throw new Error("project_id missing from service account JSON");
+      states.push({
+        client: new GoogleGenAI({
+          vertexai: true,
+          project,
+          location,
+          googleAuthOptions: { credentials: saJson },
+        }),
+        exhaustedUntil: 0,
+        consecutiveExhaustions: 0,
+        isVertex: true,
+      });
+    } catch (err) {
+      console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
+    }
+  }
+
+  // Vertex AI Express Mode key: a simple Google Cloud API key restricted to
+  // Vertex AI APIs. No project/location needed. Set VERTEX_AI_API_KEY to use.
   const vertexKey = process.env.VERTEX_AI_API_KEY;
   if (vertexKey) {
     states.push({
       client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
       exhaustedUntil: 0,
       consecutiveExhaustions: 0,
+      isVertex: true,
     });
   }
 
@@ -90,7 +119,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0 });
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false });
   }
 
   return states;
@@ -186,6 +215,7 @@ async function serverCallGemini(
   params: GeminiGenerateContentParams,
   keys: ServerKeyState[] = serverGeminiKeys,
   firestoreStateField: string = "keys",
+  vertexModel?: string,
 ): Promise<GeminiGenerateContentResult> {
   // Pull in exhaustion state from other instances before deciding which key to use.
   await syncKeyStateFromFirestore(keys, firestoreStateField);
@@ -200,10 +230,21 @@ async function serverCallGemini(
     throw err;
   }
 
+  let lastNonQuotaError: any = null;
+
   keyLoop: for (const keyState of available) {
     for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
       try {
-        const result = await keyState.client.models.generateContent(params);
+        // When a Vertex AI key is active and a vertex-specific model has been
+        // provided, substitute it. This is necessary because some models
+        // (e.g. gemini-2.5-flash-preview-tts) are only available on the Gemini
+        // Developer API; Vertex AI supports different model names for the same
+        // capability (e.g. gemini-2.0-flash for native audio output).
+        const effectiveParams =
+          keyState.isVertex && vertexModel
+            ? { ...params, model: vertexModel }
+            : params;
+        const result = await keyState.client.models.generateContent(effectiveParams);
         // Success — reset the backoff counter for this key.
         keyState.consecutiveExhaustions = 0;
         return result;
@@ -254,9 +295,27 @@ async function serverCallGemini(
           continue; // retry same key
         }
 
-        throw e;
+        // Non-quota error (e.g. 400 model-not-found, 403 permission-denied) or
+        // transient error that exhausted per-key retries: record it and try the
+        // next key in the pool instead of throwing immediately. This lets regular
+        // Gemini keys serve the request when, for example, the Vertex AI key does
+        // not have access to a particular model.
+        lastNonQuotaError = e;
+        console.warn(
+          `[Gemini] Non-quota error on key, switching to next key. ` +
+          `Error: ${e.message || `Status: ${e.status}`}`
+        );
+        continue keyLoop;
       }
     }
+  }
+
+  // All available keys failed. If every failure was a quota error the error
+  // variable is null and we signal GEMINI_QUOTA_EXCEEDED so callers return 503.
+  // If at least one key returned a real (non-quota) error, re-throw it so the
+  // caller can surface the underlying problem rather than a misleading 503.
+  if (lastNonQuotaError) {
+    throw lastNonQuotaError;
   }
 
   await sendAllKeysExhaustedAlert(firestoreStateField);
@@ -2153,6 +2212,9 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       },
       serverTTSGeminiKeys,
       "ttsKeys",
+      // Vertex AI does not have gemini-2.5-flash-preview-tts; use gemini-2.0-flash
+      // which supports native audio output on the Vertex AI backend.
+      "gemini-2.0-flash",
     );
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
