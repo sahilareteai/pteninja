@@ -104,7 +104,7 @@ export interface UserData {
   trialEndsAt?: string;
   subscriptionStatus: 'active' | 'inactive' | 'trial' | 'guest' | 'expired';
   subscriptionEndsAt?: string;
-  planId?: 'monthly' | 'quarterly' | 'annual';
+  planId?: 'weekly' | 'monthly' | 'quarterly' | 'annual';
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   cancelAtPeriodEnd?: boolean;
@@ -126,6 +126,16 @@ export interface UserData {
 }
 
 export const SUBSCRIPTION_PLANS = [
+  {
+    id: 'weekly',
+    name: 'Weekly',
+    price: 11,
+    originalPrice: 15,
+    interval: 'week',
+    durationDays: 7,
+    badge: null,
+    isSpecial: false
+  },
   { 
     id: 'monthly', 
     name: 'Monthly', 

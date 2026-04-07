@@ -2942,7 +2942,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 <p className="text-app-text-muted text-lg">Master the PTE with our premium AI-powered practice platform</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-4">
                 {SUBSCRIPTION_PLANS.map((plan) => (
                   <div 
                     key={plan.id}
