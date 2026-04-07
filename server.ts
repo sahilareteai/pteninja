@@ -255,6 +255,8 @@ async function serverCallGemini(
             : params;
         const result = await keyState.client.models.generateContent(effectiveParams);
         // Success — reset the backoff counter and track usage for this key.
+        // Note: callCount/totalInputTokens/totalOutputTokens are in-memory only
+        // and reset on every server restart/redeploy.
         keyState.consecutiveExhaustions = 0;
         keyState.callCount += 1;
         keyState.totalInputTokens += result.usageMetadata?.promptTokenCount ?? 0;

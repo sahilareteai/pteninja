@@ -1068,8 +1068,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.lastSyncedAt).toLocaleTimeString()}</p>
                             )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {vertexKeys.map(key => (
-                                <KeyCard key={key.index} keyData={key} prefix="Vertex Key" positionIndex={vertexKeys.indexOf(key)} />
+                              {vertexKeys.map((key, idx) => (
+                                <KeyCard key={key.index} keyData={key} prefix="Vertex Key" positionIndex={idx} />
                               ))}
                             </div>
                           </div>
@@ -1093,8 +1093,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.lastSyncedAt).toLocaleTimeString()}</p>
                             )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {devKeys.map(key => (
-                                <KeyCard key={key.index} keyData={key} prefix="Key" positionIndex={devKeys.indexOf(key)} />
+                              {devKeys.map((key, idx) => (
+                                <KeyCard key={key.index} keyData={key} prefix="Key" positionIndex={idx} />
                               ))}
                             </div>
                           </div>
@@ -1118,8 +1118,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.tts.lastSyncedAt).toLocaleTimeString()}</p>
                             )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {vertexTTSKeys.map(key => (
-                                <KeyCard key={key.index} keyData={key} prefix="TTS Vertex Key" positionIndex={vertexTTSKeys.indexOf(key)} />
+                              {vertexTTSKeys.map((key, idx) => (
+                                <KeyCard key={key.index} keyData={key} prefix="TTS Vertex Key" positionIndex={idx} />
                               ))}
                             </div>
                           </div>
@@ -1143,8 +1143,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.tts.lastSyncedAt).toLocaleTimeString()}</p>
                             )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {devTTSKeys.map(key => (
-                                <KeyCard key={key.index} keyData={key} prefix="TTS Key" positionIndex={devTTSKeys.indexOf(key)} />
+                              {devTTSKeys.map((key, idx) => (
+                                <KeyCard key={key.index} keyData={key} prefix="TTS Key" positionIndex={idx} />
                               ))}
                             </div>
                           </div>
