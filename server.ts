@@ -754,6 +754,7 @@ async function verifySubscriptionOwnership(
 
 // Map planId → Stripe recurring interval
 const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number }> = {
+  weekly:    { interval: "week",  interval_count: 1 },
   monthly:   { interval: "month", interval_count: 1 },
   quarterly: { interval: "month", interval_count: 3 },
   annual:    { interval: "year",  interval_count: 1 },
@@ -1798,6 +1799,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
     ``,
     `Ready to unlock the full experience?`,
     ``,
+    `Weekly Plan    — A$11/week (was A$15)`,
     `Monthly Plan   — A$21/month (was A$35)`,
     `Quarterly Plan — A$50 for 3 months (was A$90) ⭐ Best Value`,
     `Annual Plan    — A$175/year (was A$350) — Save 50%`,
@@ -1903,8 +1905,18 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
               <!-- Pricing Cards -->
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
                 <tr>
+                  <!-- Weekly -->
+                  <td width="23%" style="vertical-align:top;padding:0 6px 0 0;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:18px 14px;text-align:center;">
+                      <div style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">Weekly</div>
+                      <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Weekly</p>
+                      <p style="margin:0 0 2px;font-size:22px;font-weight:800;color:#6c63ff;">A$11</p>
+                      <p style="margin:0 0 12px;font-size:11px;color:#9ca3af;text-decoration:line-through;">A$15/week</p>
+                      <a href="${upgradeUrl}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 0;border-radius:8px;">Get Started</a>
+                    </div>
+                  </td>
                   <!-- Monthly -->
-                  <td width="31%" style="vertical-align:top;padding:0 6px 0 0;">
+                  <td width="23%" style="vertical-align:top;padding:0 6px;">
                     <div style="border:2px solid #e5e7eb;border-radius:12px;padding:18px 14px;text-align:center;">
                       <div style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">Popular</div>
                       <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Monthly</p>
@@ -1914,7 +1926,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
                     </div>
                   </td>
                   <!-- Quarterly -->
-                  <td width="38%" style="vertical-align:top;padding:0 6px;">
+                  <td width="31%" style="vertical-align:top;padding:0 6px;">
                     <div style="border:2px solid #6c63ff;border-radius:12px;padding:18px 14px;text-align:center;position:relative;background:#faf9ff;">
                       <div style="background:#6c63ff;color:#ffffff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">⭐ Best Value</div>
                       <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Quarterly</p>
@@ -1925,7 +1937,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
                     </div>
                   </td>
                   <!-- Annual -->
-                  <td width="31%" style="vertical-align:top;padding:0 0 0 6px;">
+                  <td width="23%" style="vertical-align:top;padding:0 0 0 6px;">
                     <div style="border:2px solid #e5e7eb;border-radius:12px;padding:18px 14px;text-align:center;">
                       <div style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:10px;">Save 50%</div>
                       <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1a1a2e;">Annual</p>
