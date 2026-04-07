@@ -68,6 +68,12 @@ const TRANSIENT_RETRY_BASE_MS = 1000;
 // The same model ID works on both Gemini Developer API and Vertex AI.
 const TEXT_MODEL = "gemini-2.5-flash-lite";
 
+// TTS model. gemini-2.5-flash-tts is the production-stable TTS model that works on BOTH
+// the Gemini Developer API and Vertex AI Express Mode / service-account backends.
+// (The older gemini-2.5-flash-preview-tts was Gemini Developer API-only; gemini-2.0-flash
+// supported audio output but is not a dedicated TTS model.)
+const TTS_MODEL = "gemini-2.5-flash-tts";
+
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
@@ -91,7 +97,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     try {
       const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
       const project = saJson.project_id;
-      const location = process.env.VERTEX_AI_LOCATION ?? "us-central1";
+      const location = process.env.VERTEX_AI_LOCATION?.trim() || "us-central1";
       if (!project) throw new Error("project_id missing from service account JSON");
       states.push({
         client: new GoogleGenAI({
@@ -163,6 +169,24 @@ const serverTTSGeminiKeys: ServerKeyState[] = buildServerKeyStates();
       `Set VERTEX_AI_API_KEY (Express Mode) or VERTEX_AI_SERVICE_ACCOUNT_JSON (service account) ` +
       `to enable Vertex AI as the primary provider.`
     );
+  }
+
+  // Warn if VERTEX_AI_API_KEY looks like a Gemini Developer API key (same value as any
+  // GEMINI_API_KEY). Vertex AI requires a Google Cloud API key, not a Gemini API key.
+  const vertexApiKey = process.env.VERTEX_AI_API_KEY;
+  if (vertexApiKey) {
+    const geminiKeyValues = [
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_API_KEY_2,
+      process.env.GEMINI_API_KEY_3,
+    ].filter(Boolean);
+    if (geminiKeyValues.includes(vertexApiKey)) {
+      console.error(
+        "[Vertex] VERTEX_AI_API_KEY is the same as one of your GEMINI_API_KEY values. " +
+        "VERTEX_AI_API_KEY must be a Google Cloud API key with the Vertex AI API enabled — " +
+        "not a Gemini Developer API key. Vertex AI calls will fail until this is corrected."
+      );
+    }
   }
 }
 
@@ -271,10 +295,9 @@ async function serverCallGemini(
     for (let attempt = 0; attempt <= TRANSIENT_RETRY_MAX; attempt++) {
       try {
         // When a Vertex AI key is active and a vertex-specific model has been
-        // provided, substitute it. This is necessary because some models
-        // (e.g. gemini-2.5-flash-preview-tts) are only available on the Gemini
-        // Developer API; Vertex AI supports different model names for the same
-        // capability (e.g. gemini-2.0-flash for native audio output).
+        // provided, substitute it. Most model names (TEXT_MODEL, TTS_MODEL) are
+        // identical on both backends. The vertexModel param is kept explicit so
+        // that any future divergence is easy to handle in one place.
         const effectiveParams =
           keyState.isVertex && vertexModel
             ? { ...params, model: vertexModel }
@@ -2449,7 +2472,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     }
     const response = await serverCallGemini(
       {
-        model: "gemini-2.5-flash-preview-tts",
+        model: TTS_MODEL,
         contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2458,9 +2481,9 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       },
       serverTTSGeminiKeys,
       "ttsKeys",
-      // Vertex AI does not have gemini-2.5-flash-preview-tts; use gemini-2.0-flash
-      // which supports native audio output on the Vertex AI backend.
-      "gemini-2.0-flash",
+      // TTS_MODEL (gemini-2.5-flash-tts) is the production TTS model available on both
+      // the Gemini Developer API and Vertex AI. Both endpoints share the same model name.
+      TTS_MODEL,
     );
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
