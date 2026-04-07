@@ -69,6 +69,9 @@ interface ServerKeyState {
   exhaustedUntil: number;
   consecutiveExhaustions: number; // tracks backoff level per key
   isVertex: boolean; // true for Vertex AI Express Mode keys, false for Gemini Developer API keys
+  callCount: number; // total successful calls made with this key (resets on server restart)
+  totalInputTokens: number; // total prompt tokens consumed (resets on server restart)
+  totalOutputTokens: number; // total candidate tokens generated (resets on server restart)
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
@@ -95,6 +98,9 @@ function buildServerKeyStates(): ServerKeyState[] {
         exhaustedUntil: 0,
         consecutiveExhaustions: 0,
         isVertex: true,
+        callCount: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
       });
     } catch (err) {
       console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
@@ -110,6 +116,9 @@ function buildServerKeyStates(): ServerKeyState[] {
       exhaustedUntil: 0,
       consecutiveExhaustions: 0,
       isVertex: true,
+      callCount: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
     });
   }
 
@@ -119,7 +128,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false });
+    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0 });
   }
 
   return states;
@@ -245,8 +254,11 @@ async function serverCallGemini(
             ? { ...params, model: vertexModel }
             : params;
         const result = await keyState.client.models.generateContent(effectiveParams);
-        // Success — reset the backoff counter for this key.
+        // Success — reset the backoff counter and track usage for this key.
         keyState.consecutiveExhaustions = 0;
+        keyState.callCount += 1;
+        keyState.totalInputTokens += result.usageMetadata?.promptTokenCount ?? 0;
+        keyState.totalOutputTokens += result.usageMetadata?.candidatesTokenCount ?? 0;
         return result;
       } catch (e: any) {
         const isQuotaError =
@@ -1523,34 +1535,34 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
   }
 
   const now = Date.now();
-  const textKeys = serverGeminiKeys.map((k, i) => {
+  const mapKey = (k: ServerKeyState, i: number) => {
     const remainingMs = Math.max(0, k.exhaustedUntil - now);
     return {
       index: i,
+      isVertex: k.isVertex,
       available: remainingMs === 0,
       exhaustedUntil: k.exhaustedUntil || null,
       cooldownRemainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
       consecutiveExhaustions: k.consecutiveExhaustions,
+      callCount: k.callCount,
+      totalInputTokens: k.totalInputTokens,
+      totalOutputTokens: k.totalOutputTokens,
     };
-  });
-  const ttsKeys = serverTTSGeminiKeys.map((k, i) => {
-    const remainingMs = Math.max(0, k.exhaustedUntil - now);
-    return {
-      index: i,
-      available: remainingMs === 0,
-      exhaustedUntil: k.exhaustedUntil || null,
-      cooldownRemainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
-      consecutiveExhaustions: k.consecutiveExhaustions,
-    };
-  });
+  };
+  const textKeys = serverGeminiKeys.map(mapKey);
+  const ttsKeys = serverTTSGeminiKeys.map(mapKey);
 
   res.json({
     totalKeys: serverGeminiKeys.length,
     availableKeys: textKeys.filter((k) => k.available).length,
+    vertexKeyCount: serverGeminiKeys.filter((k) => k.isVertex).length,
+    geminiKeyCount: serverGeminiKeys.filter((k) => !k.isVertex).length,
     lastSyncedAt: keyStateSyncedAtMap["keys"] || null,
     keys: textKeys,
     tts: {
       availableKeys: ttsKeys.filter((k) => k.available).length,
+      vertexKeyCount: serverTTSGeminiKeys.filter((k) => k.isVertex).length,
+      geminiKeyCount: serverTTSGeminiKeys.filter((k) => !k.isVertex).length,
       lastSyncedAt: keyStateSyncedAtMap["ttsKeys"] || null,
       keys: ttsKeys,
     },

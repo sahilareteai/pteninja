@@ -30,6 +30,12 @@ import {
   PenTool,
   BookOpen,
   Headphones,
+  ArrowLeft,
+  Hash,
+  Cpu,
+  Target,
+  Calendar,
+  Award,
 } from 'lucide-react';
 import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS, PTE_TASKS } from '../types';
@@ -68,12 +74,16 @@ interface AnalyticsData {
 interface GeminiKeyStatus {
   totalKeys: number;
   availableKeys: number;
+  vertexKeyCount: number;
+  geminiKeyCount: number;
   lastSyncedAt: number | null;
-  keys: { index: number; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number }[];
+  keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[];
   tts: {
     availableKeys: number;
+    vertexKeyCount: number;
+    geminiKeyCount: number;
     lastSyncedAt: number | null;
-    keys: { index: number; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number }[];
+    keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number }[];
   };
 }
 
@@ -94,6 +104,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiKeyStatus | null>(null);
   const [geminiRefreshing, setGeminiRefreshing] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const hasFetchedUsers = useRef(false);
   const hasFetchedPromos = useRef(false);
   const hasFetchedAnalytics = useRef(false);
@@ -336,6 +347,105 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     reading: { icon: BookOpen, color: 'text-green-400', bg: 'bg-green-400/10', bar: 'bg-green-400' },
     listening: { icon: Headphones, color: 'text-orange-400', bg: 'bg-orange-400/10', bar: 'bg-orange-400' },
   };
+
+  // ─── Key Card Helper ────────────────────────────────────────────────────────
+  function KeyCard({ keyData, prefix, positionIndex }: {
+    keyData: GeminiKeyStatus['keys'][number];
+    prefix: string;
+    positionIndex: number;
+  }) {
+    const totalTokens = keyData.totalInputTokens + keyData.totalOutputTokens;
+    const formatTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+    return (
+      <div className={cn(
+        "border rounded-xl p-4 space-y-2",
+        keyData.available ? "border-green-400/30 bg-green-400/5" : "border-red-400/30 bg-red-400/5"
+      )}>
+        <div className="flex items-center justify-between gap-1">
+          <span className="text-xs font-bold text-app-text">{prefix} #{positionIndex + 1}</span>
+          <div className={cn('flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold',
+            keyData.available ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
+          )}>
+            {keyData.available ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
+            {keyData.available ? 'Available' : 'Exhausted'}
+          </div>
+        </div>
+        {!keyData.available && keyData.cooldownRemainingSeconds > 0 && (
+          <div className="text-[11px] text-orange-400 font-bold">
+            Cooldown: {keyData.cooldownRemainingSeconds}s remaining
+          </div>
+        )}
+        {/* Usage stats */}
+        <div className="grid grid-cols-2 gap-1 pt-1">
+          <div className="bg-app-primary/5 rounded-lg p-1.5 text-center">
+            <div className="text-[10px] font-black text-app-text">{keyData.callCount}</div>
+            <div className="text-[9px] text-app-text-muted uppercase tracking-wide">Calls</div>
+          </div>
+          <div className="bg-app-primary/5 rounded-lg p-1.5 text-center">
+            <div className="text-[10px] font-black text-app-text">{formatTokens(totalTokens)}</div>
+            <div className="text-[9px] text-app-text-muted uppercase tracking-wide">Tokens</div>
+          </div>
+        </div>
+        {totalTokens > 0 && (
+          <div className="text-[9px] text-app-text-muted flex justify-between">
+            <span>↑ {formatTokens(keyData.totalInputTokens)} in</span>
+            <span>↓ {formatTokens(keyData.totalOutputTokens)} out</span>
+          </div>
+        )}
+        {keyData.consecutiveExhaustions > 0 && (
+          <div className="text-[10px] text-app-text-muted">
+            Exhaustions: {keyData.consecutiveExhaustions}×
+          </div>
+        )}
+        <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">
+          <div
+            className={cn('h-full rounded-full transition-all', keyData.available ? 'bg-green-400' : 'bg-red-400')}
+            style={{ width: keyData.available ? '100%' : `${Math.max(0, 100 - (keyData.consecutiveExhaustions * 25))}%` }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── User Engagement helpers ─────────────────────────────────────────────────
+  function getUserEngagementStats(user: AdminUser) {
+    const scores = user.taskScores ?? {};
+    const speakingPrefixes = ["ra-", "rs-", "di-", "rsit-", "sgd-", "rl-", "asq-"];
+    const writingPrefixes = ["swt-", "essay-"];
+    const readingPrefixes = ["rfib-", "rfib2-", "rmcq-", "rscq-", "rop-"];
+    const listeningPrefixes = ["sst-", "hcs-", "lfib-", "lmcq-", "mmc-", "hiw-", "wfd-", "smc-", "smw-"];
+    const inferSection = (taskId: string) => {
+      if (speakingPrefixes.some(p => taskId.startsWith(p))) return "speaking";
+      if (writingPrefixes.some(p => taskId.startsWith(p))) return "writing";
+      if (readingPrefixes.some(p => taskId.startsWith(p))) return "reading";
+      if (listeningPrefixes.some(p => taskId.startsWith(p))) return "listening";
+      return "other";
+    };
+    const sectionAttempts: Record<string, number> = { speaking: 0, writing: 0, reading: 0, listening: 0, other: 0 };
+    const sectionScoreSum: Record<string, number> = { speaking: 0, writing: 0, reading: 0, listening: 0, other: 0 };
+    let totalAttempts = 0;
+    let tasksPracticed = 0;
+    const topTasks: { taskId: string; attempts: number; avgScore: number }[] = [];
+
+    for (const [taskId, attempts] of Object.entries(scores)) {
+      if (!Array.isArray(attempts) || attempts.length === 0) continue;
+      const section = inferSection(taskId);
+      sectionAttempts[section] += attempts.length;
+      const validScores = attempts.filter((s): s is number => typeof s === 'number');
+      sectionScoreSum[section] += validScores.reduce((a, b) => a + b, 0);
+      totalAttempts += attempts.length;
+      tasksPracticed++;
+      topTasks.push({ taskId, attempts: attempts.length, avgScore: validScores.length > 0 ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0 });
+    }
+    topTasks.sort((a, b) => b.attempts - a.attempts);
+
+    const sectionAvgScore: Record<string, number> = {};
+    for (const s of Object.keys(sectionAttempts)) {
+      sectionAvgScore[s] = sectionAttempts[s] > 0 ? Math.round(sectionScoreSum[s] / sectionAttempts[s]) : 0;
+    }
+
+    return { totalAttempts, tasksPracticed, sectionAttempts, sectionAvgScore, topTasks: topTasks.slice(0, 5) };
+  }
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl">
@@ -761,13 +871,22 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               </div>
                             </td>
                             <td className="px-4 py-4">
-                              <button
-                                onClick={() => setUserToDelete(user)}
-                                className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
-                                title="Delete user"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setSelectedUser(user)}
+                                  className="p-2 rounded-xl bg-app-primary/10 text-app-primary hover:bg-app-primary/20 transition-all"
+                                  title="View user details"
+                                >
+                                  <Eye size={16} />
+                                </button>
+                                <button
+                                  onClick={() => setUserToDelete(user)}
+                                  className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                  title="Delete user"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -888,8 +1007,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-bold text-app-text">Gemini API Key Health</h3>
-                      <p className="text-xs text-app-text-muted mt-0.5">Monitor quota usage across all configured API keys</p>
+                      <h3 className="text-base font-bold text-app-text">AI API Key Health</h3>
+                      <p className="text-xs text-app-text-muted mt-0.5">Monitor quota and token usage across all configured API keys</p>
                     </div>
                     <button
                       onClick={fetchGeminiStatus}
@@ -932,98 +1051,109 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         ))}
                       </div>
 
-                      {/* Text Keys */}
-                      <div className="bg-app-bg border border-app-primary/10 rounded-2xl p-5 space-y-4">
-                        <div className="flex items-center gap-2">
-                          <Key size={16} className="text-app-primary" />
-                          <h4 className="text-sm font-bold text-app-text">Text API Keys</h4>
-                          <span className="text-[10px] text-app-text-muted">(analyze-speaking, analyze-writing, support-chat)</span>
-                        </div>
-                        {geminiStatus.lastSyncedAt && (
-                          <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.lastSyncedAt).toLocaleTimeString()}</p>
-                        )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {geminiStatus.keys.map(key => (
-                            <div key={key.index} className={cn(
-                              "border rounded-xl p-4 space-y-2",
-                              key.available ? "border-green-400/30 bg-green-400/5" : "border-red-400/30 bg-red-400/5"
-                            )}>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-app-text">Key #{key.index + 1}</span>
-                                <div className={cn('flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold',
-                                  key.available ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
-                                )}>
-                                  {key.available ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
-                                  {key.available ? 'Available' : 'Exhausted'}
-                                </div>
-                              </div>
-                              {!key.available && key.cooldownRemainingSeconds > 0 && (
-                                <div className="text-[11px] text-orange-400 font-bold">
-                                  Cooldown: {key.cooldownRemainingSeconds}s remaining
-                                </div>
-                              )}
-                              {key.consecutiveExhaustions > 0 && (
-                                <div className="text-[10px] text-app-text-muted">
-                                  Exhaustions: {key.consecutiveExhaustions}×
-                                </div>
-                              )}
-                              {/* Quota health bar */}
-                              <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">
-                                <div
-                                  className={cn('h-full rounded-full transition-all', key.available ? 'bg-green-400' : 'bg-red-400')}
-                                  style={{ width: key.available ? '100%' : `${Math.max(0, 100 - (key.consecutiveExhaustions * 25))}%` }}
-                                />
-                              </div>
+                      {/* ── Text Keys — Vertex AI ── */}
+                      {geminiStatus.vertexKeyCount > 0 && (() => {
+                        const vertexKeys = geminiStatus.keys.filter(k => k.isVertex);
+                        return (
+                          <div className="bg-app-bg border border-purple-500/20 rounded-2xl p-5 space-y-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Cpu size={16} className="text-purple-400" />
+                              <h4 className="text-sm font-bold text-app-text">Text — Vertex AI Keys</h4>
+                              <span className="text-[10px] text-app-text-muted">(analyze-speaking, analyze-writing, support-chat)</span>
+                              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400">
+                                {vertexKeys.filter(k => k.available).length}/{vertexKeys.length} available
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            {geminiStatus.lastSyncedAt && (
+                              <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.lastSyncedAt).toLocaleTimeString()}</p>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {vertexKeys.map(key => (
+                                <KeyCard key={key.index} keyData={key} prefix="Vertex Key" positionIndex={vertexKeys.indexOf(key)} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
-                      {/* TTS Keys */}
-                      <div className="bg-app-bg border border-app-primary/10 rounded-2xl p-5 space-y-4">
-                        <div className="flex items-center gap-2">
-                          <Key size={16} className="text-blue-400" />
-                          <h4 className="text-sm font-bold text-app-text">TTS API Keys</h4>
-                          <span className="text-[10px] text-app-text-muted">(generate-tts endpoint)</span>
-                        </div>
-                        {geminiStatus.tts.lastSyncedAt && (
-                          <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.tts.lastSyncedAt).toLocaleTimeString()}</p>
-                        )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {geminiStatus.tts.keys.map(key => (
-                            <div key={key.index} className={cn(
-                              "border rounded-xl p-4 space-y-2",
-                              key.available ? "border-green-400/30 bg-green-400/5" : "border-red-400/30 bg-red-400/5"
-                            )}>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-app-text">TTS Key #{key.index + 1}</span>
-                                <div className={cn('flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold',
-                                  key.available ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
-                                )}>
-                                  {key.available ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
-                                  {key.available ? 'Available' : 'Exhausted'}
-                                </div>
-                              </div>
-                              {!key.available && key.cooldownRemainingSeconds > 0 && (
-                                <div className="text-[11px] text-orange-400 font-bold">
-                                  Cooldown: {key.cooldownRemainingSeconds}s remaining
-                                </div>
-                              )}
-                              {key.consecutiveExhaustions > 0 && (
-                                <div className="text-[10px] text-app-text-muted">
-                                  Exhaustions: {key.consecutiveExhaustions}×
-                                </div>
-                              )}
-                              <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">
-                                <div
-                                  className={cn('h-full rounded-full transition-all', key.available ? 'bg-green-400' : 'bg-red-400')}
-                                  style={{ width: key.available ? '100%' : `${Math.max(0, 100 - (key.consecutiveExhaustions * 25))}%` }}
-                                />
-                              </div>
+                      {/* ── Text Keys — Gemini Developer API ── */}
+                      {geminiStatus.geminiKeyCount > 0 && (() => {
+                        const devKeys = geminiStatus.keys.filter(k => !k.isVertex);
+                        return (
+                          <div className="bg-app-bg border border-app-primary/10 rounded-2xl p-5 space-y-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Key size={16} className="text-app-primary" />
+                              <h4 className="text-sm font-bold text-app-text">Text — Gemini Developer API Keys</h4>
+                              <span className="text-[10px] text-app-text-muted">(analyze-speaking, analyze-writing, support-chat)</span>
+                              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-app-primary/10 text-app-primary">
+                                {devKeys.filter(k => k.available).length}/{devKeys.length} available
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            {geminiStatus.lastSyncedAt && (
+                              <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.lastSyncedAt).toLocaleTimeString()}</p>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {devKeys.map(key => (
+                                <KeyCard key={key.index} keyData={key} prefix="Key" positionIndex={devKeys.indexOf(key)} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── TTS Keys — Vertex AI ── */}
+                      {geminiStatus.tts.vertexKeyCount > 0 && (() => {
+                        const vertexTTSKeys = geminiStatus.tts.keys.filter(k => k.isVertex);
+                        return (
+                          <div className="bg-app-bg border border-purple-500/20 rounded-2xl p-5 space-y-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Cpu size={16} className="text-purple-400" />
+                              <h4 className="text-sm font-bold text-app-text">TTS — Vertex AI Keys</h4>
+                              <span className="text-[10px] text-app-text-muted">(generate-tts endpoint)</span>
+                              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400">
+                                {vertexTTSKeys.filter(k => k.available).length}/{vertexTTSKeys.length} available
+                              </span>
+                            </div>
+                            {geminiStatus.tts.lastSyncedAt && (
+                              <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.tts.lastSyncedAt).toLocaleTimeString()}</p>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {vertexTTSKeys.map(key => (
+                                <KeyCard key={key.index} keyData={key} prefix="TTS Vertex Key" positionIndex={vertexTTSKeys.indexOf(key)} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── TTS Keys — Gemini Developer API ── */}
+                      {geminiStatus.tts.geminiKeyCount > 0 && (() => {
+                        const devTTSKeys = geminiStatus.tts.keys.filter(k => !k.isVertex);
+                        return (
+                          <div className="bg-app-bg border border-blue-400/20 rounded-2xl p-5 space-y-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Key size={16} className="text-blue-400" />
+                              <h4 className="text-sm font-bold text-app-text">TTS — Gemini Developer API Keys</h4>
+                              <span className="text-[10px] text-app-text-muted">(generate-tts endpoint)</span>
+                              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-400">
+                                {devTTSKeys.filter(k => k.available).length}/{devTTSKeys.length} available
+                              </span>
+                            </div>
+                            {geminiStatus.tts.lastSyncedAt && (
+                              <p className="text-[10px] text-app-text-muted">Last synced: {new Date(geminiStatus.tts.lastSyncedAt).toLocaleTimeString()}</p>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {devTTSKeys.map(key => (
+                                <KeyCard key={key.index} keyData={key} prefix="TTS Key" positionIndex={devTTSKeys.indexOf(key)} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <p className="text-[10px] text-app-text-muted text-center">
+                        ⚠️ Call counts and token usage reset on server restart. Vertex AI keys are prioritised over Gemini Developer API keys.
+                      </p>
                     </>
                   )}
                 </div>
@@ -1074,6 +1204,174 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           </motion.div>
         </div>
       )}
+
+      {/* ── User Detail Modal ── */}
+      {selectedUser && (() => {
+        const stats = getUserEngagementStats(selectedUser);
+        const sectionMeta = {
+          speaking: { icon: Mic, color: 'text-blue-400', bg: 'bg-blue-400/10', bar: 'bg-blue-400' },
+          writing: { icon: PenTool, color: 'text-purple-400', bg: 'bg-purple-400/10', bar: 'bg-purple-400' },
+          reading: { icon: BookOpen, color: 'text-green-400', bg: 'bg-green-400/10', bar: 'bg-green-400' },
+          listening: { icon: Headphones, color: 'text-orange-400', bg: 'bg-orange-400/10', bar: 'bg-orange-400' },
+        } as const;
+        const maxSectionAttempts = Math.max(...Object.values(stats.sectionAttempts), 1);
+        const plan = selectedUser.planId ? (SUBSCRIPTION_PLANS.find(p => p.id === selectedUser.planId)?.name ?? selectedUser.planId) : 'No Plan';
+        return (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-app-surface border border-app-primary/20 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-app-primary/10 flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
+                  title="Back to users"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="w-10 h-10 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary shrink-0">
+                  <UserIcon size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-app-text truncate">{selectedUser.displayName || 'Anonymous'}</h3>
+                    {selectedUser.role === 'admin' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-500 uppercase">Admin</span>
+                    )}
+                    {selectedUser.accessType === 'guest' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-500/10 text-gray-400 uppercase">Guest</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-app-text-muted truncate">{selectedUser.email || 'No email'}</p>
+                </div>
+                <button
+                  onClick={() => { setSelectedUser(null); setUserToDelete(selectedUser); }}
+                  className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all shrink-0"
+                  title="Delete this user"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              {/* Scrollable content */}
+              <div className="overflow-y-auto flex-1 p-5 space-y-5">
+                {/* Account info */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
+                    { icon: CreditCard, label: 'Plan', value: plan, color: 'text-app-primary' },
+                    { icon: Activity, label: 'Status', value: selectedUser.subscriptionStatus, color: selectedUser.subscriptionStatus === 'active' ? 'text-green-400' : 'text-app-text-muted' },
+                    { icon: Calendar, label: 'Joined', value: new Date(selectedUser.createdAt).toLocaleDateString(), color: 'text-app-text-muted' },
+                    { icon: Hash, label: 'UID', value: selectedUser.uid.slice(0, 8) + '…', color: 'text-app-text-muted' },
+                    ...(selectedUser.targetScore ? [{ icon: Target, label: 'Target Score', value: String(selectedUser.targetScore), color: 'text-orange-400' }] : []),
+                    ...(selectedUser.testDate ? [{ icon: Clock, label: 'Test Date', value: new Date(selectedUser.testDate).toLocaleDateString(), color: 'text-blue-400' }] : []),
+                  ].map(item => (
+                    <div key={item.label} className="bg-app-bg border border-app-primary/10 rounded-xl p-3 flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <item.icon size={12} className={item.color} />
+                        <span className="text-[10px] text-app-text-muted uppercase font-bold tracking-wide">{item.label}</span>
+                      </div>
+                      <span className="text-sm font-bold text-app-text capitalize">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Usage summary */}
+                <div>
+                  <h4 className="text-xs font-bold text-app-text uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Zap size={13} className="text-app-primary" /> Usage &amp; Engagement
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-app-primary/5 border border-app-primary/10 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-black text-app-text">{stats.totalAttempts}</div>
+                      <div className="text-[10px] text-app-text-muted uppercase font-bold mt-0.5">Total Practice Attempts</div>
+                    </div>
+                    <div className="bg-app-primary/5 border border-app-primary/10 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-black text-app-text">{stats.tasksPracticed}</div>
+                      <div className="text-[10px] text-app-text-muted uppercase font-bold mt-0.5">Unique Tasks Practiced</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-app-primary/5 border border-app-primary/10 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-black text-app-text">{selectedUser.completedTasks?.length ?? 0}</div>
+                      <div className="text-[10px] text-app-text-muted uppercase font-bold mt-0.5">Completed Tasks</div>
+                    </div>
+                    <div className="bg-app-primary/5 border border-app-primary/10 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-black text-app-text">{selectedUser.mockTestResults?.length ?? 0}</div>
+                      <div className="text-[10px] text-app-text-muted uppercase font-bold mt-0.5">Mock Tests Taken</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section breakdown */}
+                {stats.totalAttempts > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-app-text uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <BarChart3 size={13} className="text-app-primary" /> Section Breakdown
+                    </h4>
+                    <div className="space-y-2">
+                      {(Object.keys(sectionMeta) as Array<keyof typeof sectionMeta>).map(section => {
+                        const meta = sectionMeta[section];
+                        const attempts = stats.sectionAttempts[section] ?? 0;
+                        const avgScore = stats.sectionAvgScore[section] ?? 0;
+                        const pct = Math.round((attempts / maxSectionAttempts) * 100);
+                        return (
+                          <div key={section} className="flex items-center gap-3">
+                            <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', meta.bg)}>
+                              <meta.icon size={13} className={meta.color} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-bold text-app-text capitalize">{section}</span>
+                                <span className="text-[10px] text-app-text-muted">{attempts} attempts{avgScore > 0 ? ` · avg ${avgScore}` : ''}</span>
+                              </div>
+                              <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">
+                                <div className={cn('h-full rounded-full transition-all', meta.bar)} style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top tasks */}
+                {stats.topTasks.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-app-text uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Award size={13} className="text-app-primary" /> Most Practiced Tasks
+                    </h4>
+                    <div className="space-y-1.5">
+                      {stats.topTasks.map((t, i) => (
+                        <div key={t.taskId} className="flex items-center justify-between bg-app-bg border border-app-primary/10 rounded-xl px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-app-text-muted w-4">#{i + 1}</span>
+                            <span className="text-xs font-bold text-app-text">{t.taskId}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-app-text-muted">
+                            <span>{t.attempts} attempts</span>
+                            {t.avgScore > 0 && <span className="text-app-primary font-bold">avg {t.avgScore}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {stats.totalAttempts === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 gap-2 text-app-text-muted">
+                    <Activity size={28} className="opacity-30" />
+                    <p className="text-sm">No practice activity yet</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
