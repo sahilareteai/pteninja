@@ -6285,6 +6285,7 @@ function TaskModal({
   const [audioFinished, setAudioFinished] = useState(false);
   const [volume, setVolume] = useState(0);
   const [recordingStopped, setRecordingStopped] = useState(false);
+  const [recordings, setRecordings] = useState<Array<{ id: string; base64: string; mimeType: string; attemptNum: number }>>([]);
   const recordingAnalyzerRef = useRef<AnalyserNode | null>(null);
   const recordingAnimationFrameRef = useRef<number | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
@@ -7160,6 +7161,10 @@ function TaskModal({
         if (!base64 || base64.length < 100) {
            throw new Error("No audio detected");
         }
+        setRecordings(prev => {
+          const next = [...prev, { id: crypto.randomUUID(), base64, mimeType: mediaRecorder?.mimeType || 'audio/webm', attemptNum: prev.length + 1 }];
+          return next.slice(-5); // Keep at most 5 recordings to limit memory usage
+        });
         result = await analyzeSpeaking(base64, task.category, mediaRecorder?.mimeType || 'audio/webm', task.correctAnswers?.[0]);
       } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
         if (isMockTest) {
@@ -8402,6 +8407,23 @@ function TaskModal({
               >
                 {/* Scoreboard */}
                 <div className="bg-app-bg rounded-3xl p-6 border border-app-primary/20">
+                  {task.category === 'Answer Short Question' ? (
+                    <div className="flex flex-col items-center gap-3 py-2">
+                      <h4 className="text-sm font-bold text-app-primary uppercase tracking-widest">Result</h4>
+                      {feedback.overall >= 65 ? (
+                        <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-green-500/10 border border-green-500/30">
+                          <Check size={28} className="text-green-400" />
+                          <span className="text-xl font-black text-green-400">Correct</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-red-500/10 border border-red-500/30">
+                          <X size={28} className="text-red-400" />
+                          <span className="text-xl font-black text-red-400">Incorrect</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                  <>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                     <div>
                       <h4 className="text-sm font-bold text-app-primary uppercase tracking-widest">Ninja Scoreboard</h4>
@@ -8441,6 +8463,8 @@ function TaskModal({
             <div className="sm:col-span-2" />
           </div>
         )}
+                  </>
+                  )}
                 </div>
 
                 {/* Reading Answer Key */}
@@ -8557,7 +8581,48 @@ function TaskModal({
 
                 {/* Detailed Analysis */}
                 {(task.section === 'speaking' || task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    {/* Recordings */}
+                    {task.section === 'speaking' && recordings.length > 0 && (
+                      <div className="bg-app-bg rounded-2xl p-4 border border-app-primary/20 space-y-3">
+                        <h5 className="text-sm font-bold text-app-text flex items-center gap-2">
+                          <Mic size={14} className="text-app-primary" />
+                          Your Recordings ({recordings.length} attempt{recordings.length !== 1 ? 's' : ''})
+                        </h5>
+                        <div className="space-y-2">
+                          {recordings.map((rec) => (
+                            <div key={rec.id} className="flex items-center gap-3 p-3 bg-app-surface rounded-xl border border-white/5">
+                              <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider shrink-0">
+                                Attempt {rec.attemptNum}
+                              </span>
+                              <audio
+                                controls
+                                className="flex-1 h-8"
+                                src={`data:${rec.mimeType};base64,${rec.base64}`}
+                              />
+                              <button
+                                onClick={() => setRecordings(prev => prev.filter(r => r.id !== rec.id))}
+                                className="p-1.5 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-400/10 transition-all shrink-0"
+                                title="Delete recording"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Transcription for speaking tasks */}
+                    {task.section === 'speaking' && feedback.transcription && (
+                      <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
+                        <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">What You Said</h5>
+                        <div className="text-xs text-app-text leading-relaxed italic bg-app-surface/50 p-3 rounded-xl border border-white/5">
+                          "{feedback.transcription}"
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
                     <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
                       <h5 className="text-[10px] font-bold text-app-text-muted uppercase mb-3">
                         {task.category === 'Answer Short Question' ? 'Expected Answer' : (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') ? "Sensei's Wisdom" : 'Diagnostic Data'}
@@ -8605,6 +8670,7 @@ function TaskModal({
                           ))}
                         </div>
                       )}
+                    </div>
                     </div>
                   </div>
                 )}
@@ -8676,6 +8742,7 @@ function TaskModal({
                         }
                         setTimeLeft(initialTime);
                         
+                        setAudioFinished(false);
                         setIsAudioPlaying(false);
                         setIsPreparingAudio(false);
                         setHasAudioError(false);
