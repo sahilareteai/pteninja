@@ -1559,7 +1559,7 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
 
 // ─── Get Visitor Stats ────────────────────────────────────────────────────────
 // Returns the visitor stats from Firestore. Admin only.
-app.get("/api/visitor-stats", async (req, res) => {
+app.get("/api/visitor-stats", deleteUserLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
   const { decodedToken, adminInstance } = authResult;
