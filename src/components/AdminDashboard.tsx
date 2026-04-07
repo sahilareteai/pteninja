@@ -80,17 +80,17 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const fetchVisitorStats = async () => {
     try {
-      const visitorDoc = await getDoc(doc(db, 'analytics', 'visitors'));
-      if (visitorDoc.exists()) {
-        const data = visitorDoc.data();
-        const today = new Date().toISOString().slice(0, 10);
-        setVisitorStats({
-          totalVisits: data.totalVisits ?? 0,
-          todayVisits: data.dailyVisits?.[today] ?? 0,
-        });
-      } else {
-        setVisitorStats({ totalVisits: 0, todayVisits: 0 });
-      }
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) return;
+      const response = await fetch('/api/visitor-stats', {
+        headers: { 'Authorization': `Bearer ${idToken}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setVisitorStats({
+        totalVisits: data.totalVisits ?? 0,
+        todayVisits: data.todayVisits ?? 0,
+      });
     } catch (error) {
       console.error('Error fetching visitor stats:', error);
     }

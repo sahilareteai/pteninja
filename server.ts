@@ -1557,6 +1557,41 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
   });
 });
 
+// ─── Get Visitor Stats ────────────────────────────────────────────────────────
+// Returns the visitor stats from Firestore. Admin only.
+app.get("/api/visitor-stats", async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+  const { decodedToken, adminInstance } = authResult;
+
+  const userDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+    .collection("users")
+    .doc(decodedToken.uid)
+    .get();
+  if (userDoc.data()?.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required." });
+  }
+
+  try {
+    const analyticsRef = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("analytics")
+      .doc("visitors");
+    const snap = await analyticsRef.get();
+    if (!snap.exists) {
+      return res.json({ totalVisits: 0, todayVisits: 0 });
+    }
+    const data = snap.data() ?? {};
+    const today = new Date().toISOString().slice(0, 10);
+    res.json({
+      totalVisits: data.totalVisits ?? 0,
+      todayVisits: data.dailyVisits?.[today] ?? 0,
+    });
+  } catch (error) {
+    console.error("Get visitor stats error:", error);
+    res.status(500).json({ error: "Failed to fetch visitor stats." });
+  }
+});
+
 // ─── Record Visit ─────────────────────────────────────────────────────────────
 // Called on app load to increment the visitor counter in Firestore.
 // Rate-limited to prevent abuse. No auth required.
