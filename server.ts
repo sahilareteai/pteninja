@@ -139,10 +139,20 @@ function buildServerKeyStates(): ServerKeyState[] {
     }
   }
 
+  // Support up to 10 Gemini Developer API keys.
+  // GEMINI_API_KEY is the primary key; GEMINI_API_KEY_2 through GEMINI_API_KEY_10 are backups.
+  // Keys are added in order so they are tried in priority sequence during rotation.
   const geminiKeys = [
     process.env.GEMINI_API_KEY,
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5,
+    process.env.GEMINI_API_KEY_6,
+    process.env.GEMINI_API_KEY_7,
+    process.env.GEMINI_API_KEY_8,
+    process.env.GEMINI_API_KEY_9,
+    process.env.GEMINI_API_KEY_10,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
     states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0, nonQuotaErrorCount: 0 });
@@ -431,7 +441,7 @@ async function sendAllKeysExhaustedAlert(stateField: string = "keys") {
         `All ${keyCount} configured Gemini API key(s) have hit their quota limits for the ${label} endpoint pool.`,
         `Time: ${timestamp}`,
         "",
-        "Please rotate or add new API keys (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3) immediately.",
+        "Please rotate or add new API keys (GEMINI_API_KEY through GEMINI_API_KEY_10) immediately.",
         "Keys will automatically resume after their cooldown resets.",
       ].join("\n"),
     });
