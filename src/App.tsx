@@ -8582,6 +8582,37 @@ function TaskModal({
                 {/* Detailed Analysis */}
                 {(task.section === 'speaking' || task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') && (
                   <div className="space-y-4">
+                    {/* Recordings */}
+                    {task.section === 'speaking' && recordings.length > 0 && (
+                      <div className="bg-app-bg rounded-2xl p-4 border border-app-primary/20 space-y-3">
+                        <h5 className="text-sm font-bold text-app-text flex items-center gap-2">
+                          <Mic size={14} className="text-app-primary" />
+                          Your Recordings ({recordings.length} attempt{recordings.length !== 1 ? 's' : ''})
+                        </h5>
+                        <div className="space-y-2">
+                          {recordings.map((rec) => (
+                            <div key={rec.id} className="flex items-center gap-3 p-3 bg-app-surface rounded-xl border border-white/5">
+                              <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider shrink-0">
+                                Attempt {rec.attemptNum}
+                              </span>
+                              <audio
+                                controls
+                                className="flex-1 h-8"
+                                src={`data:${rec.mimeType};base64,${rec.base64}`}
+                              />
+                              <button
+                                onClick={() => setRecordings(prev => prev.filter(r => r.id !== rec.id))}
+                                className="p-1.5 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-400/10 transition-all shrink-0"
+                                title="Delete recording"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Transcription for speaking tasks */}
                     {task.section === 'speaking' && feedback.transcription && (
                       <div className="bg-app-surface p-4 rounded-2xl border border-white/5">
@@ -8665,37 +8696,6 @@ function TaskModal({
                     </ul>
                   )}
                 </div>
-
-                {/* Recordings */}
-                {task.section === 'speaking' && recordings.length > 0 && (
-                  <div className="bg-app-bg rounded-2xl p-4 border border-app-primary/20 space-y-3">
-                    <h5 className="text-sm font-bold text-app-text flex items-center gap-2">
-                      <Mic size={14} className="text-app-primary" />
-                      Your Recordings ({recordings.length} attempt{recordings.length !== 1 ? 's' : ''})
-                    </h5>
-                    <div className="space-y-2">
-                      {recordings.map((rec) => (
-                        <div key={rec.id} className="flex items-center gap-3 p-3 bg-app-surface rounded-xl border border-white/5">
-                          <span className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider shrink-0">
-                            Attempt {rec.attemptNum}
-                          </span>
-                          <audio
-                            controls
-                            className="flex-1 h-8"
-                            src={`data:${rec.mimeType};base64,${rec.base64}`}
-                          />
-                          <button
-                            onClick={() => setRecordings(prev => prev.filter(r => r.id !== rec.id))}
-                            className="p-1.5 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-400/10 transition-all shrink-0"
-                            title="Delete recording"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex gap-4">
                   {!isMockTest && (
