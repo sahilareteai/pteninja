@@ -64,6 +64,10 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 const TRANSIENT_RETRY_MAX = 2;
 const TRANSIENT_RETRY_BASE_MS = 1000;
 
+// Model names used across text endpoints (analyze-speaking, analyze-writing, support-chat).
+// The same model ID works on both Gemini Developer API and Vertex AI.
+const TEXT_MODEL = "gemini-2.5-flash-lite";
+
 interface ServerKeyState {
   client: GoogleGenAI;
   exhaustedUntil: number;
@@ -1903,14 +1907,14 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     ];
 
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents,
       config: { systemInstruction },
     },
     serverGeminiKeys,
     "keys",
-    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
-    "gemini-2.5-flash-lite",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
     );
 
     const text = response.text ?? "";
@@ -2504,7 +2508,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
       config: {
         responseMimeType: "application/json",
@@ -2528,8 +2532,8 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
     },
     serverGeminiKeys,
     "keys",
-    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
-    "gemini-2.5-flash-lite",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
     );
 
     const parsed = JSON.parse(response.text ?? "{}");
@@ -2583,7 +2587,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
 
   try {
     const response = await serverCallGemini({
-      model: "gemini-2.5-flash-lite",
+      model: TEXT_MODEL,
       contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
       config: {
         responseMimeType: "application/json",
@@ -2604,8 +2608,8 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
     },
     serverGeminiKeys,
     "keys",
-    // gemini-2.5-flash-lite is available on both Vertex AI and Gemini Developer API.
-    "gemini-2.5-flash-lite",
+    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+    TEXT_MODEL,
     );
 
     res.json(JSON.parse(response.text ?? "{}"));
