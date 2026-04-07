@@ -324,7 +324,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
             style={{ height: `${Math.max(pct, 4)}%`, minHeight: value > 0 ? 4 : 0 }}
           />
         </div>
-        <div className="text-[9px] text-app-text-muted font-bold">{label.slice(5)}</div>
+        <div className="text-[9px] text-app-text-muted font-bold">{label.slice(5) || label}</div>
         <div className="text-[10px] font-black text-app-text">{value}</div>
       </div>
     );
@@ -490,7 +490,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                                 <div className="w-full flex flex-col justify-end" style={{ height: 36 }}>
                                   <div className="w-full bg-app-accent/60 rounded-t" style={{ height: `${Math.max(pct, count > 0 ? 8 : 0)}%` }} />
                                 </div>
-                                <div className="text-[8px] text-app-text-muted">{date.slice(8)}</div>
+                                <div className="text-[8px] text-app-text-muted">{date.length >= 10 ? date.slice(8) : date}</div>
                               </div>
                             );
                           })}
@@ -551,14 +551,14 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                           <p className="text-xs text-app-text-muted text-center py-4">No task data yet</p>
                         ) : analytics.tasks.topTasks.map((task, i) => {
                           const maxCount = analytics.tasks.topTasks[0]?.count ?? 1;
-                          const category = TASK_CATEGORY_MAP[task.taskId] ?? task.taskId;
+                          const taskLabel = TASK_CATEGORY_MAP[task.taskId] ?? task.taskId;
                           const pct = maxCount > 0 ? Math.round((task.count / maxCount) * 100) : 0;
                           return (
                             <div key={task.taskId} className="flex items-center gap-3">
                               <span className="text-[10px] font-black text-app-text-muted w-4 text-right">{i + 1}</span>
                               <div className="flex-1 space-y-0.5">
                                 <div className="flex justify-between">
-                                  <span className="text-xs font-bold text-app-text truncate max-w-[160px]">{category}</span>
+                                  <span className="text-xs font-bold text-app-text truncate max-w-[160px]">{taskLabel}</span>
                                   <span className="text-xs font-black text-app-primary ml-2">{task.count}</span>
                                 </div>
                                 <div className="h-1.5 bg-app-primary/10 rounded-full overflow-hidden">

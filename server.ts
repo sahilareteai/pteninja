@@ -1633,9 +1633,10 @@ app.get("/api/admin-analytics", adminStatusLimiter, async (req, res) => {
 
     // New signups last 7 days
     const now = Date.now();
+    const MS_PER_DAY = 86400_000;
     const signupsByDay: Record<string, number> = {};
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now - i * 86400_000).toISOString().slice(0, 10);
+      const d = new Date(now - i * MS_PER_DAY).toISOString().slice(0, 10);
       signupsByDay[d] = 0;
     }
     for (const u of userDocs) {
@@ -1683,7 +1684,7 @@ app.get("/api/admin-analytics", adminStatusLimiter, async (req, res) => {
     const totalVisits = (visitorsData.totalVisits as number) ?? 0;
     const dailyVisits: Record<string, number> = {};
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now - i * 86400_000).toISOString().slice(0, 10);
+      const d = new Date(now - i * MS_PER_DAY).toISOString().slice(0, 10);
       dailyVisits[d] = (visitorsData.dailyVisits as Record<string, number>)?.[d] ?? 0;
     }
 
