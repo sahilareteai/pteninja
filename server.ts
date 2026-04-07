@@ -68,11 +68,11 @@ const TRANSIENT_RETRY_BASE_MS = 1000;
 // The same model ID works on both Gemini Developer API and Vertex AI.
 const TEXT_MODEL = "gemini-2.5-flash-lite";
 
-// TTS model. gemini-2.5-flash-tts is the production-stable TTS model that works on BOTH
-// the Gemini Developer API and Vertex AI Express Mode / service-account backends.
-// (The older gemini-2.5-flash-preview-tts was Gemini Developer API-only; gemini-2.0-flash
-// supported audio output but is not a dedicated TTS model.)
-const TTS_MODEL = "gemini-2.5-flash-tts";
+// TTS model. gemini-2.5-flash-preview-tts is the dedicated TTS model available on both
+// the Gemini Developer API and Vertex AI (Express Mode and service-account backends).
+// Use VERTEX_AI_LOCATION=global in your environment if calling via a service-account
+// key, as TTS preview models require the global endpoint on Vertex AI.
+const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 
 interface ServerKeyState {
   client: GoogleGenAI;
@@ -2481,8 +2481,8 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       },
       serverTTSGeminiKeys,
       "ttsKeys",
-      // TTS_MODEL (gemini-2.5-flash-tts) is the production TTS model available on both
-      // the Gemini Developer API and Vertex AI. Both endpoints share the same model name.
+      // TTS_MODEL (gemini-2.5-flash-preview-tts) is the dedicated TTS model available on
+      // both the Gemini Developer API and Vertex AI. Both backends share the same model name.
       TTS_MODEL,
     );
 
