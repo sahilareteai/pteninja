@@ -1592,6 +1592,129 @@ app.get("/api/visitor-stats", deleteUserLimiter, async (req, res) => {
   }
 });
 
+// ─── Admin Analytics ─────────────────────────────────────────────────────────
+// Returns aggregated engagement data for the admin dashboard. Admin only.
+app.get("/api/admin-analytics", adminStatusLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+  const { decodedToken, adminInstance } = authResult;
+
+  // Verify admin
+  let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+  if (!isAdmin) {
+    try {
+      const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+        .collection("users").doc(decodedToken.uid).get();
+      isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+    } catch { /* deny */ }
+  }
+  if (!isAdmin) return res.status(403).json({ error: "Admin access required." });
+
+  try {
+    const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+
+    // Fetch all users (aggregate only — no PII returned)
+    const usersSnap = await db.collection("users").get();
+    const userDocs = usersSnap.docs.map(d => d.data() as Record<string, any>);
+
+    // User funnel counts
+    const totalUsers = userDocs.length;
+    const paidUsers = userDocs.filter(u => u.subscriptionStatus === "active").length;
+    const trialUsers = userDocs.filter(u => u.subscriptionStatus === "trial").length;
+    const guestUsers = userDocs.filter(u => u.accessType === "guest").length;
+
+    // Plan distribution
+    const planCounts: Record<string, number> = {};
+    for (const u of userDocs) {
+      if (u.planId && u.subscriptionStatus === "active") {
+        planCounts[u.planId] = (planCounts[u.planId] ?? 0) + 1;
+      }
+    }
+
+    // New signups last 7 days
+    const now = Date.now();
+    const signupsByDay: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now - i * 86400_000).toISOString().slice(0, 10);
+      signupsByDay[d] = 0;
+    }
+    for (const u of userDocs) {
+      if (u.createdAt) {
+        const day = new Date(u.createdAt).toISOString().slice(0, 10);
+        if (day in signupsByDay) signupsByDay[day]++;
+      }
+    }
+
+    // Task engagement: aggregate taskScores across all users
+    const sectionCounts: Record<string, number> = { speaking: 0, writing: 0, reading: 0, listening: 0 };
+    const categoryCounts: Record<string, number> = {};
+    // Task ID prefix → section mapping (mirrors PTE_TASKS in types.ts)
+    const speakingPrefixes = ["ra-", "rs-", "di-", "rsit-", "sgd-", "rl-", "asq-"];
+    const writingPrefixes = ["swt-", "essay-"];
+    const readingPrefixes = ["rfib-", "rfib2-", "rmcq-", "rscq-", "rop-"];
+    const listeningPrefixes = ["sst-", "hcs-", "lfib-", "lmcq-", "mmc-", "hiw-", "wfd-", "smc-", "smw-"];
+    const inferSection = (taskId: string): string => {
+      if (speakingPrefixes.some(p => taskId.startsWith(p))) return "speaking";
+      if (writingPrefixes.some(p => taskId.startsWith(p))) return "writing";
+      if (readingPrefixes.some(p => taskId.startsWith(p))) return "reading";
+      if (listeningPrefixes.some(p => taskId.startsWith(p))) return "listening";
+      return "other";
+    };
+    for (const u of userDocs) {
+      const scores = u.taskScores as Record<string, number[]> | undefined;
+      if (!scores) continue;
+      for (const [taskId, attempts] of Object.entries(scores)) {
+        if (!Array.isArray(attempts) || attempts.length === 0) continue;
+        const section = inferSection(taskId);
+        if (section in sectionCounts) sectionCounts[section] += attempts.length;
+        categoryCounts[taskId] = (categoryCounts[taskId] ?? 0) + attempts.length;
+      }
+    }
+
+    // Top 10 most practiced task IDs (used to build category bar chart on front-end)
+    const topTasks = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([taskId, count]) => ({ taskId, count }));
+
+    // Visitor trend (last 7 days)
+    const visitorsSnap = await db.collection("analytics").doc("visitors").get();
+    const visitorsData = visitorsSnap.exists ? (visitorsSnap.data() ?? {}) : {};
+    const totalVisits = (visitorsData.totalVisits as number) ?? 0;
+    const dailyVisits: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now - i * 86400_000).toISOString().slice(0, 10);
+      dailyVisits[d] = (visitorsData.dailyVisits as Record<string, number>)?.[d] ?? 0;
+    }
+
+    // Support chat topics
+    const topicsSnap = await db.collection("analytics").doc("supportTopics").get();
+    const supportTopics = topicsSnap.exists ? (topicsSnap.data() ?? {}) : {};
+
+    // Support tickets
+    const ticketsSnap = await db.collection("analytics").doc("supportTickets").get();
+    const ticketsData = ticketsSnap.exists ? (ticketsSnap.data() ?? {}) : {};
+    const totalTickets = (ticketsData.total as number) ?? 0;
+    // Build per-category counts (exclude 'total' and 'daily' keys)
+    const ticketCategories: Record<string, number> = {};
+    for (const [k, v] of Object.entries(ticketsData)) {
+      if (k !== "total" && k !== "daily" && typeof v === "number") {
+        ticketCategories[k] = v;
+      }
+    }
+
+    res.json({
+      users: { totalUsers, paidUsers, trialUsers, guestUsers, planCounts, signupsByDay },
+      tasks: { sectionCounts, topTasks },
+      visitors: { totalVisits, dailyVisits },
+      support: { topics: supportTopics, totalTickets, ticketCategories },
+    });
+  } catch (error) {
+    console.error("Admin analytics error:", error);
+    res.status(500).json({ error: "Failed to fetch analytics." });
+  }
+});
+
 // ─── Record Visit ─────────────────────────────────────────────────────────────
 // Called on app load to increment the visitor counter in Firestore.
 // Rate-limited to prevent abuse. No auth required.
@@ -1747,6 +1870,17 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     });
 
     const text = response.text ?? "";
+
+    // Track support chat topic (fire-and-forget, privacy-safe — no message content stored)
+    const adminInst = getAdminApp();
+    if (adminInst && safeIssueType) {
+      const { FieldValue } = await import("firebase-admin/firestore");
+      const topicsRef = getAdminFirestore(adminInst, FIREBASE_DATABASE_ID)
+        .collection("analytics")
+        .doc("supportTopics");
+      topicsRef.set({ [safeIssueType]: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    }
+
     res.json({ response: text });
   } catch (error: any) {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {
@@ -2210,6 +2344,23 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
       });
     } catch (confirmError) {
       console.warn("Could not send confirmation email to user:", confirmError);
+    }
+
+    // Track support ticket issue type (fire-and-forget, privacy-safe — no PII stored)
+    const adminInstTicket = getAdminApp();
+    if (adminInstTicket && userDetails.issueType) {
+      const { FieldValue } = await import("firebase-admin/firestore");
+      const ticketsRef = getAdminFirestore(adminInstTicket, FIREBASE_DATABASE_ID)
+        .collection("analytics")
+        .doc("supportTickets");
+      ticketsRef.set(
+        {
+          total: FieldValue.increment(1),
+          [userDetails.issueType]: FieldValue.increment(1),
+          [`daily.${new Date().toISOString().slice(0, 10)}`]: FieldValue.increment(1),
+        },
+        { merge: true }
+      ).catch(() => {});
     }
 
     res.json({ success: true, message: "Support ticket sent successfully.", ticketId });
