@@ -273,6 +273,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
     setIsDeletingUser(true);
+    const deletedUser = userToDelete; // capture before any state update
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) throw new Error('Not authenticated');
@@ -282,14 +283,34 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ uid: userToDelete.uid }),
+        body: JSON.stringify({ uid: deletedUser.uid }),
       });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error ?? 'Failed to delete user');
       }
-      setUsers(prev => prev.filter(u => u.uid !== userToDelete.uid));
-      toast.success(`User ${userToDelete.displayName || userToDelete.email || userToDelete.uid} deleted`);
+      setUsers(prev => prev.filter(u => u.uid !== deletedUser.uid));
+      // Keep analytics counts in sync so the Analytics tab reflects the deletion
+      // immediately, without waiting for a full re-fetch.
+      setAnalytics(prev => {
+        if (!prev) return prev;
+        const wasActive = deletedUser.subscriptionStatus === 'active';
+        const wasTrial = deletedUser.subscriptionStatus === 'trial';
+        const wasGuest = deletedUser.accessType === 'guest';
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            totalUsers: Math.max(0, prev.users.totalUsers - 1),
+            paidUsers: wasActive ? Math.max(0, prev.users.paidUsers - 1) : prev.users.paidUsers,
+            trialUsers: wasTrial ? Math.max(0, prev.users.trialUsers - 1) : prev.users.trialUsers,
+            guestUsers: wasGuest ? Math.max(0, prev.users.guestUsers - 1) : prev.users.guestUsers,
+          },
+        };
+      });
+      // Force the analytics to re-fetch fresh data next time the tab is visited
+      hasFetchedAnalytics.current = false;
+      toast.success(`User ${deletedUser.displayName || deletedUser.email || deletedUser.uid} deleted`);
       setUserToDelete(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete user');

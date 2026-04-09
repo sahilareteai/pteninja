@@ -3381,15 +3381,16 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
 
   const getRemainingDays = () => {
     const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (isTrial && user.trialEndsAt) {
-      const diff = new Date(user.trialEndsAt).getTime() - now.getTime();
-      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+      const endsAt = new Date(user.trialEndsAt);
+      const endsMidnight = new Date(endsAt.getFullYear(), endsAt.getMonth(), endsAt.getDate());
+      return Math.max(0, Math.round((endsMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24)));
     }
     if (isGuest) {
       const createdAt = new Date(user.createdAt);
-      const expiresAt = new Date(createdAt.getTime() + 3 * 24 * 60 * 60 * 1000);
-      const diff = expiresAt.getTime() - now.getTime();
-      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+      const expiryMidnight = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate() + 3);
+      return Math.max(0, Math.round((expiryMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24)));
     }
     return 0;
   };

@@ -91,6 +91,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         // Listen for real-time updates to user data
         unsubDoc = onSnapshot(userRef, (docSnap) => {
+          // Capture fromCache before type narrowing via exists() turns docSnap
+          // into `never` in the else branch (TypeScript type-predicate narrowing).
+          const snapFromCache = docSnap.metadata.fromCache;
           if (docSnap.exists()) {
             const userData = docSnap.data() as UserData;
             
@@ -143,8 +146,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 }).catch((err) => console.error('Failed to ensure admin role:', err));
               }).catch((err) => console.error('Failed to get ID token for admin role check:', err));
             }
-          } else {
-            // New user or guest
+          } else if (!snapFromCache) {
+            // Server has confirmed the document does not exist — safe to create.
+            // Skipping fromCache snapshots prevents a stale local-cache entry from
+            // triggering a fresh-account write that would overwrite an existing
+            // user's activityLog and trialEndsAt (causing a streak + days reset).
             const isGuest = firebaseUser.isAnonymous;
             const now = new Date();
             const createdAt = now.toISOString();
@@ -215,13 +221,18 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
             setUser(newUser);
           }
-          setLoading(false);
-          setIsAuthenticating(false);
+          // Only finalise loading & record a visit when the snapshot is conclusive
+          // (server data, or an existing document from cache). When the cache
+          // reports "no document" we wait for the authoritative server snapshot.
+          if (docSnap.exists() || !snapFromCache) {
+            setLoading(false);
+            setIsAuthenticating(false);
 
-          // Record a visit once per browser session
-          if (!hasRecordedVisitRef.current) {
-            hasRecordedVisitRef.current = true;
-            fetch('/api/record-visit', { method: 'POST' }).catch((err) => console.error('Failed to record visit:', err));
+            // Record a visit once per browser session
+            if (!hasRecordedVisitRef.current) {
+              hasRecordedVisitRef.current = true;
+              fetch('/api/record-visit', { method: 'POST' }).catch((err) => console.error('Failed to record visit:', err));
+            }
           }
         }, (err: any) => {
           // If we're anonymous and get a permission error, it's likely the same root cause
