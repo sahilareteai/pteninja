@@ -530,6 +530,27 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
 
   try {
   switch (event.type) {
+    case "customer.subscription.created": {
+      const sub = event.data.object as unknown as SubscriptionRuntime;
+      const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+      if (!customerId) break;
+      const customerSnapshot = await db
+        .collection("users")
+        .where("stripeCustomerId", "==", customerId)
+        .limit(1)
+        .get();
+      if (customerSnapshot.empty) break;
+      const createdUpdates: Record<string, unknown> = {
+        stripeSubscriptionId: sub.id,
+      };
+      if (sub.status === "active" || sub.status === "trialing") {
+        createdUpdates.subscriptionStatus = "active";
+        createdUpdates.subscriptionEndsAt = new Date(sub.current_period_end * 1000).toISOString();
+        createdUpdates.cancelAtPeriodEnd = sub.cancel_at_period_end;
+      }
+      await customerSnapshot.docs[0].ref.update(createdUpdates);
+      break;
+    }
     case "customer.subscription.updated": {
       const sub = event.data.object as unknown as SubscriptionRuntime;
       const updates: Record<string, unknown> = {
@@ -875,6 +896,7 @@ const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "yea
 interface SubscriptionRuntime {
   id: string;
   status: string;
+  customer?: string | { id: string };
   current_period_end: number;
   cancel_at_period_end: boolean;
   // latest_invoice is a string ID when NOT expanded, or a full Invoice object when expanded.
