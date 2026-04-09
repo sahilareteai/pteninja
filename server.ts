@@ -252,6 +252,32 @@ async function syncKeyStateFromFirestore(keys: ServerKeyState[], stateField: str
   }
 }
 
+// Increments the daily token usage counters in Firestore (fire-and-forget).
+// Uses Firestore FieldValue.increment so concurrent serverless instances
+// don't overwrite each other's counts.
+async function persistDailyTokenUsage(inputTokens: number, outputTokens: number, isTextPool: boolean): Promise<void> {
+  if (inputTokens === 0 && outputTokens === 0) return;
+  const adminInstance = getAdminApp();
+  if (!adminInstance) return;
+  try {
+    const { FieldValue } = await import("firebase-admin/firestore");
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const prefix = isTextPool ? "text" : "tts";
+    await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("analytics")
+      .doc("tokenUsage")
+      .set(
+        {
+          [`daily.${today}.${prefix}Input`]: FieldValue.increment(inputTokens),
+          [`daily.${today}.${prefix}Output`]: FieldValue.increment(outputTokens),
+        },
+        { merge: true },
+      );
+  } catch (err) {
+    console.warn("[Gemini] Failed to persist daily token usage to Firestore:", err);
+  }
+}
+
 // Writes the current in-memory exhaustion state for the given key pool to Firestore
 // so other instances can pick it up on their next sync.
 async function persistKeyStateToFirestore(keys: ServerKeyState[], stateField: string): Promise<void> {
@@ -318,8 +344,13 @@ async function serverCallGemini(
         // and reset on every server restart/redeploy.
         keyState.consecutiveExhaustions = 0;
         keyState.callCount += 1;
-        keyState.totalInputTokens += result.usageMetadata?.promptTokenCount ?? 0;
-        keyState.totalOutputTokens += result.usageMetadata?.candidatesTokenCount ?? 0;
+        const inputTokens = result.usageMetadata?.promptTokenCount ?? 0;
+        const outputTokens = result.usageMetadata?.candidatesTokenCount ?? 0;
+        keyState.totalInputTokens += inputTokens;
+        keyState.totalOutputTokens += outputTokens;
+        // Persist daily totals to Firestore so they survive server restarts.
+        const isTextPool = keys === serverGeminiKeys;
+        persistDailyTokenUsage(inputTokens, outputTokens, isTextPool).catch(() => {/* fire-and-forget */});
         return result;
       } catch (e: any) {
         const isQuotaError =
@@ -1503,18 +1534,24 @@ app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
     // 3 days — matches the guest access window in SubscriptionProvider (guestExpiresAt = createdAt + 3 days)
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
-    const snapshot = await db
+    // Fetch all guest docs first (single-field equality avoids the need for a
+    // composite index) and then filter by createdAt in memory.
+    const allGuestsSnap = await db
       .collection("users")
       .where("accessType", "==", "guest")
-      .where("createdAt", "<", cutoff)
       .get();
+
+    const staleGuests = allGuestsSnap.docs.filter(docSnap => {
+      const data = docSnap.data();
+      return typeof data.createdAt === "string" && data.createdAt < cutoff;
+    });
 
     // Delete Firestore docs in batches of up to 500 (Firestore batch limit)
     const BATCH_SIZE = 500;
     let deleted = 0;
     const successfulUids: string[] = [];
-    for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
-      const chunk = snapshot.docs.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < staleGuests.length; i += BATCH_SIZE) {
+      const chunk = staleGuests.slice(i, i + BATCH_SIZE);
       const batch = db.batch();
       for (const docSnap of chunk) {
         batch.delete(docSnap.ref);
@@ -1697,6 +1734,29 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
   const textKeys = serverGeminiKeys.map(mapKey);
   const ttsKeys = serverTTSGeminiKeys.map(mapKey);
 
+  // Read today's daily token totals from Firestore
+  let dailyTokens: Record<string, { textInput: number; textOutput: number; ttsInput: number; ttsOutput: number }> = {};
+  try {
+    const adminInstance = getAdminApp();
+    if (adminInstance) {
+      const tokenSnap = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+        .collection("analytics")
+        .doc("tokenUsage")
+        .get();
+      if (tokenSnap.exists) {
+        const raw = (tokenSnap.data()?.daily ?? {}) as Record<string, Record<string, number>>;
+        for (const [day, counts] of Object.entries(raw)) {
+          dailyTokens[day] = {
+            textInput: typeof counts.textInput === "number" ? counts.textInput : 0,
+            textOutput: typeof counts.textOutput === "number" ? counts.textOutput : 0,
+            ttsInput: typeof counts.ttsInput === "number" ? counts.ttsInput : 0,
+            ttsOutput: typeof counts.ttsOutput === "number" ? counts.ttsOutput : 0,
+          };
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
   res.json({
     totalKeys: serverGeminiKeys.length,
     availableKeys: textKeys.filter((k) => k.available).length,
@@ -1704,6 +1764,7 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
     geminiKeyCount: serverGeminiKeys.filter((k) => !k.isVertex).length,
     lastSyncedAt: keyStateSyncedAtMap["keys"] || null,
     keys: textKeys,
+    dailyTokens,
     tts: {
       availableKeys: ttsKeys.filter((k) => k.available).length,
       vertexKeyCount: serverTTSGeminiKeys.filter((k) => k.isVertex).length,

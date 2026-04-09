@@ -78,6 +78,7 @@ interface GeminiKeyStatus {
   geminiKeyCount: number;
   lastSyncedAt: number | null;
   keys: { index: number; isVertex: boolean; available: boolean; exhaustedUntil: number | null; cooldownRemainingSeconds: number; consecutiveExhaustions: number; callCount: number; totalInputTokens: number; totalOutputTokens: number; nonQuotaErrorCount: number }[];
+  dailyTokens: Record<string, { textInput: number; textOutput: number; ttsInput: number; ttsOutput: number }>;
   tts: {
     availableKeys: number;
     vertexKeyCount: number;
@@ -340,6 +341,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       hasFetchedUsers.current = false;
       hasFetchedAnalytics.current = false;
       await fetchData(true);
+      await fetchAnalytics();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to purge stale guests');
       console.error('Purge stale guests error:', error);
@@ -1116,6 +1118,59 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         ))}
                       </div>
 
+                      {/* ── Daily Token Usage ── */}
+                      {(() => {
+                        const formatTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+                        const today = new Date().toISOString().slice(0, 10);
+                        // Show last 7 days descending
+                        const days = Object.keys(geminiStatus.dailyTokens).sort((a, b) => b.localeCompare(a)).slice(0, 7);
+                        if (days.length === 0) return null;
+                        const todayData = geminiStatus.dailyTokens[today];
+                        return (
+                          <div className="bg-app-bg border border-app-primary/10 rounded-2xl p-5 space-y-4">
+                            <div className="flex items-center gap-2">
+                              <Hash size={16} className="text-app-primary" />
+                              <h4 className="text-sm font-bold text-app-text">Token Usage (Daily Totals)</h4>
+                              <span className="text-[10px] text-app-text-muted ml-auto">Persisted across restarts</span>
+                            </div>
+                            {/* Today highlight */}
+                            {todayData && (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {[
+                                  { label: "Today Text In", value: todayData.textInput, color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/20' },
+                                  { label: "Today Text Out", value: todayData.textOutput, color: 'text-purple-400', bg: 'bg-purple-400/5 border-purple-400/20' },
+                                  { label: "Today TTS In", value: todayData.ttsInput, color: 'text-green-400', bg: 'bg-green-400/5 border-green-400/20' },
+                                  { label: "Today TTS Out", value: todayData.ttsOutput, color: 'text-orange-400', bg: 'bg-orange-400/5 border-orange-400/20' },
+                                ].map(item => (
+                                  <div key={item.label} className={cn("border rounded-xl p-3 text-center", item.bg)}>
+                                    <div className={cn("text-lg font-black", item.color)}>{formatTokens(item.value)}</div>
+                                    <div className="text-[9px] font-bold text-app-text-muted uppercase tracking-wide mt-0.5">{item.label}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Per-day table */}
+                            <div className="space-y-1.5">
+                              {days.map(day => {
+                                const d = geminiStatus.dailyTokens[day];
+                                const totalText = d.textInput + d.textOutput;
+                                const totalTTS = d.ttsInput + d.ttsOutput;
+                                const isToday = day === today;
+                                return (
+                                  <div key={day} className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-xs", isToday ? "bg-app-primary/10" : "bg-app-primary/5")}>
+                                    <span className={cn("font-bold w-24 shrink-0", isToday ? "text-app-primary" : "text-app-text-muted")}>{day}{isToday ? ' (today)' : ''}</span>
+                                    <div className="flex gap-3 flex-wrap">
+                                      <span className="text-app-text-muted">Text: <span className="font-black text-app-text">{formatTokens(totalText)}</span> <span className="text-[10px]">(↑{formatTokens(d.textInput)} ↓{formatTokens(d.textOutput)})</span></span>
+                                      <span className="text-app-text-muted">TTS: <span className="font-black text-app-text">{formatTokens(totalTTS)}</span> <span className="text-[10px]">(↑{formatTokens(d.ttsInput)} ↓{formatTokens(d.ttsOutput)})</span></span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* ── Text Keys — Vertex AI ── */}
                       {geminiStatus.vertexKeyCount > 0 && (() => {
                         const vertexKeys = geminiStatus.keys.filter(k => k.isVertex);
@@ -1217,7 +1272,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       })()}
 
                       <p className="text-[10px] text-app-text-muted text-center">
-                        ⚠️ Call counts and token usage reset on server restart. Vertex AI keys are prioritised over Gemini Developer API keys.
+                        ⚠️ Per-key call counts reset on server restart. Daily token totals persist via Firestore. Vertex AI keys are prioritised over Gemini Developer API keys.
                       </p>
 
                       {/* ── No Vertex AI keys warning ── */}
