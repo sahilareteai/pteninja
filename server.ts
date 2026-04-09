@@ -528,6 +528,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
     }
   };
 
+  try {
   switch (event.type) {
     case "customer.subscription.updated": {
       const sub = event.data.object as unknown as SubscriptionRuntime;
@@ -738,6 +739,9 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
     }
     default:
       break;
+  }
+  } catch (handlerErr: unknown) {
+    console.error("Webhook handler error for event", event.type, event.id, handlerErr);
   }
 
   res.json({ received: true });
