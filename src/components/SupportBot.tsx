@@ -226,7 +226,7 @@ export function SupportBot({ isOpen, setIsOpen, userName, userEmail }: SupportBo
       {/* Floating toggle button — desktop only */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-app-primary text-app-bg rounded-full shadow-lg hidden md:flex items-center justify-center hover:bg-app-accent transition-colors"
+        className="fixed z-50 w-12 h-12 md:w-14 md:h-14 bg-app-primary text-app-bg shadow-lg flex items-center justify-center hover:bg-app-accent transition-colors right-0 top-1/2 -translate-y-1/2 rounded-l-2xl md:rounded-full md:top-auto md:translate-y-0 md:bottom-20 md:right-6"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         aria-label={isOpen ? 'Close support chat' : 'Open support chat'}
@@ -264,7 +264,7 @@ export function SupportBot({ isOpen, setIsOpen, userName, userEmail }: SupportBo
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="fixed bottom-20 right-3 z-50 w-96 max-w-[calc(100vw-1.5rem)] bg-app-bg border border-app-surface rounded-2xl shadow-2xl flex flex-col md:bottom-24 md:right-6"
+            className="fixed z-50 w-80 max-w-[calc(100vw-4rem)] bg-app-bg border border-app-surface rounded-2xl shadow-2xl flex flex-col right-14 top-1/2 -translate-y-1/2 md:w-96 md:max-w-[calc(100vw-1.5rem)] md:translate-y-0 md:top-auto md:bottom-36 md:right-6"
             style={{ maxHeight: '80vh' }}
           >
             {/* Header */}
