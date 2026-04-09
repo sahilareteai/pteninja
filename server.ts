@@ -1500,8 +1500,8 @@ app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
     }
 
     const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
-    const GUEST_ACCESS_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — matches SubscriptionProvider
-    const cutoff = new Date(Date.now() - GUEST_ACCESS_MS).toISOString();
+    // 3 days — matches the guest access window in SubscriptionProvider (guestExpiresAt = createdAt + 3 days)
+    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
     const snapshot = await db
       .collection("users")
@@ -1509,22 +1509,34 @@ app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
       .where("createdAt", "<", cutoff)
       .get();
 
+    // Delete Firestore docs in batches of up to 500 (Firestore batch limit)
+    const BATCH_SIZE = 500;
     let deleted = 0;
-    for (const docSnap of snapshot.docs) {
-      const uid = docSnap.id;
-      try {
-        await docSnap.ref.delete();
-      } catch (fsErr) {
-        console.warn("Could not delete guest Firestore doc:", uid, fsErr instanceof Error ? fsErr.message : fsErr);
-        continue;
+    const successfulUids: string[] = [];
+    for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
+      const chunk = snapshot.docs.slice(i, i + BATCH_SIZE);
+      const batch = db.batch();
+      for (const docSnap of chunk) {
+        batch.delete(docSnap.ref);
       }
-      // Best-effort Auth deletion — anonymous accounts may have already been cleaned up by Firebase
+      try {
+        await batch.commit();
+        for (const docSnap of chunk) {
+          successfulUids.push(docSnap.id);
+          deleted++;
+        }
+      } catch (batchErr) {
+        console.warn("Batch delete failed for chunk starting at", i, batchErr instanceof Error ? batchErr.message : batchErr);
+      }
+    }
+
+    // Best-effort Auth deletion — anonymous accounts may have already been cleaned up by Firebase
+    for (const uid of successfulUids) {
       try {
         await getAdminAuth(adminInstance).deleteUser(uid);
       } catch (authErr) {
         console.warn("Could not delete guest Auth account:", uid, authErr instanceof Error ? authErr.message : authErr);
       }
-      deleted++;
     }
 
     res.json({ success: true, deleted });
