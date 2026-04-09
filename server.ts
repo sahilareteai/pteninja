@@ -740,8 +740,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
     default:
       break;
   }
-  } catch (handlerErr: any) {
-    console.error("Webhook handler error for event", event.type, handlerErr);
+  } catch (handlerErr: unknown) {
+    console.error("Webhook handler error for event", event.type, event.id, handlerErr);
   }
 
   res.json({ received: true });
