@@ -100,6 +100,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [isPurgingGuests, setIsPurgingGuests] = useState(false);
   const [roleChangingUid, setRoleChangingUid] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiKeyStatus | null>(null);
@@ -310,6 +311,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       });
       // Force the analytics to re-fetch fresh data next time the tab is visited
       hasFetchedAnalytics.current = false;
+      hasFetchedUsers.current = false;
       toast.success(`User ${deletedUser.displayName || deletedUser.email || deletedUser.uid} deleted`);
       setUserToDelete(null);
     } catch (error) {
@@ -317,6 +319,32 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       console.error('Delete user error:', error);
     } finally {
       setIsDeletingUser(false);
+    }
+  };
+
+  const handlePurgeStaleGuests = async () => {
+    setIsPurgingGuests(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+      const response = await fetch('/api/purge-stale-guests', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${idToken}` },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? 'Failed to purge stale guests');
+      }
+      const { deleted } = await response.json();
+      toast.success(`Purged ${deleted} stale guest session${deleted !== 1 ? 's' : ''}`);
+      hasFetchedUsers.current = false;
+      hasFetchedAnalytics.current = false;
+      await fetchData(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to purge stale guests');
+      console.error('Purge stale guests error:', error);
+    } finally {
+      setIsPurgingGuests(false);
     }
   };
 
@@ -819,6 +847,17 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         <RefreshCw size={14} />
                         Refresh
                       </button>
+                      {guestCount > 0 && (
+                        <button
+                          onClick={handlePurgeStaleGuests}
+                          disabled={isPurgingGuests}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-red-500/20 rounded-xl text-red-400 hover:text-red-500 hover:border-red-500/40 transition-all disabled:opacity-50"
+                          title="Delete anonymous guest sessions older than 3 days"
+                        >
+                          {isPurgingGuests ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          Purge stale guests
+                        </button>
+                      )}
                     </div>
                   </div>
 
