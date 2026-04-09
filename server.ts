@@ -1464,6 +1464,76 @@ app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
   }
 });
 
+// ─── Purge Stale Guest Sessions ───────────────────────────────────────────────
+// Deletes Firestore docs (and Firebase Auth accounts) for anonymous guest
+// sessions whose createdAt is older than the guest access window (3 days).
+// Requires a valid Firebase ID token from an admin user.
+app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch (lookupErr) {
+        console.warn("Admin role lookup failed:", lookupErr);
+      }
+    }
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+
+    const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+    const GUEST_ACCESS_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — matches SubscriptionProvider
+    const cutoff = new Date(Date.now() - GUEST_ACCESS_MS).toISOString();
+
+    const snapshot = await db
+      .collection("users")
+      .where("accessType", "==", "guest")
+      .where("createdAt", "<", cutoff)
+      .get();
+
+    let deleted = 0;
+    for (const docSnap of snapshot.docs) {
+      const uid = docSnap.id;
+      try {
+        await docSnap.ref.delete();
+      } catch (fsErr) {
+        console.warn("Could not delete guest Firestore doc:", uid, fsErr instanceof Error ? fsErr.message : fsErr);
+        continue;
+      }
+      // Best-effort Auth deletion — anonymous accounts may have already been cleaned up by Firebase
+      try {
+        await getAdminAuth(adminInstance).deleteUser(uid);
+      } catch (authErr) {
+        console.warn("Could not delete guest Auth account:", uid, authErr instanceof Error ? authErr.message : authErr);
+      }
+      deleted++;
+    }
+
+    res.json({ success: true, deleted });
+  } catch (error) {
+    console.error("Purge stale guests error:", error);
+    res.status(400).json({ error: "Failed to purge stale guest sessions" });
+  }
+});
+
 // ─── Ensure Admin Role ────────────────────────────────────────────────────────
 // Called on sign-in: if the user's email is in ADMIN_EMAILS, persist role:'admin'
 // in Firestore using the Admin SDK so it is never overwritten by client-side writes.
