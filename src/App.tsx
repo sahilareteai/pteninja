@@ -2030,7 +2030,7 @@ function AppContent() {
           <SubscriptionModal 
             key="subscription-modal"
             user={user}
-            onClose={() => !isAccessRestricted && setShowSubscriptionModal(false)}
+            onClose={() => setShowSubscriptionModal(false)}
             onLogin={login}
             isAccessRestricted={isAccessRestricted}
             isDarkMode={isDarkMode}
@@ -2800,6 +2800,25 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
       >
+        {isAccessRestricted && !selectedPlan && !showSuccess && (
+          <div className="w-full text-left bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-6 rounded-r-md shadow-sm">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <Info className="h-5 w-5 text-amber-400" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                  Your trial has expired
+                </h3>
+                <div className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                  <p>
+                    We hope you enjoyed your trial! Please choose a plan below to continue accessing your dashboard and all premium features.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col items-center text-center space-y-6">
           {showSuccess ? (
             <div className="w-full max-w-md space-y-8 py-12">
