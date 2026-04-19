@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType, collection, query, where, getDocs } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
@@ -181,7 +181,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             
             const newUser: UserData = {
               uid: firebaseUser.uid,
-              email: firebaseUser.email || null,
+              email: firebaseUser.email?.toLowerCase() || null,
               emailVerified: firebaseUser.emailVerified,
               displayName: firebaseUser.displayName || null,
               createdAt,
@@ -377,6 +377,25 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
     setAuthError(null);
     setSessionError(null);
     try {
+      // Validation: Check if a user with this email already exists
+      const cleanEmail = guestEmail.trim().toLowerCase();
+      if (cleanEmail) {
+        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const existingUser = querySnapshot.docs[0].data();
+          if (existingUser.accessType === 'user') {
+            setAuthError("This email is already registered. Please sign in with Google to continue.");
+          } else {
+            setAuthError("This email is already in use for a guest session. Please use a different email or sign in.");
+          }
+          setIsAuthenticating(false);
+          setShowGuestModal(true);
+          return;
+        }
+      }
+
       const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       localStorage.setItem('pte_session_id', newSessionId);
       
@@ -394,7 +413,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       
       const newUser: UserData = {
         uid: firebaseUser.uid,
-        email: guestEmail.trim() || null,
+        email: cleanEmail || null,
         displayName: guestName.trim(),
         createdAt,
         accessType: 'guest',
@@ -410,6 +429,20 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       };
 
       await setDoc(userRef, newUser);
+
+      // Trigger welcome email for guests who provided an email
+      if (newUser.email) {
+        firebaseUser.getIdToken().then(idToken => {
+          fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`,
+            },
+          }).catch(err => console.warn("Failed to trigger guest welcome email:", err));
+        });
+      }
+
       // Fresh data is written – clear the guard before updating React state so
       // the access check runs against the correct, unexpired guest record.
       pendingGuestWriteRef.current = false;
