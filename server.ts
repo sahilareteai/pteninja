@@ -2183,9 +2183,29 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
     return res.status(401).json({ error: "Invalid or expired token." });
   }
 
-  const email = decodedToken.email;
+  let email = (decodedToken.email || "").toLowerCase();
+  let accessType = "user"; // default
+
+  // If email is missing from the token (common for anonymous guests),
+  // look it up in Firestore.
+  if (!email) {
+    try {
+      const userDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+        .collection("users")
+        .doc(decodedToken.uid)
+        .get();
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        email = (data?.email || "").toLowerCase();
+        accessType = data?.accessType || "user";
+      }
+    } catch (err) {
+      console.warn("[WelcomeEmail] Failed to look up guest email in Firestore:", err);
+    }
+  }
+
   if (!email || !isValidEmail(email)) {
-    return res.status(400).json({ error: "No valid email address for this user." });
+    return res.status(400).json({ error: "No valid email address found for this user." });
   }
 
   const transport = createMailTransport();
@@ -2204,12 +2224,17 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
 
   const subject = "Welcome to PTE Ninja 🎉 — Your Journey to PTE Success Starts Now";
 
+  // Dynamic message based on access type
+  const accessMessage = accessType === "guest"
+    ? "You now have 3 days of free guest access — a great way to start your PTE Academic practice."
+    : "You now have a 7-day free trial — unlimited access to AI-powered PTE Academic practice.";
+
   const textBody = [
     `Hi ${displayName},`,
     ``,
     `Welcome to PTE Ninja! 🎉`,
     ``,
-    `You now have a 7-day free trial — unlimited access to AI-powered PTE Academic practice.`,
+    `${accessMessage}`,
     ``,
     `Ready to unlock the full experience?`,
     ``,
@@ -2249,11 +2274,11 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
             </td>
           </tr>
 
-          <!-- Trial Banner -->
+          <!-- Trial/Guest Banner -->
           <tr>
             <td style="background:#f5f3ff;padding:20px 40px;text-align:center;border-bottom:1px solid #ede9fe;">
               <p style="margin:0;font-size:15px;color:#5b21b6;">
-                <strong>🎁 Your 7-Day Free Trial is active!</strong> Explore every feature with no commitment.
+                <strong>🎁 ${accessType === 'guest' ? 'Your 3-Day Guest Access is active!' : 'Your 7-Day Free Trial is active!'}</strong> Explore our features and start practicing.
               </p>
             </td>
           </tr>

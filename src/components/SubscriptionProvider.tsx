@@ -181,7 +181,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             
             const newUser: UserData = {
               uid: firebaseUser.uid,
-              email: firebaseUser.email || null,
+              email: firebaseUser.email?.toLowerCase() || null,
               emailVerified: firebaseUser.emailVerified,
               displayName: firebaseUser.displayName || null,
               createdAt,
@@ -429,6 +429,20 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       };
 
       await setDoc(userRef, newUser);
+
+      // Trigger welcome email for guests who provided an email
+      if (newUser.email) {
+        firebaseUser.getIdToken().then(idToken => {
+          fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`,
+            },
+          }).catch(err => console.warn("Failed to trigger guest welcome email:", err));
+        });
+      }
+
       // Fresh data is written – clear the guard before updating React state so
       // the access check runs against the correct, unexpired guest record.
       pendingGuestWriteRef.current = false;
