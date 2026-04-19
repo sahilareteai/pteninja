@@ -1711,6 +1711,40 @@ app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
   }
 });
 
+// ─── Check Email Availability ────────────────────────────────────────────────
+// Public endpoint to check if an email is already registered.
+// Used by the guest login flow to prevent duplicate accounts.
+app.post("/api/check-email-availability", async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string") {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured" });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+    const querySnapshot = await db.collection("users").where("email", "==", cleanEmail).limit(1).get();
+
+    if (querySnapshot.empty) {
+      return res.json({ available: true });
+    }
+
+    const userData = querySnapshot.docs[0].data();
+    res.json({
+      available: false,
+      accessType: userData.accessType || "user"
+    });
+  } catch (error) {
+    console.error("Check email availability error:", error);
+    res.status(500).json({ error: "Failed to check email availability" });
+  }
+});
+
 // ─── Gemini Key Status (admin only) ──────────────────────────────────────────
 // Returns current in-memory exhaustion state for all configured Gemini keys.
 // Useful for diagnosing quota issues without leaking key values.

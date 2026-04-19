@@ -377,22 +377,28 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
     setAuthError(null);
     setSessionError(null);
     try {
-      // Validation: Check if a user with this email already exists
+      // Validation: Check if a user with this email already exists via server-side API
+      // (Direct Firestore query would fail due to security rules)
       const cleanEmail = guestEmail.trim().toLowerCase();
       if (cleanEmail) {
-        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
-        const querySnapshot = await getDocs(q);
+        const response = await fetch('/api/check-email-availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail })
+        });
 
-        if (!querySnapshot.empty) {
-          const existingUser = querySnapshot.docs[0].data();
-          if (existingUser.accessType === 'user') {
-            setAuthError("This email is already registered. Please sign in with Google to continue.");
-          } else {
-            setAuthError("This email is already in use for a guest session. Please use a different email or sign in.");
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.available) {
+            if (data.accessType === 'user') {
+              setAuthError("This email is already registered with a Premium/Trial account. Please use 'Login with Google' instead.");
+            } else {
+              setAuthError("A guest session is already active for this email. Please use a different email or sign in with Google.");
+            }
+            setIsAuthenticating(false);
+            setShowGuestModal(true);
+            return;
           }
-          setIsAuthenticating(false);
-          setShowGuestModal(true);
-          return;
         }
       }
 
@@ -456,8 +462,13 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       setIsAuthenticating(false);
       setShowGuestModal(true); // Re-open modal if it fails so user can see error
       
+      const isPermissionError = error.code === 'permission-denied' ||
+                               (error.message && error.message.toLowerCase().includes('insufficient permissions'));
+
       if (error.code === 'auth/admin-restricted-operation') {
         setAuthError("Guest access (Anonymous Authentication) is not enabled in the Firebase Console. Please enable it in Authentication > Sign-in method.");
+      } else if (isPermissionError) {
+        setAuthError("Permission denied. This email might be reserved or your session expired. Please try with Google login.");
       } else {
         setAuthError("Failed to sign in as guest. Please try again later.");
       }
