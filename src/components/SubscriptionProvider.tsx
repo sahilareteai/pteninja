@@ -21,6 +21,9 @@ interface SubscriptionContextType {
   setAuthError: (error: string | null) => void;
   currency: CurrencyInfo;
   formatPrice: (amount: number) => string;
+  pendingGuestWriteRef: React.RefObject<boolean>;
+  isSyncingSubscription: boolean;
+  setIsSyncingSubscription: (syncing: boolean) => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -37,6 +40,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
+  const [isSyncingSubscription, setIsSyncingSubscription] = useState(false);
   // Tracks when a fresh guest write is in-flight so stale Firestore snapshots
   // (from a previous anonymous session) don't trigger the subscription modal.
   const pendingGuestWriteRef = useRef(false);
@@ -44,6 +48,22 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const hasRecordedVisitRef = useRef(false);
   // Ensures we only call ensure-admin-role once per auth session.
   const hasEnsuredAdminRoleRef = useRef(false);
+
+  useEffect(() => {
+    // Check if returning from Stripe checkout
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('payment_intent') || params.has('setup_intent')) {
+      setIsSyncingSubscription(true);
+
+      // Clear params from URL to avoid re-triggering on refresh
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, '', newUrl);
+
+      // Auto-clear syncing state after 10s if snapshot doesn't arrive
+      const timer = setTimeout(() => setIsSyncingSubscription(false), 10000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     const initCurrency = async () => {
@@ -134,6 +154,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               }
             }
 
+            if (userData.subscriptionStatus === 'active') {
+              setIsSyncingSubscription(false);
+            }
+
             setUser(userData);
 
             // Ensure admin role for protected accounts (once per auth session)
@@ -198,8 +222,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               }
             });
 
-            // Send a welcome email for real (non-anonymous) users with an email address
-            if (!isGuest && firebaseUser.email) {
+            // Send a welcome email to any new user with an email address
+            if (firebaseUser.email) {
               firebaseUser.getIdToken().then(idToken => {
                 return fetch('/api/send-welcome-email', {
                   method: 'POST',
@@ -207,10 +231,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${idToken}`,
                   },
-                }).then(res => {
+                })
+                .then(res => {
                   if (!res.ok) {
-                    return res.json().then(body => {
-                      console.warn("Welcome email API error:", body?.error ?? res.status);
+                    res.json().then(body => {
+                      console.warn("Welcome email API error:", body?.error ?? res.status, "for user:", firebaseUser.uid);
                     });
                   }
                 });
@@ -479,13 +504,16 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       authError,
       setAuthError,
       currency,
-      formatPrice: (amount: number) => CurrencyService.format(CurrencyService.convert(amount))
+      formatPrice: (amount: number) => CurrencyService.format(CurrencyService.convert(amount)),
+      pendingGuestWriteRef,
+      isSyncingSubscription,
+      setIsSyncingSubscription
     }}>
       {children}
       
       {/* Global Auth Loading Overlay */}
       <AnimatePresence>
-        {isAuthenticating && (
+        {(isAuthenticating || isSyncingSubscription) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -516,12 +544,14 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-app-text tracking-tight uppercase">
-                  {guestName ? "Preparing Your Dojo" : "Authenticating"}
+                  {isSyncingSubscription ? "Activating Premium" : (guestName ? "Preparing Your Dojo" : "Authenticating")}
                 </h3>
                 <p className="text-app-text-muted text-sm max-w-[280px] mx-auto leading-relaxed">
-                  {guestName 
-                    ? "Sharpening your katanas and setting up your practice environment..." 
-                    : "Connecting to the Ninja network..."}
+                  {isSyncingSubscription
+                    ? "Securing your subscription and unlocking all premium features..."
+                    : (guestName
+                      ? "Sharpening your katanas and setting up your practice environment..."
+                      : "Connecting to the Ninja network...")}
                 </p>
               </div>
             </div>

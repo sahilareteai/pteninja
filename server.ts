@@ -2183,11 +2183,6 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
     return res.status(401).json({ error: "Invalid or expired token." });
   }
 
-  // Only send to real (non-anonymous) users with a valid email address
-  if (decodedToken.firebase?.sign_in_provider === "anonymous") {
-    return res.status(400).json({ error: "Welcome email is not sent to anonymous users." });
-  }
-
   const email = decodedToken.email;
   if (!email || !isValidEmail(email)) {
     return res.status(400).json({ error: "No valid email address for this user." });

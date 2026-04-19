@@ -1231,7 +1231,8 @@ function AppContent() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
   const sentNotifications = useRef<Set<string>>(new Set());
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency } = useSubscription();
+  const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef } = useSubscription();
 
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
@@ -1284,6 +1285,13 @@ function AppContent() {
       setProgress(prev => ({ ...prev, targetScore: user.targetScore }));
     }
   }, [user]);
+
+  useEffect(() => {
+    if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
+      setUpgradeReason('expired');
+      setShowSubscriptionModal(true);
+    }
+  }, [isAccessRestricted, loading, setShowSubscriptionModal, pendingGuestWriteRef]);
 
   // Auto-sync subscription state when returning from the Stripe Customer Portal.
   // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
@@ -1835,6 +1843,7 @@ function AppContent() {
                 onViewPattern={() => setActiveTab('pattern')}
                 onViewMockTests={() => setActiveTab('mock-tests')}
                 calculateAverageScore={calculateAverageScore}
+                setUpgradeReason={setUpgradeReason}
                 calculateSectionAverage={calculateSectionAverage}
                 calculateStudyPlan={calculateStudyPlan}
                 onSetTargetScore={handleSetTargetScore}
@@ -1851,6 +1860,8 @@ function AppContent() {
                 onStartTest={(test) => { setResumeSession(null); setActiveMockTest(test); }}
                 savedSessions={user?.savedMockSessions ?? null}
                 onResumeTest={(test, session) => { setResumeSession(session); setActiveMockTest(test); }}
+                setShowSubscriptionModal={setShowSubscriptionModal}
+                setUpgradeReason={setUpgradeReason}
               />
             ) : activeTab === 'roadmap' ? (
               <RoadmapView 
@@ -1940,6 +1951,8 @@ function AppContent() {
                 onBack={() => setActiveTab('dashboard')} 
                 onSelectTask={handleSelectTask}
                 onHoverTask={handleHoverTask}
+                setShowSubscriptionModal={setShowSubscriptionModal}
+                setUpgradeReason={setUpgradeReason}
               />
             )}
           </AnimatePresence>
@@ -2030,10 +2043,14 @@ function AppContent() {
           <SubscriptionModal 
             key="subscription-modal"
             user={user}
-            onClose={() => setShowSubscriptionModal(false)}
+            onClose={() => {
+              setShowSubscriptionModal(false);
+              setUpgradeReason(null);
+            }}
             onLogin={login}
             isAccessRestricted={isAccessRestricted}
             isDarkMode={isDarkMode}
+            upgradeReason={upgradeReason}
           />
         )}
         {showStreakModal && (
@@ -2632,7 +2649,7 @@ import { CheckoutForm } from './components/CheckoutForm';
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
-function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean }) {
+function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode, upgradeReason }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean, upgradeReason: 'expired' | 'limit' | null }) {
   const { formatPrice, currency } = useSubscription();
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -2800,7 +2817,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
       >
-        {isAccessRestricted && !selectedPlan && !showSuccess && (
+        {(isAccessRestricted || upgradeReason === 'expired') && !selectedPlan && !showSuccess && (
           <div className="w-full text-left bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-6 rounded-r-md shadow-sm">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -2808,11 +2825,30 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">
-                  Your trial has expired
+                  Your free access has ended
                 </h3>
                 <div className="mt-2 text-sm text-amber-700 dark:text-amber-300">
                   <p>
-                    We hope you enjoyed your trial! Please choose a plan below to continue accessing your dashboard and all premium features.
+                    We hope you enjoyed your free access! Please choose a plan below to continue accessing your dashboard and all premium features.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {upgradeReason === 'limit' && !selectedPlan && !showSuccess && (
+          <div className="w-full text-left bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 mb-6 rounded-r-md shadow-sm">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <Lock className="h-5 w-5 text-blue-400" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-bold text-blue-800 dark:text-blue-200">
+                  Free Content Limit Reached
+                </h3>
+                <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+                  <p>
+                    You've practiced all the free questions for this task type. Upgrade to Pro to unlock all {PTE_TASKS.length}+ questions and mock tests!
                   </p>
                 </div>
               </div>
@@ -4007,7 +4043,23 @@ function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: st
 }
 const MOCK_TESTS_PAGE_SIZE = 20;
 
-function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }: { user: UserData, onStartTest: (test: MockTest) => void, onBack: () => void, savedSessions?: Record<string, MockTestSavedSession> | null, onResumeTest: (test: MockTest, session: MockTestSavedSession) => void }) {
+function MockTestView({
+  user,
+  onStartTest,
+  onBack,
+  savedSessions,
+  onResumeTest,
+  setShowSubscriptionModal,
+  setUpgradeReason
+}: {
+  user: UserData,
+  onStartTest: (test: MockTest) => void,
+  onBack: () => void,
+  savedSessions?: Record<string, MockTestSavedSession> | null,
+  onResumeTest: (test: MockTest, session: MockTestSavedSession) => void,
+  setShowSubscriptionModal: (show: boolean) => void,
+  setUpgradeReason: (reason: 'limit' | 'expired' | null) => void
+}) {
   const [visibleCount, setVisibleCount] = useState(MOCK_TESTS_PAGE_SIZE);
   // Also include legacy single-session for backward compat
   const allSavedSessions: Record<string, MockTestSavedSession> = {
@@ -4015,6 +4067,9 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
     ...(savedSessions ?? {}),
   };
   const visibleTests = MOCK_TESTS.slice(0, visibleCount);
+  const completedTestsCount = (user.mockTestResults || []).length;
+  const guestLimitReached = user?.accessType === 'guest' && completedTestsCount >= 10;
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 md:mb-8">
@@ -4071,6 +4126,7 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
           const isCompleted = user.mockTestResults?.some(r => r.testId === test.id);
           const bestScore = user.mockTestResults?.filter(r => r.testId === test.id).reduce((max, r) => Math.max(max, r.overallScore), 0) || 0;
           const isInProgress = !!allSavedSessions[test.id];
+          const isLockedForGuest = guestLimitReached && !isCompleted && !isInProgress;
 
           return (
             <motion.div
@@ -4080,7 +4136,7 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
               transition={{ delay: Math.min(index, 4) * 0.05 }}
               className={cn(
                 "group relative bg-app-surface border rounded-3xl p-6 transition-all overflow-hidden",
-                isInProgress ? "border-app-primary/40 ring-1 ring-app-primary/20" : "border-app-primary/10 hover:border-app-primary/30"
+                isLockedForGuest ? "border-app-primary/10 opacity-60" : (isInProgress ? "border-app-primary/40 ring-1 ring-app-primary/20" : "border-app-primary/10 hover:border-app-primary/30")
               )}
             >
               <div className="absolute top-0 right-0 p-4">
@@ -4135,15 +4191,24 @@ function MockTestView({ user, onStartTest, onBack, savedSessions, onResumeTest }
                 )}
 
                 <button
-                  onClick={() => isInProgress ? onResumeTest(test, allSavedSessions[test.id]) : onStartTest(test)}
+                  onClick={() => {
+                    if (isLockedForGuest) {
+                      setUpgradeReason('limit');
+                      setShowSubscriptionModal(true);
+                    } else if (isInProgress) {
+                      onResumeTest(test, allSavedSessions[test.id]);
+                    } else {
+                      onStartTest(test);
+                    }
+                  }}
+                  disabled={isLockedForGuest}
                   className={cn(
                     "w-full py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all shadow-lg",
-                    isInProgress
-                      ? "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10 flex items-center justify-center gap-2"
-                      : "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10"
+                    isLockedForGuest ? "bg-gray-500/10 text-gray-400 cursor-not-allowed border border-gray-500/20" :
+                    (isInProgress ? "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10 flex items-center justify-center gap-2" : "bg-app-primary text-app-bg hover:bg-app-accent shadow-app-primary/10")
                   )}
                 >
-                  {isInProgress ? <><RotateCcw size={14} /> Resume Test</> : isCompleted ? 'Retake Test' : 'Start Mock Test'}
+                  {isLockedForGuest ? <><Lock size={14} /> Limit Reached</> : (isInProgress ? <><RotateCcw size={14} /> Resume Test</> : isCompleted ? 'Retake Test' : 'Start Mock Test')}
                 </button>
               </div>
             </motion.div>
@@ -4817,7 +4882,7 @@ function MockTestSession({
   );
 }
 
-function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget, onUpgrade }: { 
+function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelectSection, onViewRoadmap, onViewVocabulary, onViewShuriken, onViewPattern, onViewMockTests, calculateAverageScore, calculateSectionAverage, calculateStudyPlan, onSetTargetScore, onSetTestDate, onSaveToSchedule, onResetTarget, onUpgrade, setUpgradeReason }: { 
   progress: UserProgress, 
   user: any,
   allTasks: PTETask[],
@@ -4836,7 +4901,8 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onSetTestDate: (date: string) => void | Promise<void>,
   onSaveToSchedule: () => void | Promise<void>,
   onResetTarget: () => void | Promise<void>,
-  onUpgrade: () => void
+  onUpgrade: () => void,
+  setUpgradeReason: (reason: 'limit' | 'expired' | null) => void
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -5911,7 +5977,7 @@ function PatternView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTask }: { section: PTESection, user: any, allTasks: PTETask[], onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void, onHoverTask?: (task: PTETask) => void }) {
+function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTask, setShowSubscriptionModal, setUpgradeReason }: { section: PTESection, user: any, allTasks: PTETask[], onBack: () => void, onSelectTask: (task: PTETask, allTasks: PTETask[]) => void, onHoverTask?: (task: PTETask) => void, setShowSubscriptionModal: (show: boolean) => void, setUpgradeReason: (reason: 'limit') => void }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const tasks = allTasks.filter(t => t.section === section);
   
@@ -6024,21 +6090,35 @@ function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTas
             exit={{ opacity: 0, y: -10 }}
             className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            {filteredTasks.map(task => (
-                <TaskCard 
-                  key={task.id} 
-                  task={task} 
-                  isCompleted={user?.completedTasks?.includes(task.id)}
-                  onClick={async () => {
-                    try {
-                      await onSelectTask(task, filteredTasks);
-                    } catch (e) {
-                      console.error("Failed to select task:", e);
-                    }
-                  }} 
-                  onHover={() => onHoverTask?.(task)}
-                />
-            ))}
+            {(() => {
+              const completedTasksForCategory = (user.completedTasks || [])
+                .map(taskId => allTasks.find(t => t.id === taskId && t.category === selectedCategory))
+                .filter(Boolean);
+              const guestLimitReached = user?.accessType === 'guest' && completedTasksForCategory.length >= 10;
+
+              return filteredTasks.map(task => {
+                  const isCompleted = user?.completedTasks?.includes(task.id);
+                  const isLockedForGuest = guestLimitReached && !isCompleted;
+
+                  return (
+                    <TaskCard 
+                      key={task.id} 
+                      task={task} 
+                      isCompleted={isCompleted}
+                      isLocked={isLockedForGuest}
+                      onClick={() => {
+                        if (isLockedForGuest) {
+                          setUpgradeReason('limit');
+                          setShowSubscriptionModal(true);
+                        } else {
+                          onSelectTask(task, filteredTasks);
+                        }
+                      }} 
+                      onHover={() => onHoverTask?.(task)}
+                    />
+                  );
+              });
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
@@ -6046,7 +6126,7 @@ function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTas
   );
 }
 
-function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCompleted?: boolean, onClick: () => void, onHover?: () => void }) {
+function TaskCard({ task, isCompleted, onClick, onHover, isLocked }: { task: PTETask, isCompleted?: boolean, onClick: () => void, onHover?: () => void, isLocked?: boolean }) {
   const sectionColors = {
     speaking: "bg-rose-500/20 text-rose-500 border-rose-500/30",
     writing: "bg-sky-500/20 text-sky-500 border-sky-500/30",
@@ -6096,19 +6176,23 @@ function TaskCard({ task, isCompleted, onClick, onHover }: { task: PTETask, isCo
         onClick();
       }}
       onMouseEnter={onHover}
+      disabled={isLocked}
       className={cn(
         "flex items-center gap-3 md:gap-4 p-3 md:p-5 bg-app-surface border border-app-primary/5 rounded-2xl hover:border-app-primary/40 transition-all group text-left relative overflow-hidden w-full border-l-4",
         task.section === 'speaking' ? 'border-l-rose-500' :
         task.section === 'writing' ? 'border-l-sky-500' :
         task.section === 'reading' ? 'border-l-emerald-500' :
-        'border-l-violet-500'
+        'border-l-violet-500',
+        isLocked && "opacity-60 cursor-not-allowed hover:border-app-primary/5"
       )}
     >
       <div className={cn(
         "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-colors shrink-0",
-        isCompleted ? "bg-green-500/20 text-green-500" : "bg-app-bg text-app-primary group-hover:bg-app-primary group-hover:text-app-bg"
+        isLocked ? "bg-gray-500/10 text-gray-400" :
+        (isCompleted ? "bg-green-500/20 text-green-500" : "bg-app-bg text-app-primary group-hover:bg-app-primary group-hover:text-app-bg")
       )}>
-        {isCompleted ? <Check size={20} className="md:w-6 md:h-6" /> : <Play size={18} className="md:w-5 md:h-5" />}
+        {isLocked ? <Lock size={20} /> : 
+         (isCompleted ? <Check size={20} className="md:w-6 md:h-6" /> : <Play size={18} className="md:w-5 md:h-5" />)}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-1">
