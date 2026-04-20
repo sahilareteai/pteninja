@@ -801,7 +801,7 @@ const getAdminApp = () => {
 };
 
 // Rate limiter for admin mutation endpoints
-const deleteUserLimiter = rateLimit({
+const adminMutationLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   standardHeaders: true,
@@ -1462,7 +1462,7 @@ app.post("/api/create-payment-intent", subscriptionLimiter, async (req, res) => 
 // ─── Delete User ──────────────────────────────────────────────────────────────
 // Deletes a user's Firestore document and Firebase Auth account.
 // Requires a valid Firebase ID token from an admin user.
-app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
+app.post("/api/delete-user", adminMutationLimiter, async (req, res) => {
   const adminInstance = getAdminApp();
   if (!adminInstance) {
     return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
@@ -1525,7 +1525,7 @@ app.post("/api/delete-user", deleteUserLimiter, async (req, res) => {
 // Deletes Firestore docs (and Firebase Auth accounts) for anonymous guest
 // sessions whose createdAt is older than the guest access window (3 days).
 // Requires a valid Firebase ID token from an admin user.
-app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
+app.post("/api/purge-stale-guests", adminMutationLimiter, async (req, res) => {
   const adminInstance = getAdminApp();
   if (!adminInstance) {
     return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
@@ -1612,7 +1612,7 @@ app.post("/api/purge-stale-guests", deleteUserLimiter, async (req, res) => {
 // ─── Ensure Admin Role ────────────────────────────────────────────────────────
 // Called on sign-in: if the user's email is in ADMIN_EMAILS, persist role:'admin'
 // in Firestore using the Admin SDK so it is never overwritten by client-side writes.
-app.post("/api/ensure-admin-role", deleteUserLimiter, async (req, res) => {
+app.post("/api/ensure-admin-role", adminMutationLimiter, async (req, res) => {
   const adminInstance = getAdminApp();
   if (!adminInstance) {
     return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
@@ -1646,7 +1646,7 @@ app.post("/api/ensure-admin-role", deleteUserLimiter, async (req, res) => {
 
 // ─── Set User Role ────────────────────────────────────────────────────────────
 // Allows an admin to set the role of any user to 'admin' or 'user'.
-app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
+app.post("/api/set-user-role", adminMutationLimiter, async (req, res) => {
   const adminInstance = getAdminApp();
   if (!adminInstance) {
     return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
@@ -1708,6 +1708,83 @@ app.post("/api/set-user-role", deleteUserLimiter, async (req, res) => {
   } catch (error) {
     console.error("Set user role error:", error);
     res.status(400).json({ error: "Failed to set user role" });
+  }
+});
+
+// ─── Set User Subscription (admin only override) ─────────────────────────────
+// Allows an admin to manually set the subscription status and plan of any user.
+// This is a manual override and bypasses Stripe's automatic status management.
+app.post("/api/admin/set-user-subscription", adminMutationLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const { uid, subscriptionStatus, planId, subscriptionEndsAt } = req.body;
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+  if (!uid || typeof uid !== "string") {
+    return res.status(400).json({ error: "uid is required" });
+  }
+
+  const VALID_STATUSES = ["active", "trial", "guest", "expired", "inactive"];
+  const VALID_PLANS = ["weekly", "monthly", "quarterly", "annual"];
+
+  if (subscriptionStatus && !VALID_STATUSES.includes(subscriptionStatus)) {
+    return res.status(400).json({ error: "Invalid subscriptionStatus" });
+  }
+  if (planId && !VALID_PLANS.includes(planId)) {
+    return res.status(400).json({ error: "Invalid planId" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+
+    // Resolve admin status
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch (lookupErr) {
+        console.warn("Could not look up caller role:", lookupErr);
+      }
+    }
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    const updates: Record<string, any> = {};
+    if (subscriptionStatus) updates.subscriptionStatus = subscriptionStatus;
+    if (planId) updates.planId = planId;
+    if (subscriptionEndsAt) updates.subscriptionEndsAt = subscriptionEndsAt;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No updates provided" });
+    }
+
+    // Set a flag to indicate this was a manual override, which helps debugging.
+    updates.manualSubscriptionOverride = true;
+    updates.manualOverrideAt = new Date().toISOString();
+    updates.manualOverrideBy = decodedToken.email || decodedToken.uid;
+
+    await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(uid)
+      .set(updates, { merge: true });
+
+    res.json({ success: true, updates });
+  } catch (error) {
+    console.error("Set user subscription error:", error);
+    res.status(400).json({ error: "Failed to update user subscription" });
   }
 });
 
@@ -1837,7 +1914,7 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
 
 // ─── Get Visitor Stats ────────────────────────────────────────────────────────
 // Returns the visitor stats from Firestore. Admin only.
-app.get("/api/visitor-stats", deleteUserLimiter, async (req, res) => {
+app.get("/api/visitor-stats", adminMutationLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
   const { decodedToken, adminInstance } = authResult;

@@ -107,6 +107,11 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [geminiStatus, setGeminiStatus] = useState<GeminiKeyStatus | null>(null);
   const [geminiRefreshing, setGeminiRefreshing] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [isOverridingSubscription, setIsOverridingSubscription] = useState(false);
+  const [overrideStatus, setOverrideStatus] = useState<UserData['subscriptionStatus']>('inactive');
+  const [overridePlan, setOverridePlan] = useState<string>('');
+  const [overrideEndsAt, setOverrideEndsAt] = useState<string>('');
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
   const hasFetchedUsers = useRef(false);
   const hasFetchedPromos = useRef(false);
   const hasFetchedAnalytics = useRef(false);
@@ -129,6 +134,27 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       fetchGeminiStatus();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      setOverrideStatus(selectedUser.subscriptionStatus || 'inactive');
+      setOverridePlan(selectedUser.planId || '');
+      if (selectedUser.subscriptionEndsAt) {
+        try {
+          const date = new Date(selectedUser.subscriptionEndsAt);
+          if (!isNaN(date.getTime())) {
+            setOverrideEndsAt(date.toISOString().split('T')[0]);
+          } else {
+            setOverrideEndsAt('');
+          }
+        } catch {
+          setOverrideEndsAt('');
+        }
+      } else {
+        setOverrideEndsAt('');
+      }
+    }
+  }, [selectedUser]);
 
   const fetchAnalytics = async () => {
     setIsLoading(true);
@@ -347,6 +373,50 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       console.error('Purge stale guests error:', error);
     } finally {
       setIsPurgingGuests(false);
+    }
+  };
+
+  const handleSetSubscription = async () => {
+    if (!selectedUser) return;
+    setIsOverridingSubscription(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+
+      const response = await fetch('/api/admin/set-user-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          uid: selectedUser.uid,
+          subscriptionStatus: overrideStatus,
+          planId: overridePlan || null,
+          subscriptionEndsAt: overrideEndsAt ? new Date(overrideEndsAt).toISOString() : null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? 'Failed to update subscription');
+      }
+
+      const updatedFields = {
+        subscriptionStatus: overrideStatus,
+        planId: overridePlan || undefined,
+        subscriptionEndsAt: overrideEndsAt ? new Date(overrideEndsAt).toISOString() : undefined
+      };
+
+      setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? { ...u, ...updatedFields } : u));
+      setSelectedUser(prev => prev ? { ...prev, ...updatedFields } : null);
+
+      toast.success(`Subscription updated for ${selectedUser.displayName || selectedUser.email}`);
+      setShowOverrideConfirm(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update subscription');
+    } finally {
+      setIsOverridingSubscription(false);
     }
   };
 
@@ -1410,6 +1480,62 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
 
+                {/* Manual Subscription Override */}
+                <div className="bg-orange-400/5 border border-orange-400/20 rounded-2xl p-5 space-y-4">
+                  <h4 className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-2">
+                    <Shield size={13} /> Manage Subscription (Admin)
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-app-text-muted font-bold uppercase">Status</label>
+                      <select
+                        value={overrideStatus}
+                        onChange={(e) => setOverrideStatus(e.target.value as UserData['subscriptionStatus'])}
+                        className="w-full bg-app-surface border border-app-primary/10 rounded-xl px-3 py-2 text-sm focus:border-orange-400 transition-all"
+                      >
+                        <option value="inactive">Inactive</option>
+                        <option value="active">Active</option>
+                        <option value="trial">Trial</option>
+                        <option value="guest">Guest</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-app-text-muted font-bold uppercase">Plan</label>
+                      <select
+                        value={overridePlan}
+                        onChange={(e) => setOverridePlan(e.target.value)}
+                        className="w-full bg-app-surface border border-app-primary/10 rounded-xl px-3 py-2 text-sm focus:border-orange-400 transition-all"
+                      >
+                        <option value="">No Plan</option>
+                        {SUBSCRIPTION_PLANS.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-[10px] text-app-text-muted font-bold uppercase">Expiration Date</label>
+                      <input
+                        type="date"
+                        value={overrideEndsAt}
+                        onChange={(e) => setOverrideEndsAt(e.target.value)}
+                        className="w-full bg-app-surface border border-app-primary/10 rounded-xl px-3 py-2 text-sm focus:border-orange-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setShowOverrideConfirm(true)}
+                    className="w-full bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw size={14} />
+                    Update Subscription
+                  </button>
+                </div>
+
                 {/* Usage summary */}
                 <div>
                   <h4 className="text-xs font-bold text-app-text uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -1504,6 +1630,62 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           </div>
         );
       })()}
+
+      {/* Subscription Override Confirmation Modal */}
+      {showOverrideConfirm && selectedUser && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface border border-orange-500/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-400">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-app-text">Manual Override</h3>
+                <p className="text-xs text-app-text-muted">Confirm subscription changes</p>
+              </div>
+            </div>
+            <div className="text-sm text-app-text space-y-2">
+              <p>You are about to manually override the subscription for <span className="font-bold">{selectedUser.displayName || selectedUser.email}</span>.</p>
+              <div className="bg-app-bg/50 rounded-lg p-3 text-[11px] space-y-1 border border-app-primary/5">
+                <div className="flex justify-between">
+                  <span className="text-app-text-muted">New Status:</span>
+                  <span className="font-bold text-orange-400 uppercase">{overrideStatus}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-text-muted">New Plan:</span>
+                  <span className="font-bold">{SUBSCRIPTION_PLANS.find(p => p.id === overridePlan)?.name || 'None'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-text-muted">Ends At:</span>
+                  <span className="font-bold">{overrideEndsAt || 'No expiration'}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-app-text-muted italic">This will bypass the standard payment flow and create an audit log.</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowOverrideConfirm(false)}
+                disabled={isOverridingSubscription}
+                className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSetSubscription}
+                disabled={isOverridingSubscription}
+                className="flex items-center gap-2 bg-orange-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-orange-600 transition-all disabled:opacity-50"
+              >
+                {isOverridingSubscription ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                Confirm Changes
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
