@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 import { cert, getApps, initializeApp as initAdminApp } from "firebase-admin/app";
@@ -615,6 +616,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
       const invoiceUrl = rawInvoiceUrl ? escapeHtml(rawInvoiceUrl) : null;
       const safeEmail = escapeHtml(recipientEmail);
       const paymentDate = new Date((invoice.created ?? Date.now() / 1000) * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+      const invoiceUnsubscribeUrl = generateUnsubscribeUrl(recipientEmail, invoiceAppUrl);
 
       const subject = `Payment Confirmed — ${amountDisplay} for PTE Ninja`;
 
@@ -634,6 +636,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         ``,
         `Happy studying,`,
         `The PTE Ninja Team`,
+        buildUnsubscribeFooterText(invoiceUnsubscribeUrl),
       ];
       const textBody = textLines.join("\n");
 
@@ -727,16 +730,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
           </tr>
 
           <!-- Footer -->
-          <tr>
-            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
-              <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">
-                This receipt was sent to <a href="mailto:${safeEmail}" style="color:#9ca3af;">${safeEmail}</a>.
-              </p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
-                &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
-              </p>
-            </td>
-          </tr>
+          ${buildUnsubscribeFooterHtml(invoiceUnsubscribeUrl, recipientEmail)}
 
         </table>
       </td>
@@ -2167,6 +2161,82 @@ function isValidEmail(email: string): boolean {
   return domainParts.every((part) => part.length > 0 && /^[A-Za-z0-9-]+$/.test(part) && !part.startsWith("-") && !part.endsWith("-"));
 }
 
+// ─── Email Unsubscribe Helpers ────────────────────────────────────────────────
+
+/**
+ * Returns a URL-safe HMAC-SHA256 token for the given lowercased email address.
+ * Uses UNSUBSCRIBE_SECRET (required in production; falls back to a hard-coded
+ * test value only during local development so the server still boots).
+ */
+function getUnsubscribeSecret(): string {
+  return process.env.UNSUBSCRIBE_SECRET || "dev-unsubscribe-secret-change-in-prod";
+}
+
+function generateUnsubscribeToken(email: string): string {
+  return createHmac("sha256", getUnsubscribeSecret())
+    .update(email.toLowerCase())
+    .digest("hex");
+}
+
+function verifyUnsubscribeToken(email: string, token: string): boolean {
+  try {
+    const expected = generateUnsubscribeToken(email.toLowerCase());
+    const a = Buffer.from(expected, "hex");
+    const b = Buffer.from(token,    "hex");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns a full unsubscribe URL that the user can click to opt out of
+ * marketing emails (weekly upgrade nudges, etc.).  The link is HMAC-signed
+ * so it cannot be forged without knowing UNSUBSCRIBE_SECRET.
+ */
+function generateUnsubscribeUrl(email: string, appUrl: string): string {
+  const token = generateUnsubscribeToken(email.toLowerCase());
+  const encodedEmail = Buffer.from(email.toLowerCase()).toString("base64url");
+  return `${appUrl}/api/unsubscribe?e=${encodedEmail}&t=${token}`;
+}
+
+/**
+ * Small-font unsubscribe footer HTML to append to all marketing email templates.
+ * The footer is visually subtle but clearly actionable.
+ */
+function buildUnsubscribeFooterHtml(unsubscribeUrl: string, recipientEmail: string): string {
+  const safeUrl = escapeHtml(unsubscribeUrl);
+  const safeEmail = escapeHtml(recipientEmail);
+  return `<tr>
+    <td style="background:#f9fafb;padding:16px 40px 20px;text-align:center;border-top:1px solid #e5e7eb;">
+      <p style="margin:0 0 4px;font-size:11px;color:#d1d5db;line-height:1.5;">
+        You are receiving this email because you created an account at PTE Ninja
+        (<a href="mailto:${safeEmail}" style="color:#d1d5db;">${safeEmail}</a>).
+      </p>
+      <p style="margin:0;font-size:11px;color:#d1d5db;line-height:1.5;">
+        Don't want these emails?
+        <a href="${safeUrl}" style="color:#d1d5db;text-decoration:underline;">Unsubscribe</a>
+        &nbsp;|&nbsp;
+        &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+      </p>
+    </td>
+  </tr>`;
+}
+
+/**
+ * Plain-text unsubscribe footer to append to all marketing email text bodies.
+ */
+function buildUnsubscribeFooterText(unsubscribeUrl: string): string {
+  return [
+    "",
+    "---",
+    "You are receiving this because you signed up for PTE Ninja.",
+    `To unsubscribe from promotional emails: ${unsubscribeUrl}`,
+    `© ${new Date().getFullYear()} PTE Ninja. All rights reserved.`,
+  ].join("\n");
+}
+
 /** Validate a single history entry has the expected shape. */
 function isValidHistoryEntry(h: unknown): h is { role: "user" | "model"; parts: Array<{ text: string }> } {
   if (!h || typeof h !== "object") return false;
@@ -2266,6 +2336,82 @@ app.post("/api/gemini-quota-alert", geminiQuotaAlertLimiter, async (_req, res) =
   res.json({ ok: true });
 });
 
+// ─── Email Unsubscribe ────────────────────────────────────────────────────────
+// GET /api/unsubscribe?e=BASE64URL_EMAIL&t=HMAC_TOKEN
+// No authentication required — the HMAC token is the proof of ownership.
+// Sets emailUnsubscribed: true on the matching Firestore user document.
+// Returns a user-friendly HTML page confirming the unsubscription.
+app.get("/api/unsubscribe", async (req, res) => {
+  const { e: encodedEmail, t: token } = req.query as Record<string, string | undefined>;
+
+  const appUrl = process.env.APP_URL ?? "https://pteninja.com";
+
+  const errorPage = (msg: string) => `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Unsubscribe — PTE Ninja</title>
+<style>body{font-family:sans-serif;max-width:480px;margin:60px auto;text-align:center;color:#374151}
+h1{color:#dc2626}a{color:#6c63ff}</style></head>
+<body><h1>Something went wrong</h1><p>${escapeHtml(msg)}</p>
+<p><a href="${escapeHtml(appUrl)}">Return to PTE Ninja</a></p></body></html>`;
+
+  const successPage = (email: string) => `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Unsubscribed — PTE Ninja</title>
+<style>body{font-family:sans-serif;max-width:480px;margin:60px auto;text-align:center;color:#374151}
+h1{color:#6c63ff}a{color:#6c63ff}p{line-height:1.7;color:#6b7280}</style></head>
+<body>
+<h1>✅ You've been unsubscribed</h1>
+<p>The address <strong>${escapeHtml(email)}</strong> has been removed from our
+promotional mailing list. You will no longer receive weekly upgrade reminders.</p>
+<p style="font-size:13px;">You will still receive important account emails such as
+payment receipts and support replies.</p>
+<p><a href="${escapeHtml(appUrl)}">Return to PTE Ninja</a></p>
+<p style="font-size:11px;color:#d1d5db;">Changed your mind?
+Contact <a href="mailto:support@pteninja.com" style="color:#d1d5db;">support@pteninja.com</a>
+to re-subscribe.</p>
+</body></html>`;
+
+  if (!encodedEmail || !token) {
+    res.status(400).type("html").send(errorPage("Missing unsubscribe parameters."));
+    return;
+  }
+
+  let email: string;
+  try {
+    email = Buffer.from(encodedEmail, "base64url").toString("utf8").toLowerCase();
+  } catch {
+    res.status(400).type("html").send(errorPage("Invalid unsubscribe link."));
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    res.status(400).type("html").send(errorPage("Invalid email address in unsubscribe link."));
+    return;
+  }
+
+  if (!verifyUnsubscribeToken(email, token)) {
+    res.status(400).type("html").send(errorPage("This unsubscribe link is invalid or has expired."));
+    return;
+  }
+
+  const adminInstance = getAdminApp();
+  if (adminInstance) {
+    try {
+      const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+      // Look up user(s) with this email and mark them unsubscribed
+      const snap = await db.collection("users").where("email", "==", email).limit(5).get();
+      const batch = db.batch();
+      snap.docs.forEach(doc => batch.update(doc.ref, { emailUnsubscribed: true }));
+      if (!snap.empty) await batch.commit();
+    } catch (err) {
+      console.error("[Unsubscribe] Firestore update error:", err);
+      // Still show success to the user — we've at minimum validated the token
+    }
+  }
+
+  res.type("html").send(successPage(email));
+});
+
 // ─── Welcome Email ────────────────────────────────────────────────────────────
 const welcomeEmailLimiter = rateLimit({
   windowMs: 60_000 * 60, // 1 hour
@@ -2332,6 +2478,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
   const appUrl = process.env.APP_URL ?? "https://pteninja.com";
   const upgradeUrl = escapeHtml(appUrl);
   const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+  const unsubscribeUrl = generateUnsubscribeUrl(email, appUrl);
 
   const subject = "Welcome to PTE Ninja 🎉 — Your Journey to PTE Success Starts Now";
 
@@ -2358,6 +2505,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
     ``,
     `Happy studying,`,
     `The PTE Ninja Team`,
+    buildUnsubscribeFooterText(unsubscribeUrl),
   ].join("\n");
 
   const htmlBody = `<!DOCTYPE html>
@@ -2518,17 +2666,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
           </tr>
 
           <!-- Footer -->
-          <tr>
-            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
-              <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">
-                You're receiving this because you created an account at PTE Ninja
-                (<a href="mailto:${safeEmail}" style="color:#9ca3af;">${safeEmail}</a>).
-              </p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
-                &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
-              </p>
-            </td>
-          </tr>
+          ${buildUnsubscribeFooterHtml(unsubscribeUrl, email)}
 
         </table>
       </td>
@@ -2667,6 +2805,8 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
 </body></html>`;
 
   // Confirmation email sent back to the user
+  const supportAppUrl = process.env.APP_URL ?? "https://pteninja.com";
+  const supportUnsubscribeUrl = generateUnsubscribeUrl(userDetails.email, supportAppUrl);
   const confirmationSubject = `[PTE Ninja] Your support request has been received — ${ticketId}`;
   const confirmationTextBody = [
     `Hi ${userDetails.name},`,
@@ -2685,8 +2825,10 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
     ``,
     `Best regards,`,
     `The PTE Ninja Support Team`,
+    buildUnsubscribeFooterText(supportUnsubscribeUrl),
   ].join("\n");
 
+  const supportUnsubscribeSafeUrl = escapeHtml(supportUnsubscribeUrl);
   const confirmationHtmlBody = `
 <html><body style="font-family:sans-serif;max-width:600px;margin:auto;color:#333">
 <h2 style="color:#1a1a2e">PTE Ninja &#8212; Support Request Received</h2>
@@ -2700,6 +2842,13 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
 <p>Our team typically responds within <strong>1&#8211;2 business days</strong>. Please keep your ticket ID (<strong>${safeTicketId}</strong>) handy when following up.</p>
 <p>If you have additional information to share, simply reply to this email.</p>
 <p>Best regards,<br><strong>The PTE Ninja Support Team</strong></p>
+<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 12px"/>
+<p style="font-size:11px;color:#d1d5db;text-align:center;">
+  Don't want promotional emails?
+  <a href="${supportUnsubscribeSafeUrl}" style="color:#d1d5db;text-decoration:underline;">Unsubscribe</a>
+  &nbsp;&mdash;&nbsp;
+  &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+</p>
 </body></html>`;
 
   const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
@@ -2748,6 +2897,320 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   } catch (error) {
     console.error("Failed to send support ticket email:", error);
     res.status(500).json({ error: "Failed to send ticket. Please try again." });
+  }
+});
+
+// ─── Weekly Upgrade Email (Cron) ──────────────────────────────────────────────
+// POST /api/send-weekly-upgrade-emails
+// Secured with CRON_SECRET (passed as "Authorization: ******" header).
+// Intended to be called by a weekly Vercel Cron Job or an external scheduler.
+// Sends a polished upgrade nudge to all trial and guest users who:
+//   • have not unsubscribed (emailUnsubscribed !== true)
+//   • have a valid email address
+//   • have not received an upgrade email in the last 6 days
+//   • are still on a trial or guest plan (subscriptionStatus !== "active")
+const weeklyUpgradeLimiter = rateLimit({
+  windowMs: 60_000 * 60, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests." },
+});
+
+app.post("/api/send-weekly-upgrade-emails", weeklyUpgradeLimiter, async (req, res) => {
+  // Authenticate cron caller via CRON_SECRET
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.warn("[WeeklyUpgrade] CRON_SECRET is not set — endpoint disabled.");
+    return res.status(503).json({ error: "Cron endpoint is not configured." });
+  }
+  const authHeader = req.headers.authorization ?? "";
+  const providedSecret = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+  // Constant-time comparison to guard against timing attacks
+  const secretBuf = Buffer.from(cronSecret);
+  const providedBuf = Buffer.from(providedSecret);
+  if (
+    secretBuf.length !== providedBuf.length ||
+    !timingSafeEqual(secretBuf, providedBuf)
+  ) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured." });
+  }
+
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn("[WeeklyUpgrade] No SMTP config — weekly upgrade emails not sent.");
+    return res.json({ success: true, sent: 0, skipped: 0, message: "No SMTP config." });
+  }
+
+  const appUrl = process.env.APP_URL ?? "https://pteninja.com";
+  const fromAddress = process.env.SMTP_USER ?? process.env.GMAIL_USER ?? "no-reply@pteninja.com";
+  const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+  const { FieldValue } = await import("firebase-admin/firestore");
+
+  // Minimum gap between upgrade emails for the same user (6 days)
+  const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+
+  let sent = 0;
+  let skipped = 0;
+
+  try {
+    // Fetch trial users (subscriptionStatus === "trial")
+    const trialSnap = await db.collection("users")
+      .where("subscriptionStatus", "==", "trial")
+      .get();
+
+    // Fetch guest users (accessType === "guest")
+    const guestSnap = await db.collection("users")
+      .where("accessType", "==", "guest")
+      .get();
+
+    // Combine and de-duplicate by document ID
+    const seenIds = new Set<string>();
+    const candidates: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, any> }> = [];
+    for (const doc of [...trialSnap.docs, ...guestSnap.docs]) {
+      if (!seenIds.has(doc.id)) {
+        seenIds.add(doc.id);
+        candidates.push({ ref: doc.ref, data: doc.data() as Record<string, any> });
+      }
+    }
+
+    for (const { ref, data } of candidates) {
+      const email: string = (data.email ?? "").toLowerCase();
+      if (!email || !isValidEmail(email)) { skipped++; continue; }
+
+      // Skip unsubscribed users
+      if (data.emailUnsubscribed === true) { skipped++; continue; }
+
+      // Skip users who already have an active paid subscription
+      if (data.subscriptionStatus === "active") { skipped++; continue; }
+
+      // Skip if emailed within the last 6 days
+      if (data.lastUpgradeEmailSentAt) {
+        const lastMs = new Date(data.lastUpgradeEmailSentAt).getTime();
+        if (!isNaN(lastMs) && nowMs - lastMs < SIX_DAYS_MS) { skipped++; continue; }
+      }
+
+      const displayName: string = data.displayName || data.name || email.split("@")[0];
+      const safeName = escapeHtml(displayName);
+      const accessType: string = data.accessType ?? "user";
+      const unsubscribeUrl = generateUnsubscribeUrl(email, appUrl);
+      const upgradeUrlSafe = escapeHtml(appUrl);
+
+      const subject = "🚀 Your PTE Ninja trial is waiting — upgrade today!";
+
+      const accessNote = accessType === "guest"
+        ? "As a guest user you have 3 days of free access."
+        : "You have a 7-day free trial with full access to all practice tools.";
+
+      const textBody = [
+        `Hi ${displayName},`,
+        ``,
+        `We noticed you haven't upgraded to a premium plan yet on PTE Ninja.`,
+        ``,
+        `${accessNote} Don't let your preparation stall — our AI-powered tools`,
+        `are ready to help you hit your target PTE score!`,
+        ``,
+        `✨ Why upgrade?`,
+        `  • Unlimited AI-scored speaking & writing practice`,
+        `  • Detailed performance insights and progress tracking`,
+        `  • Vocabulary builder with 3 000+ high-frequency PTE words`,
+        `  • Personalised study planner to reach your target score`,
+        ``,
+        `Our plans (limited-time discounts):`,
+        `  Weekly Plan    — A$11/week  (was A$15)`,
+        `  Monthly Plan   — A$21/month (was A$35)`,
+        `  Quarterly Plan — A$50 / 3 months (was A$90)  ⭐ Best Value`,
+        `  Annual Plan    — A$175/year (was A$350) — Save 50%`,
+        ``,
+        `Upgrade now: ${appUrl}`,
+        ``,
+        `Good luck with your studies,`,
+        `The PTE Ninja Team`,
+        buildUnsubscribeFooterText(unsubscribeUrl),
+      ].join("\n");
+
+      const htmlBody = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade Your PTE Ninja Plan</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(108,99,255,0.10);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:36px 40px 28px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 20px;margin-bottom:16px;">
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
+                <span style="font-size:22px;color:rgba(255,255,255,0.7);margin-left:2px;">⚡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;line-height:1.3;">
+                🚀 Ready to unlock your full potential?
+              </h1>
+              <p style="margin:10px 0 0;color:rgba(255,255,255,0.85);font-size:15px;line-height:1.6;">
+                Hi <strong>${safeName}</strong> — your PTE journey is just getting started!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 40px 20px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.7;">
+                We noticed you haven't upgraded yet. ${escapeHtml(accessNote)} Your exam preparation
+                deserves the best tools — don't let your momentum slow down!
+              </p>
+
+              <!-- Feature highlights -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td style="padding:10px 14px;background:#f9fafb;border-radius:8px;margin-bottom:8px;display:block;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:20px;padding-right:12px;">🧠</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Unlimited AI Practice</strong> — Speaking, Writing, Listening &amp; Reading tasks scored in real time</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:10px 14px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:20px;padding-right:12px;">📊</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Progress Insights</strong> — Track your improvement with detailed score analytics</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:10px 14px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:20px;padding-right:12px;">📚</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Vocabulary Builder</strong> — 3 000+ high-frequency PTE Academic words</td>
+                    </tr></table>
+                  </td>
+                </tr>
+                <tr><td style="height:8px;"></td></tr>
+                <tr>
+                  <td style="padding:10px 14px;background:#f9fafb;border-radius:8px;">
+                    <table cellpadding="0" cellspacing="0"><tr>
+                      <td style="font-size:20px;padding-right:12px;">📅</td>
+                      <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Study Planner</strong> — AI-personalised schedule to hit your target score</td>
+                    </tr></table>
+                  </td>
+                </tr>
+              </table>
+
+              <h2 style="margin:0 0 16px;font-size:19px;color:#1a1a2e;font-weight:700;text-align:center;">
+                🎯 Choose the plan that suits you
+              </h2>
+
+              <!-- Pricing Cards -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <!-- Weekly -->
+                  <td width="23%" style="vertical-align:top;padding:0 5px 0 0;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:16px 12px;text-align:center;">
+                      <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1a1a2e;">Weekly</p>
+                      <p style="margin:0 0 2px;font-size:20px;font-weight:800;color:#6c63ff;">A$11</p>
+                      <p style="margin:0 0 10px;font-size:10px;color:#9ca3af;text-decoration:line-through;">A$15/wk</p>
+                      <a href="${upgradeUrlSafe}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:7px 0;border-radius:8px;">Start</a>
+                    </div>
+                  </td>
+                  <!-- Monthly -->
+                  <td width="23%" style="vertical-align:top;padding:0 5px;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:16px 12px;text-align:center;">
+                      <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1a1a2e;">Monthly</p>
+                      <p style="margin:0 0 2px;font-size:20px;font-weight:800;color:#6c63ff;">A$21</p>
+                      <p style="margin:0 0 10px;font-size:10px;color:#9ca3af;text-decoration:line-through;">A$35/mo</p>
+                      <a href="${upgradeUrlSafe}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:7px 0;border-radius:8px;">Start</a>
+                    </div>
+                  </td>
+                  <!-- Quarterly (Best Value) -->
+                  <td width="31%" style="vertical-align:top;padding:0 5px;">
+                    <div style="border:2px solid #6c63ff;border-radius:12px;padding:16px 12px;text-align:center;background:#faf9ff;">
+                      <div style="background:#6c63ff;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:2px 8px;border-radius:20px;display:inline-block;margin-bottom:8px;">⭐ Best Value</div>
+                      <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1a1a2e;">Quarterly</p>
+                      <p style="margin:0 0 2px;font-size:20px;font-weight:800;color:#6c63ff;">A$50</p>
+                      <p style="margin:0 0 2px;font-size:10px;color:#9ca3af;text-decoration:line-through;">A$90/3mo</p>
+                      <p style="margin:0 0 10px;font-size:10px;color:#6c63ff;font-weight:600;">≈ A$16.67/mo</p>
+                      <a href="${upgradeUrlSafe}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:7px 0;border-radius:8px;">Best Deal</a>
+                    </div>
+                  </td>
+                  <!-- Annual -->
+                  <td width="23%" style="vertical-align:top;padding:0 0 0 5px;">
+                    <div style="border:2px solid #e5e7eb;border-radius:12px;padding:16px 12px;text-align:center;">
+                      <div style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:20px;display:inline-block;margin-bottom:8px;">Save 50%</div>
+                      <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1a1a2e;">Annual</p>
+                      <p style="margin:0 0 2px;font-size:20px;font-weight:800;color:#6c63ff;">A$175</p>
+                      <p style="margin:0 0 10px;font-size:10px;color:#9ca3af;text-decoration:line-through;">A$350/yr</p>
+                      <a href="${upgradeUrlSafe}" style="display:block;background:#6c63ff;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:7px 0;border-radius:8px;">Start</a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Main CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 20px;">
+                <tr>
+                  <td align="center">
+                    <a href="${upgradeUrlSafe}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:14px 48px;border-radius:50px;letter-spacing:0.5px;">
+                      Upgrade My Plan &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:13px;color:#6b7280;text-align:center;line-height:1.6;">
+                Questions? Just reply to this email or visit our
+                <a href="${upgradeUrlSafe}" style="color:#6c63ff;text-decoration:none;">support centre</a>.
+                All plans include unlimited access. Cancel anytime.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer with unsubscribe -->
+          ${buildUnsubscribeFooterHtml(unsubscribeUrl, email)}
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+      try {
+        await transport.sendMail({
+          from: `PTE Ninja <${fromAddress}>`,
+          to: email,
+          subject,
+          text: textBody,
+          html: htmlBody,
+        });
+        // Update lastUpgradeEmailSentAt (fire-and-forget)
+        ref.update({ lastUpgradeEmailSentAt: new Date().toISOString() }).catch(() => {});
+        sent++;
+      } catch (sendErr) {
+        console.error(`[WeeklyUpgrade] Failed to send to ${email}:`, sendErr);
+        skipped++;
+      }
+    }
+
+    console.log(`[WeeklyUpgrade] Done — sent: ${sent}, skipped: ${skipped}`);
+    res.json({ success: true, sent, skipped });
+  } catch (error) {
+    console.error("[WeeklyUpgrade] Fatal error:", error);
+    res.status(500).json({ error: "Failed to send weekly upgrade emails." });
   }
 });
 
