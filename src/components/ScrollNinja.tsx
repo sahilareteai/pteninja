@@ -22,6 +22,10 @@ export function ScrollNinja() {
   // Karate chop (Left arm)
   const leftArmRotate = useTransform(scrollYProgress, [0, 0.5, 0.8, 1], [0, 0, 90, 45]);
   
+  // Legs (Ninja kick / dynamic pose)
+  const leftLegRotate = useTransform(scrollYProgress, [0, 0.4, 0.8, 1], [0, -45, -90, -60]);
+  const rightLegRotate = useTransform(scrollYProgress, [0, 0.4, 0.8, 1], [0, 15, 30, 10]);
+  
   return (
     <div className="fixed right-2 md:right-12 top-1/3 z-50 pointer-events-none scale-75 md:scale-100 origin-right">
       <motion.div 
@@ -63,8 +67,12 @@ export function ScrollNinja() {
           </motion.g>
           
           {/* Legs */}
-          <rect x="40" y="80" width="8" height="20" rx="2" fill="currentColor" className="text-slate-800 dark:text-slate-200" />
-          <rect x="52" y="80" width="8" height="20" rx="2" fill="currentColor" className="text-slate-800 dark:text-slate-200" />
+          <motion.g style={{ rotate: leftLegRotate, originX: '44px', originY: '80px' }}>
+            <rect x="40" y="80" width="8" height="20" rx="2" fill="currentColor" className="text-slate-800 dark:text-slate-200" />
+          </motion.g>
+          <motion.g style={{ rotate: rightLegRotate, originX: '56px', originY: '80px' }}>
+            <rect x="52" y="80" width="8" height="20" rx="2" fill="currentColor" className="text-slate-800 dark:text-slate-200" />
+          </motion.g>
         </svg>
       </motion.div>
     </div>
