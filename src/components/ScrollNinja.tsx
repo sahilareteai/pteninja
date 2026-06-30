@@ -10,21 +10,37 @@ export function ScrollNinja() {
   // Ninja container moves down as you scroll, but we can just make it fixed or absolute.
   // Actually, making it fixed on the screen is better, but maybe the user wants it to follow the scroll.
   // Let's make it a fixed element on the right side of the screen that animates as you scroll.
-  const yPos = useTransform(scrollYProgress, [0, 1], ['0%', '200%']);
+  const yPos = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
   
-  // Right Arm (Drawing sword)
-  const armRotate = useTransform(scrollYProgress, [0, 0.3, 0.6, 1], [0, -120, -150, -45]);
+  // Right Arm (Swinging sword fast left and right)
+  const armRotate = useTransform(
+    scrollYProgress, 
+    [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], 
+    [0, -120, -45, -135, -30, -150, -45, -135, -30, -150, -45]
+  );
   
-  // Sword unsheathing
-  const swordY = useTransform(scrollYProgress, [0, 0.3, 0.6, 1], [0, -30, -50, -10]);
-  const swordRotate = useTransform(scrollYProgress, [0, 0.3, 0.6, 1], [0, 45, 90, 135]);
+  // Sword unsheathes quickly at the start, then stays in hand for the swings
+  const swordY = useTransform(scrollYProgress, [0, 0.05, 0.1, 1], [0, -30, -50, -50]);
+  const swordRotate = useTransform(scrollYProgress, [0, 0.05, 0.1, 1], [0, 45, 90, 90]);
   
-  // Karate chop (Left arm)
-  const leftArmRotate = useTransform(scrollYProgress, [0, 0.5, 0.8, 1], [0, 0, 90, 45]);
+  // Karate chop (Left arm) - also punches back and forth
+  const leftArmRotate = useTransform(
+    scrollYProgress, 
+    [0, 0.2, 0.4, 0.6, 0.8, 1], 
+    [0, 90, 0, 90, 0, 90]
+  );
   
-  // Legs (Ninja kick / dynamic pose)
-  const leftLegRotate = useTransform(scrollYProgress, [0, 0.4, 0.8, 1], [0, -45, -90, -60]);
-  const rightLegRotate = useTransform(scrollYProgress, [0, 0.4, 0.8, 1], [0, 15, 30, 10]);
+  // Legs (Running/walking pose so they stay clearly visible)
+  const leftLegRotate = useTransform(
+    scrollYProgress, 
+    [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1], 
+    [0, 30, -30, 30, -30, 30, -30, 30, -30]
+  );
+  const rightLegRotate = useTransform(
+    scrollYProgress, 
+    [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1], 
+    [0, -30, 30, -30, 30, -30, 30, -30, 30]
+  );
   
   return (
     <div className="fixed right-2 md:right-12 top-1/3 z-50 pointer-events-none scale-75 md:scale-100 origin-right">
