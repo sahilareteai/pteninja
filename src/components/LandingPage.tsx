@@ -177,20 +177,16 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           transition={{ duration: 0.8 }}
           className="space-y-8"
         >
-          <motion.div 
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface/80 backdrop-blur-md rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase shadow-lg shadow-app-primary/10"
-          >
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase">
             <Star size={14} className="fill-current" />
-            Turn Your Dreams Into Reality
-          </motion.div>
-          <h2 className="text-5xl md:text-8xl font-black text-app-text tracking-tighter leading-[1.1]">
-            MAKE YOUR DREAM OF COMING TO AUSTRALIA OR UK TRUE BY <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">NAILING PTE</span>
+            The Ultimate AI PTE Trainer
+          </div>
+          <h2 className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
+            MASTER THE PTE <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">WITH AI PRECISION</span>
           </h2>
-          <p className="text-xl text-app-text-muted max-w-3xl mx-auto leading-relaxed">
-            Unleash your true potential with the ultimate AI PTE trainer. Get real-time feedback, realistic mock tests, and actionable insights to achieve your target score.
+          <p className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
+            Stop guessing your score. Get real-time AI feedback on your speaking, writing, reading, and listening. Practice with the most accurate PTE simulation available.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
             <button 
@@ -209,6 +205,219 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           </div>
         </motion.div>
       </header>
+
+      {/* Global Opportunities Section */}
+      <section className="relative z-10 py-12 px-6">
+        <div className="max-w-5xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="p-8 md:p-12 bg-gradient-to-br from-app-surface/80 to-app-surface/40 backdrop-blur-xl border border-app-primary/20 rounded-3xl shadow-2xl shadow-app-primary/5 text-center relative overflow-hidden group hover:border-app-primary/40 transition-all duration-500"
+          >
+            <div className="absolute top-0 right-0 w-64 h-64 bg-app-primary/10 blur-[100px] rounded-full pointer-events-none group-hover:bg-app-primary/20 transition-all duration-700" />
+            <h3 className="text-2xl md:text-4xl font-bold text-app-text mb-6 relative z-10">
+              Make your dream of coming to <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">Australia, UK</span>, and beyond true by nailing PTE.
+            </h3>
+            <p className="text-app-text-muted mb-8 relative z-10 max-w-2xl mx-auto leading-relaxed">
+              The PTE Academic exam is widely accepted by universities, colleges, and governments around the world. Achieve your target score and unlock global opportunities.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12 relative z-10">
+              <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
+                <span className="text-4xl filter drop-shadow-md">🇦🇺</span>
+                <span className="font-bold text-app-text uppercase tracking-widest text-xs">Australia</span>
+              </div>
+              <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
+                <span className="text-4xl filter drop-shadow-md">🇬🇧</span>
+                <span className="font-bold text-app-text uppercase tracking-widest text-xs">UK</span>
+              </div>
+              <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
+                <span className="text-4xl filter drop-shadow-md">🇨🇦</span>
+                <span className="font-bold text-app-text uppercase tracking-widest text-xs">Canada</span>
+              </div>
+              <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
+                <span className="text-4xl filter drop-shadow-md">🇳🇿</span>
+                <span className="font-bold text-app-text uppercase tracking-widest text-xs">New Zealand</span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Platform Preview Section */}
+      <section className="relative z-10 py-24 px-6 bg-app-bg">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-14"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Platform Preview</p>
+            <h2 className="text-4xl md:text-5xl font-black text-app-text tracking-tight mb-4">
+              Everything You Need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">Master PTE</span>
+            </h2>
+            <p className="text-base text-app-text-muted max-w-2xl mx-auto leading-relaxed">
+              AI-powered practice tools, vocabulary mastery, full mock tests, and real-time support — all in one place.
+            </p>
+          </motion.div>
+
+          {/* Bento grid collage */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+            className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5"
+          >
+            {/* Smart Dashboard — tall, spans 2 rows on md */}
+            <div className="col-span-2 md:col-span-1 md:row-span-2 relative flex flex-col rounded-2xl overflow-hidden group border border-white/[0.07] hover:border-app-primary/40 transition-all duration-500 shadow-lg hover:shadow-xl hover:shadow-app-primary/10 min-h-[280px] md:min-h-[440px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0d1f2d] via-[#0a2e2a] to-[#061a18]" />
+              {/* Mock dashboard UI */}
+              <div className="relative z-10 flex-1 p-5 flex flex-col gap-3 overflow-hidden pointer-events-none select-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-app-primary/20 flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-app-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                  </div>
+                  <span className="text-white/70 text-xs font-semibold">My Progress</span>
+                </div>
+                {/* Progress bars */}
+                <div className="space-y-2.5">
+                  {[{ label: 'Speaking', w: '78%', color: 'bg-app-primary' }, { label: 'Writing', w: '65%', color: 'bg-teal-400' }, { label: 'Reading', w: '82%', color: 'bg-cyan-400' }, { label: 'Listening', w: '71%', color: 'bg-emerald-400' }].map(({ label, w, color }) => (
+                    <div key={label}>
+                      <div className="flex justify-between text-[10px] text-white/50 mb-1"><span>{label}</span><span>{w}</span></div>
+                      <div className="h-1.5 bg-white/10 rounded-full"><div className={`h-full ${color} rounded-full`} style={{ width: w }} /></div>
+                    </div>
+                  ))}
+                </div>
+                {/* Streak card */}
+                <div className="bg-white/5 rounded-xl p-3 border border-white/[0.07]">
+                  <div className="text-[9px] text-white/40 uppercase tracking-widest mb-2">Study Streak</div>
+                  <div className="flex items-end gap-1">
+                    {[3,5,4,6,5,7,6].map((h, i) => (
+                      <div key={i} className="flex-1 bg-app-primary/30 rounded-sm" style={{ height: `${h * 5}px` }} />
+                    ))}
+                  </div>
+                </div>
+                {/* Score badge */}
+                <div className="bg-app-primary/10 border border-app-primary/20 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-[9px] text-app-primary/70 uppercase tracking-widest">Mock Score</div>
+                    <div className="text-2xl font-black text-white">78 <span className="text-sm font-normal text-white/40">/ 90</span></div>
+                  </div>
+                  <svg className="w-8 h-8 text-app-primary/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
+                </div>
+              </div>
+              <div className="relative z-10 px-5 py-4 border-t border-white/[0.07]">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Smart Dashboard</p>
+                <p className="text-white font-bold text-sm leading-tight">Track your progress, study streak & plan</p>
+              </div>
+            </div>
+
+            {/* Vocabulary Builder */}
+            <div className="relative flex flex-col rounded-2xl overflow-hidden group border border-white/[0.07] hover:border-app-primary/40 transition-all duration-500 shadow-lg hover:shadow-xl hover:shadow-app-primary/10 min-h-[200px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0d1a2d] via-[#0a2040] to-[#071830]" />
+              {/* Mock vocab UI */}
+              <div className="relative z-10 flex-1 p-4 flex flex-col gap-2.5 overflow-hidden pointer-events-none select-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-teal-500/20 flex items-center justify-center shrink-0">
+                    <svg className="w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                  </div>
+                  <span className="text-white/70 text-[10px] font-semibold">Word of the Day</span>
+                </div>
+                <div className="bg-white/5 border border-white/[0.07] rounded-xl p-3">
+                  <div className="text-teal-300 font-bold text-sm">ubiquitous</div>
+                  <div className="text-white/40 text-[10px] mt-0.5">adj. present everywhere</div>
+                  <div className="flex gap-1 mt-2">
+                    <span className="bg-teal-500/20 text-teal-300 text-[9px] px-2 py-0.5 rounded-full">Academic</span>
+                    <span className="bg-white/10 text-white/40 text-[9px] px-2 py-0.5 rounded-full">🔊 Audio</span>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {['prevalent', 'pervasive', 'omnipresent'].map(w => (
+                    <div key={w} className="flex-1 bg-white/5 border border-white/[0.07] rounded-lg p-1.5 text-center text-[9px] text-white/40">{w}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="relative z-10 px-4 py-3 border-t border-white/[0.07]">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Vocabulary Builder</p>
+                <p className="text-white font-bold text-sm leading-tight">2000+ academic words with audio</p>
+              </div>
+            </div>
+
+            {/* Premium Plans */}
+            <div className="relative flex flex-col rounded-2xl overflow-hidden group border border-white/[0.07] hover:border-app-primary/40 transition-all duration-500 shadow-lg hover:shadow-xl hover:shadow-app-primary/10 min-h-[200px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a0d] via-[#1a2a10] to-[#0a1a10]" />
+              {/* Mock pricing UI */}
+              <div className="relative z-10 flex-1 p-4 flex flex-col gap-2.5 overflow-hidden pointer-events-none select-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-yellow-500/20 flex items-center justify-center shrink-0">
+                    <svg className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  </div>
+                  <span className="text-white/70 text-[10px] font-semibold">Choose Your Plan</span>
+                </div>
+                <div className="bg-app-primary/10 border border-app-primary/30 rounded-xl p-3 relative mt-1">
+                  <span className="absolute -top-2.5 right-3 bg-app-primary text-black text-[8px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
+                  <div className="text-white font-bold text-xs">Pro Plan</div>
+                  <div className="text-app-primary font-black text-lg mt-0.5">$19<span className="text-xs font-normal text-white/40">/mo</span></div>
+                  <div className="flex flex-col gap-1 mt-2">
+                    {['Full mock tests', 'AI feedback', 'All practice tools'].map(f => (
+                      <div key={f} className="flex items-center gap-1.5"><span className="text-app-primary text-[10px]">✓</span><span className="text-white/50 text-[9px]">{f}</span></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="relative z-10 px-4 py-3 border-t border-white/[0.07]">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Premium Plans</p>
+                <p className="text-white font-bold text-sm leading-tight">Affordable pricing, exceptional results</p>
+              </div>
+            </div>
+
+            {/* Help & Support — spans full width on mobile, 2 cols on md */}
+            <div className="col-span-2 md:col-span-2 relative flex flex-col rounded-2xl overflow-hidden group border border-white/[0.07] hover:border-app-primary/40 transition-all duration-500 shadow-lg hover:shadow-xl hover:shadow-app-primary/10 min-h-[200px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#071a20] via-[#0a1f2a] to-[#061520]" />
+              {/* Mock chat UI */}
+              <div className="relative z-10 flex-1 p-5 flex flex-col gap-2.5 overflow-hidden pointer-events-none select-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                  </div>
+                  <span className="text-white/70 text-[10px] font-semibold">PTE AI Assistant</span>
+                  <span className="ml-auto flex items-center gap-1.5 text-[9px] text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />Online
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2 md:flex-row md:gap-4">
+                  <div className="bg-white/10 border border-white/[0.07] rounded-xl rounded-tl-sm p-3 max-w-[70%]">
+                    <p className="text-white/70 text-[10px] leading-relaxed">Hi! I'm your PTE study assistant. How can I help you today? 👋</p>
+                  </div>
+                  <div className="bg-app-primary/15 border border-app-primary/20 rounded-xl rounded-tr-sm p-3 max-w-[70%] self-end ml-auto">
+                    <p className="text-white/70 text-[10px] leading-relaxed">Can you help me improve my speaking score?</p>
+                  </div>
+                </div>
+                <div className="bg-white/10 border border-white/[0.07] rounded-xl rounded-tl-sm p-3 max-w-[75%]">
+                  <p className="text-white/70 text-[10px] leading-relaxed">Absolutely! I'll analyze your responses and give personalized tips. ✨</p>
+                </div>
+              </div>
+              <div className="relative z-10 px-5 py-4 border-t border-white/[0.07]">
+                <p className="text-[10px] font-bold text-app-primary uppercase tracking-widest mb-0.5">Help & Support</p>
+                <p className="text-white font-bold text-base leading-tight">AI-powered support bot, always ready to help</p>
+              </div>
+            </div>
+          </motion.div>
+          
+          <div className="mt-12 text-center">
+            <button 
+              onClick={onLogin}
+              className="inline-flex items-center gap-3 px-8 py-4 bg-app-surface/50 border border-app-primary/20 text-app-primary font-bold text-sm rounded-xl hover:bg-app-primary/10 transition-all"
+            >
+              Explore All Features
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </section>
 
       {/* Features Grid */}
       <section className="relative z-10 py-32 px-6 bg-app-bg">
