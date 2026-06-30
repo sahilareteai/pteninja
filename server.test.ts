@@ -1,22 +1,54 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
-// ─── Firebase Admin mocks (hoisted so vi.mock can use them) ───────────────────
-const mockVerifyIdToken  = vi.hoisted(() => vi.fn());
-const mockFirestoreDocGet = vi.hoisted(() => vi.fn());
-const mockGetApps        = vi.hoisted(() => vi.fn());
-const mockInitApp        = vi.hoisted(() => vi.fn());
+// ─── Firebase Admin mocks ────────────────────────────────────────────────────
+const mockVerifyIdToken    = vi.hoisted(() => vi.fn());
+const mockFirestoreDocGet  = vi.hoisted(() => vi.fn());
+const mockFirestoreDocDelete = vi.hoisted(() => vi.fn());
+const mockFirestoreDocSet    = vi.hoisted(() => vi.fn());
+const mockFirestoreDocUpdate = vi.hoisted(() => vi.fn());
+const mockFirestoreCollectionGet = vi.hoisted(() => vi.fn());
+
+const mockFirestoreBatchDelete = vi.hoisted(() => vi.fn());
+const mockFirestoreBatchUpdate = vi.hoisted(() => vi.fn());
+const mockFirestoreBatchSet    = vi.hoisted(() => vi.fn());
+const mockFirestoreBatchCommit = vi.hoisted(() => vi.fn());
+const mockFirestoreBatch = vi.hoisted(() => vi.fn(() => ({
+  delete: mockFirestoreBatchDelete,
+  update: mockFirestoreBatchUpdate,
+  set: mockFirestoreBatchSet,
+  commit: mockFirestoreBatchCommit,
+})));
+
+const mockDeleteUser = vi.hoisted(() => vi.fn());
+const mockGetUser    = vi.hoisted(() => vi.fn());
+const mockGetApps    = vi.hoisted(() => vi.fn());
+const mockInitApp    = vi.hoisted(() => vi.fn());
 
 vi.mock("firebase-admin/auth", () => ({
-  getAuth: () => ({ verifyIdToken: mockVerifyIdToken }),
+  getAuth: () => ({
+    verifyIdToken: mockVerifyIdToken,
+    deleteUser: mockDeleteUser,
+    getUser: mockGetUser,
+  }),
 }));
 
 vi.mock("firebase-admin/firestore", () => ({
   getFirestore: () => ({
     collection: () => ({
-      doc: () => ({ get: mockFirestoreDocGet }),
-      where: () => ({ limit: () => ({ get: mockFirestoreDocGet }) }),
+      doc: () => ({
+        get: mockFirestoreDocGet,
+        delete: mockFirestoreDocDelete,
+        set: mockFirestoreDocSet,
+        update: mockFirestoreDocUpdate,
+      }),
+      where: () => ({
+        limit: () => ({ get: mockFirestoreDocGet }),
+        get: mockFirestoreCollectionGet,
+      }),
+      get: mockFirestoreCollectionGet,
     }),
+    batch: mockFirestoreBatch,
   }),
 }));
 
@@ -26,16 +58,20 @@ vi.mock("firebase-admin/app", () => ({
   initializeApp: mockInitApp,
 }));
 
-// Use vi.hoisted so the mock functions are available when vi.mock is hoisted
-const mockPaymentIntentsCreate   = vi.hoisted(() => vi.fn());
-const mockPaymentIntentsRetrieve = vi.hoisted(() => vi.fn());
-const mockCustomersCreate        = vi.hoisted(() => vi.fn());
-const mockPricesCreate           = vi.hoisted(() => vi.fn());
-const mockSubscriptionsCreate    = vi.hoisted(() => vi.fn());
-const mockSubscriptionsCancel    = vi.hoisted(() => vi.fn());
-const mockSubscriptionsList      = vi.hoisted(() => vi.fn());
-const mockSubscriptionsUpdate    = vi.hoisted(() => vi.fn());
-const mockInvoicesRetrieve       = vi.hoisted(() => vi.fn());
+// ─── Stripe Mocks ────────────────────────────────────────────────────────────
+const mockPaymentIntentsCreate       = vi.hoisted(() => vi.fn());
+const mockPaymentIntentsRetrieve     = vi.hoisted(() => vi.fn());
+const mockCustomersCreate            = vi.hoisted(() => vi.fn());
+const mockPricesCreate               = vi.hoisted(() => vi.fn());
+const mockSubscriptionsCreate        = vi.hoisted(() => vi.fn());
+const mockSubscriptionsCancel        = vi.hoisted(() => vi.fn());
+const mockSubscriptionsList          = vi.hoisted(() => vi.fn());
+const mockSubscriptionsUpdate        = vi.hoisted(() => vi.fn());
+const mockSubscriptionsRetrieve      = vi.hoisted(() => vi.fn());
+const mockInvoicesRetrieve           = vi.hoisted(() => vi.fn());
+const mockBillingPortalSessionsCreate = vi.hoisted(() => vi.fn());
+const mockCouponsRetrieve            = vi.hoisted(() => vi.fn());
+const mockCouponsCreate              = vi.hoisted(() => vi.fn());
 
 vi.mock("stripe", () => {
   class MockStripe {
@@ -47,11 +83,40 @@ vi.mock("stripe", () => {
       cancel: mockSubscriptionsCancel,
       list:   mockSubscriptionsList,
       update: mockSubscriptionsUpdate,
+      retrieve: mockSubscriptionsRetrieve,
     };
     invoices       = { retrieve: mockInvoicesRetrieve };
+    billingPortal  = { sessions: { create: mockBillingPortalSessionsCreate } };
+    coupons        = { retrieve: mockCouponsRetrieve, create: mockCouponsCreate };
   }
   return { default: MockStripe };
 });
+
+// ─── Nodemailer Mocks ────────────────────────────────────────────────────────
+const mockSendMail = vi.hoisted(() => vi.fn());
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: () => ({
+      sendMail: mockSendMail,
+    }),
+  },
+}));
+
+// ─── Google GenAI Mocks ──────────────────────────────────────────────────────
+const mockGenerateContent = vi.hoisted(() => vi.fn());
+vi.mock("@google/genai", () => {
+  class MockGoogleGenAI {
+    models = {
+      generateContent: mockGenerateContent,
+    };
+  }
+  return {
+    GoogleGenAI: MockGoogleGenAI,
+    Modality: { AUDIO: "AUDIO" },
+    Type: { OBJECT: "OBJECT", NUMBER: "NUMBER", STRING: "STRING", ARRAY: "ARRAY" },
+  };
+});
+
 
 // Import app after mocks are set up
 const { app } = await import("./server.ts");
@@ -409,3 +474,373 @@ describe("POST /api/cancel-subscription", () => {
     expect(res.body.error).toMatch(/subscriptionId is required/i);
   });
 });
+
+// ─── Health check endpoint ────────────────────────────────────────────────────
+describe("GET /api/health", () => {
+  it("returns 200 and status ok", async () => {
+    const res = await request(app).get("/api/health");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ok");
+  });
+});
+
+// ─── Customer Portal endpoint ──────────────────────────────────────────────────
+describe("POST /api/customer-portal", () => {
+  beforeEach(() => {
+    mockBillingPortalSessionsCreate.mockReset();
+  });
+
+  it("returns billing portal session URL", async () => {
+    mockBillingPortalSessionsCreate.mockResolvedValue({ url: "https://stripe.com/portal/session" });
+
+    const res = await request(app)
+      .post("/api/customer-portal")
+      .set("Authorization", AUTH_HEADER)
+      .send({ customerId: "cus_123", returnUrl: "https://pteninja.com" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe("https://stripe.com/portal/session");
+    expect(mockBillingPortalSessionsCreate).toHaveBeenCalledWith({
+      customer: "cus_123",
+      return_url: "https://pteninja.com",
+    });
+  });
+
+  it("returns 400 if customerId is missing", async () => {
+    const res = await request(app)
+      .post("/api/customer-portal")
+      .set("Authorization", AUTH_HEADER)
+      .send({ returnUrl: "https://pteninja.com" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("customerId is required");
+  });
+});
+
+// ─── Apply Retention Discount endpoint ──────────────────────────────────────────
+describe("POST /api/apply-retention-discount", () => {
+  beforeEach(() => {
+    mockCouponsRetrieve.mockReset();
+    mockCouponsCreate.mockReset();
+    mockSubscriptionsUpdate.mockReset();
+  });
+
+  it("applies a 10% coupon successfully", async () => {
+    mockCouponsRetrieve.mockResolvedValue({ id: "PTENINJA_RETENTION_10" });
+    mockSubscriptionsUpdate.mockResolvedValue({});
+
+    const res = await request(app)
+      .post("/api/apply-retention-discount")
+      .set("Authorization", AUTH_HEADER)
+      .send({ subscriptionId: "sub_123" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith("sub_123", {
+      discounts: [{ coupon: "PTENINJA_RETENTION_10" }],
+    });
+  });
+
+  it("creates coupon if retrieve fails", async () => {
+    mockCouponsRetrieve.mockRejectedValue(new Error("Not found"));
+    mockCouponsCreate.mockResolvedValue({ id: "PTENINJA_RETENTION_10" });
+    mockSubscriptionsUpdate.mockResolvedValue({});
+
+    const res = await request(app)
+      .post("/api/apply-retention-discount")
+      .set("Authorization", AUTH_HEADER)
+      .send({ subscriptionId: "sub_123" });
+
+    expect(res.status).toBe(200);
+    expect(mockCouponsCreate).toHaveBeenCalledWith({
+      id: "PTENINJA_RETENTION_10",
+      percent_off: 10,
+      duration: "once",
+      name: "10% loyalty discount",
+    });
+  });
+});
+
+// ─── Reactivate Subscription endpoint ───────────────────────────────────────────
+describe("POST /api/reactivate-subscription", () => {
+  beforeEach(() => {
+    mockSubscriptionsUpdate.mockReset();
+  });
+
+  it("reactivates a subscription successfully", async () => {
+    mockSubscriptionsUpdate.mockResolvedValue({
+      cancel_at_period_end: false,
+      current_period_end: 1800000000,
+    });
+
+    const res = await request(app)
+      .post("/api/reactivate-subscription")
+      .set("Authorization", AUTH_HEADER)
+      .send({ subscriptionId: "sub_123" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cancelAtPeriodEnd).toBe(false);
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith("sub_123", {
+      cancel_at_period_end: false,
+    });
+  });
+});
+
+// ─── Change Plan endpoint ───────────────────────────────────────────────────────
+describe("POST /api/change-plan", () => {
+  beforeEach(() => {
+    mockSubscriptionsRetrieve.mockReset();
+    mockPricesCreate.mockReset();
+    mockSubscriptionsUpdate.mockReset();
+  });
+
+  it("changes subscription plan successfully", async () => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_123",
+      items: { data: [{ id: "item_123" }] },
+    });
+    mockPricesCreate.mockResolvedValue({ id: "price_new" });
+    mockSubscriptionsUpdate.mockResolvedValue({
+      id: "sub_123",
+      status: "active",
+      current_period_end: 1900000000,
+      cancel_at_period_end: false,
+    });
+
+    const res = await request(app)
+      .post("/api/change-plan")
+      .set("Authorization", AUTH_HEADER)
+      .send({
+        subscriptionId: "sub_123",
+        planId: "monthly",
+        planName: "Monthly",
+        amount: 2100,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("active");
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_123");
+    expect(mockPricesCreate).toHaveBeenCalled();
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith("sub_123", {
+      items: [{ id: "item_123", price: "price_new" }],
+      proration_behavior: "create_prorations",
+    });
+  });
+});
+
+// ─── Sync Subscription Status endpoint ─────────────────────────────────────────
+describe("POST /api/sync-subscription", () => {
+  beforeEach(() => {
+    mockSubscriptionsRetrieve.mockReset();
+    mockSubscriptionsList.mockReset();
+  });
+
+  it("syncs subscription by subscriptionId successfully", async () => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      status: "active",
+      current_period_end: 1800000000,
+      cancel_at_period_end: false,
+    });
+
+    const res = await request(app)
+      .post("/api/sync-subscription")
+      .set("Authorization", AUTH_HEADER)
+      .send({ subscriptionId: "sub_123" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("active");
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_123");
+  });
+
+  it("resolves and syncs subscription by customerId", async () => {
+    mockSubscriptionsList.mockResolvedValue({ data: [{ id: "sub_resolved" }] });
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      status: "active",
+      current_period_end: 1800000000,
+      cancel_at_period_end: false,
+    });
+
+    const res = await request(app)
+      .post("/api/sync-subscription")
+      .set("Authorization", AUTH_HEADER)
+      .send({ customerId: "cus_123" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.subscriptionId).toBe("sub_resolved");
+    expect(mockSubscriptionsList).toHaveBeenCalledWith({
+      customer: "cus_123",
+      status: "all",
+      limit: 1,
+    });
+  });
+});
+
+// ─── Check Email Availability endpoint ──────────────────────────────────────────
+describe("POST /api/check-email-availability", () => {
+  beforeEach(() => {
+    mockFirestoreCollectionGet.mockReset();
+  });
+
+  it("returns available: true if email does not exist", async () => {
+    mockFirestoreCollectionGet.mockResolvedValue({ empty: true });
+
+    const res = await request(app)
+      .post("/api/check-email-availability")
+      .send({ email: "newuser@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.available).toBe(true);
+  });
+
+  it("returns available: false if email exists", async () => {
+    mockFirestoreCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ data: () => ({ accessType: "user" }) }],
+    });
+
+    const res = await request(app)
+      .post("/api/check-email-availability")
+      .send({ email: "existing@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.available).toBe(false);
+  });
+});
+
+// ─── Support Chat endpoint ─────────────────────────────────────────────────────
+describe("POST /api/support-chat", () => {
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    mockGetApps.mockReturnValue([{}]); // so getAdminApp returns truthy
+    mockFirestoreDocSet.mockReset();
+  });
+
+  it("returns AI response successfully", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: "Hello! How can I help you with PTE today?",
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20 },
+    });
+
+    const res = await request(app)
+      .post("/api/support-chat")
+      .send({
+        message: "Tell me about Read Aloud",
+        history: [],
+        userDetails: { name: "John", email: "john@example.com", issueType: "Speaking" },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.response).toBe("Hello! How can I help you with PTE today?");
+    expect(mockGenerateContent).toHaveBeenCalled();
+  });
+});
+
+// ─── Support Ticket endpoint ───────────────────────────────────────────────────
+describe("POST /api/support-ticket", () => {
+  beforeEach(() => {
+    mockSendMail.mockReset();
+  });
+
+  it("sends support emails and returns ticketId", async () => {
+    vi.stubEnv("SUPPORT_EMAIL", "support@pteninja.com");
+    vi.stubEnv("SMTP_HOST", "smtp.example.com");
+    vi.stubEnv("SMTP_USER", "smtp_user");
+    vi.stubEnv("SMTP_PASS", "smtp_pass");
+
+    mockSendMail.mockResolvedValue({ messageId: "mail_sent" });
+
+    const res = await request(app)
+      .post("/api/support-ticket")
+      .send({
+        userDetails: {
+          name: "John Doe",
+          email: "john@example.com",
+          issueType: "Billing",
+          description: "Stripe error",
+        },
+        conversation: "User: hello\nModel: hi",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.ticketId).toBeDefined();
+    expect(mockSendMail).toHaveBeenCalled();
+  });
+});
+
+// ─── Gemini Quota Alert endpoint ────────────────────────────────────────────────
+describe("POST /api/gemini-quota-alert", () => {
+  beforeEach(() => {
+    mockSendMail.mockReset();
+  });
+
+  it("sends quota alert email successfully", async () => {
+    vi.stubEnv("SUPPORT_EMAIL", "support@pteninja.com");
+    vi.stubEnv("SMTP_HOST", "smtp.example.com");
+    vi.stubEnv("SMTP_USER", "smtp_user");
+    vi.stubEnv("SMTP_PASS", "smtp_pass");
+    mockSendMail.mockResolvedValue({});
+
+    const res = await request(app).post("/api/gemini-quota-alert");
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(mockSendMail).toHaveBeenCalled();
+  });
+});
+
+// ─── Unsubscribe endpoint ──────────────────────────────────────────────────────
+describe("GET /api/unsubscribe", () => {
+  beforeEach(() => {
+    mockGetApps.mockReturnValue([{}]);
+    mockFirestoreCollectionGet.mockReset();
+    mockFirestoreBatch.mockReturnValue({
+      update: vi.fn(),
+      commit: vi.fn().mockResolvedValue({}),
+    });
+  });
+
+  it("renders success page for valid unsub token", async () => {
+    // Generate valid token for testing
+    // Using default unsubscribe secret 'dev-unsubscribe-secret-change-in-prod'
+    const crypto = await import("node:crypto");
+    const email = "user@example.com";
+    const token = crypto.createHmac("sha256", "dev-unsubscribe-secret-change-in-prod")
+      .update(email)
+      .digest("hex");
+    const encodedEmail = Buffer.from(email).toString("base64url");
+
+    mockFirestoreCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: {} }],
+    });
+
+    const res = await request(app)
+      .get(`/api/unsubscribe?e=${encodedEmail}&t=${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("unsubscribed");
+  });
+});
+
+// ─── Welcome Email endpoint ────────────────────────────────────────────────────
+describe("POST /api/send-welcome-email", () => {
+  beforeEach(() => {
+    mockSendMail.mockReset();
+  });
+
+  it("sends welcome email successfully", async () => {
+    vi.stubEnv("SMTP_HOST", "smtp.example.com");
+    vi.stubEnv("SMTP_USER", "smtp_user");
+    vi.stubEnv("SMTP_PASS", "smtp_pass");
+    mockSendMail.mockResolvedValue({});
+
+    const res = await request(app)
+      .post("/api/send-welcome-email")
+      .set("Authorization", AUTH_HEADER);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSendMail).toHaveBeenCalled();
+  });
+});
+
