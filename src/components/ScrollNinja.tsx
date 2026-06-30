@@ -23,7 +23,7 @@ export function ScrollNinja() {
   const leftArmRotate = useTransform(scrollYProgress, [0, 0.5, 0.8, 1], [0, 0, 90, 45]);
   
   return (
-    <div className="fixed right-4 md:right-12 top-1/3 z-50 pointer-events-none hidden md:block">
+    <div className="fixed right-2 md:right-12 top-1/3 z-50 pointer-events-none scale-75 md:scale-100 origin-right">
       <motion.div 
         style={{ y: yPos }}
         className="relative w-32 h-32"
