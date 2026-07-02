@@ -64,11 +64,13 @@ import { analyzeSpeaking, analyzeWriting, generateTTS, WritingAnalysisResult } f
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
 import { PromoService, PromoCode } from './services/promoService';
 import { AdminDashboard } from './components/AdminDashboard';
+import { CookieBanner } from './components/CookieBanner';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { SupportBot } from './components/SupportBot';
 import { auth, db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
+import { deleteUser } from 'firebase/auth';
 import { seedTasksToFirestore } from './services/taskService';
 
 // Module-level mic stream cache — shared across TaskModal instances so the browser
@@ -1735,6 +1737,7 @@ function AppContent() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-app-accent/5 blur-[120px] rounded-full" />
       </div>
 
+      <CookieBanner />
       <div className="relative z-10 flex flex-col h-dvh">
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
@@ -3314,6 +3317,22 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             )}
           </div>
         </div>
+        <button 
+          onClick={async () => {
+            if(window.confirm('Are you sure you want to delete your account? This action cannot be undone.')){
+              try {
+                if(auth.currentUser) await deleteUser(auth.currentUser);
+                onLogout();
+              } catch(e) {
+                alert('Account deletion requires a recent login. Please log out, log back in, and try again.');
+              }
+            }
+          }}
+          className="p-3 md:p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all shrink-0"
+          title="Delete Account"
+        >
+          <Trash2 className="w-5 h-5 md:w-6 md:h-6" />
+        </button>
         <button 
           onClick={onLogout}
           className="p-3 md:p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all shrink-0"

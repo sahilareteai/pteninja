@@ -105,9 +105,29 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">9. Contact Us</h2>
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">9. Third-Party Services & APIs</h2>
+            <p>We use the following third-party services which act as data processors under the DPDP Act and GDPR. We ensure they have strict Data Processing Agreements (DPAs) in place:</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>Google Firebase & Authentication:</strong> Securely hosts our application and manages user identity.</li>
+              <li><strong>Google Gemini AI:</strong> Processes text and audio for scoring and feedback. Data is ephemeral and not used to train base models.</li>
+              <li><strong>Stripe:</strong> Securely handles all payment processing. We never store or transmit your raw credit card information on our servers.</li>
+            </ul>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">10. Data Protection Officer (DPO)</h2>
             <p>
-              If you have any questions about this Privacy Policy, please contact us at:
+              In compliance with the Digital Personal Data Protection (DPDP) Act, 2023 and GDPR, we have appointed a Data Protection / Grievance Officer. 
+              If you have any grievances, data deletion requests, or questions about this Privacy Policy, please contact our DPO at:
+              <br />
+              <span className="text-app-primary font-bold">pteninja.support@gmail.com</span>
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">11. Contact Us</h2>
+            <p>
+              For general inquiries, please contact us at:
               <br />
               <span className="text-app-primary font-bold">ninja-pte-services@googlegroups.com</span>
             </p>

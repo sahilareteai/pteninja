@@ -50,6 +50,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// DPDP/GDPR Compliance: Global Rate Limiter for all public endpoints
+const publicApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 150, // Limit each IP to 150 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests from this IP, please try again after 15 minutes." }
+});
+app.use("/api/", publicApiLimiter);
+
 // ─── Gemini Key Rotation ──────────────────────────────────────────────────────
 // Base per-key cooldown for the first quota hit. Subsequent consecutive hits on
 // the same key use exponential backoff (doubles each time) up to MAX_KEY_COOLDOWN_MS.

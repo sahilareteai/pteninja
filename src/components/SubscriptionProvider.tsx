@@ -37,6 +37,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [guestConsent, setGuestConsent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
@@ -368,6 +369,10 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
   const handleGuestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName.trim()) return;
+    if (!guestConsent) {
+      setAuthError("You must agree to the Privacy Policy to continue.");
+      return;
+    }
 
     if (isAuthenticating) return;
     
@@ -690,6 +695,20 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
                     placeholder="your@email.com"
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   />
+                </div>
+
+                <div className="flex items-start gap-3 mt-4 px-1">
+                  <input
+                    type="checkbox"
+                    id="guestConsent"
+                    checked={guestConsent}
+                    onChange={(e) => setGuestConsent(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-app-primary border-gray-300 rounded focus:ring-app-primary dark:border-gray-600 dark:bg-gray-800"
+                    required
+                  />
+                  <label htmlFor="guestConsent" className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    I agree to the <a href="#" onClick={(e) => { e.preventDefault(); document.getElementById('privacy-policy')?.scrollIntoView(); setShowGuestModal(false); }} className="text-app-primary hover:underline">Privacy Policy</a> and <a href="#" onClick={(e) => { e.preventDefault(); document.getElementById('terms-of-service')?.scrollIntoView(); setShowGuestModal(false); }} className="text-app-primary hover:underline">Terms of Service</a>.
+                  </label>
                 </div>
 
                 {authError && (
