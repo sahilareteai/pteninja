@@ -570,53 +570,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
         </div>
       </section>
 
-      {/* Testimonials Grid */}
-      <section className="relative z-10 py-32 px-6 bg-app-bg">
-        <div className="max-w-7xl mx-auto">
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Success Stories</p>
-            <h3 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">Join 15,000+ Successful Ninjas</h3>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
-              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
-              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
-            ].map((t, i) => (
-              <motion.div 
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -5 }}
-                className="p-8 bg-app-surface/30 backdrop-blur-sm border border-app-primary/10 rounded-3xl hover:border-app-primary/30 transition-all"
-              >
-                <div className="flex items-center gap-2 mb-4 text-app-primary">
-                  {[...Array(5)].map((_, j) => <Star key={j} size={16} className="fill-current" />)}
-                </div>
-                <p className="text-app-text-muted mb-6 leading-relaxed">"{t.text}"</p>
-                <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-app-primary to-app-accent rounded-full flex items-center justify-center text-app-bg font-bold text-sm">
-                      {t.name.charAt(0)}
-                    </div>
-                    <div className="font-bold text-app-text text-sm">{t.name}</div>
-                  </div>
-                  <div className="text-xs font-bold text-app-primary bg-app-primary/10 px-3 py-1 rounded-full">
-                    Score: {t.score}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+
 
       {/* Final CTA */}
       <section className="relative z-10 py-32 px-6 border-t border-app-border">
