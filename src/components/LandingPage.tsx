@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, X, Sun, Moon, Star, ArrowRight, Mic, PenTool, Target, ShieldCheck } from 'lucide-react';
+import { Shield, X, Sun, Moon, Star, ArrowRight, Mic, PenTool, Target, ShieldCheck, CheckCircle, Clock, Zap, MessageSquare, Award, PlayCircle, Quote } from 'lucide-react';
 import { Logo } from './Logo';
 import { PrivacyPolicy } from './PrivacyPolicy';
 import { TermsOfService } from './TermsOfService';
@@ -51,15 +51,21 @@ export function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, on
   );
 }
 
+const itemVariant = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
+
 function FeatureCard({ icon: Icon, title, description }: { icon: any, title: string, description: string }) {
   return (
-    <div className="p-10 bg-app-surface/50 backdrop-blur-md border border-app-primary/10 rounded-3xl hover:border-app-primary/40 hover:bg-app-surface transition-all group">
+    <motion.div 
+      variants={itemVariant}
+      whileHover={{ y: -8, transition: { duration: 0.2 } }}
+      className="p-10 bg-app-surface/50 backdrop-blur-md border border-app-primary/10 rounded-3xl hover:border-app-primary/40 hover:bg-app-surface transition-all group shadow-lg hover:shadow-app-primary/10"
+    >
       <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-app-primary transition-colors">
         <Icon className="text-app-primary group-hover:text-app-bg" size={28} />
       </div>
       <h3 className="text-2xl font-bold text-app-text mb-4">{title}</h3>
       <p className="text-app-text-muted leading-relaxed">{description}</p>
-    </div>
+    </motion.div>
   );
 }
 
@@ -144,8 +150,16 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       
       {/* Background Glows and Abstract Shapes */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-app-primary/10 blur-[150px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-app-accent/10 blur-[150px] rounded-full" />
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }} 
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-app-primary/20 blur-[150px] rounded-full" 
+        />
+        <motion.div 
+          animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }} 
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-app-accent/20 blur-[150px] rounded-full" 
+        />
       </div>
 
       {/* Navbar */}
@@ -170,28 +184,31 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       </nav>
 
       {/* Hero Section */}
-      <header className="relative z-10 pt-20 pb-32 px-6 max-w-7xl mx-auto text-center">
+      <header className="relative z-10 pt-20 pb-24 px-6 max-w-7xl mx-auto text-center">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: { opacity: 0 },
+            show: { opacity: 1, transition: { staggerChildren: 0.15 } }
+          }}
           className="space-y-8"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase">
+          <motion.div variants={itemVariant} className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase shadow-[0_0_15px_rgba(var(--app-primary-rgb),0.15)]">
             <Star size={14} className="fill-current" />
             The Ultimate AI PTE Trainer
-          </div>
-          <h2 className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
+          </motion.div>
+          <motion.h2 variants={itemVariant} className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
             MASTER THE PTE <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">WITH AI PRECISION</span>
-          </h2>
-          <p className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
+          </motion.h2>
+          <motion.p variants={itemVariant} className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
             Stop guessing your score. Get real-time AI feedback on your speaking, writing, reading, and listening. Practice with the most accurate PTE simulation available.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
+          </motion.p>
+          <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
             <button 
               onClick={onLogin}
-              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.5)]"
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
             >
               Start Training Now
               <ArrowRight className="group-hover:translate-x-1 transition-transform" />
@@ -202,9 +219,31 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             >
               Try Guest Access for Free
             </button>
-          </div>
+          </motion.div>
         </motion.div>
       </header>
+
+      {/* Infinite Marquee Section */}
+      <section className="relative z-10 py-10 border-y border-white/[0.03] bg-black/10 backdrop-blur-sm overflow-hidden flex items-center">
+        <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-app-bg to-transparent z-10" />
+        <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-app-bg to-transparent z-10" />
+        <motion.div 
+          className="flex whitespace-nowrap gap-16 md:gap-32 items-center px-8"
+          animate={{ x: [0, -2000] }}
+          transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
+        >
+          {/* Repeat twice for seamless infinite scroll */}
+          {[...Array(2)].map((_, i) => (
+            <React.Fragment key={i}>
+              <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">University of Sydney</span></div>
+              <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">Monash University</span></div>
+              <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">UNSW Sydney</span></div>
+              <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">University of Melbourne</span></div>
+              <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">Australian National University</span></div>
+            </React.Fragment>
+          ))}
+        </motion.div>
+      </section>
 
       {/* Global Opportunities Section */}
       <section className="relative z-10 py-12 px-6">
@@ -419,6 +458,73 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
         </div>
       </section>
 
+      {/* How It Works Section */}
+      <section className="relative z-10 py-32 px-6 bg-app-surface/20 border-t border-white/[0.03]">
+        <div className="max-w-4xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-20"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Your Journey</p>
+            <h2 className="text-4xl md:text-5xl font-black text-app-text tracking-tight mb-4">
+              How <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">It Works</span>
+            </h2>
+          </motion.div>
+
+          <div className="relative">
+            {/* Connecting Line */}
+            <div className="absolute left-[27px] top-4 bottom-4 w-[2px] bg-gradient-to-b from-app-primary/50 via-app-accent/50 to-transparent md:left-1/2 md:-ml-[1px]" />
+            
+            {/* Step 1 */}
+            <motion.div 
+              initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }}
+              className="relative flex items-start gap-8 mb-16 md:justify-between md:items-center"
+            >
+              <div className="md:w-5/12 md:text-right order-2 md:order-1 ml-16 md:ml-0">
+                <h3 className="text-2xl font-bold text-app-text mb-2">1. Take a Mock Test</h3>
+                <p className="text-app-text-muted leading-relaxed">Experience the real PTE exam interface under timed conditions to get an accurate baseline score.</p>
+              </div>
+              <div className="absolute left-0 md:left-1/2 md:-translate-x-1/2 w-14 h-14 bg-app-bg border border-app-primary rounded-full flex items-center justify-center z-10 shadow-[0_0_15px_rgba(var(--app-primary-rgb),0.3)] order-1 md:order-2">
+                <Clock className="text-app-primary" size={24} />
+              </div>
+              <div className="hidden md:block md:w-5/12 order-3" />
+            </motion.div>
+
+            {/* Step 2 */}
+            <motion.div 
+              initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}
+              className="relative flex items-start gap-8 mb-16 md:justify-between md:items-center"
+            >
+              <div className="hidden md:block md:w-5/12 order-1" />
+              <div className="absolute left-0 md:left-1/2 md:-translate-x-1/2 w-14 h-14 bg-app-bg border border-app-primary rounded-full flex items-center justify-center z-10 shadow-[0_0_15px_rgba(var(--app-primary-rgb),0.3)] order-1 md:order-2">
+                <Zap className="text-app-primary" size={24} />
+              </div>
+              <div className="md:w-5/12 md:text-left order-2 md:order-3 ml-16 md:ml-0">
+                <h3 className="text-2xl font-bold text-app-text mb-2">2. Instant AI Analysis</h3>
+                <p className="text-app-text-muted leading-relaxed">Our advanced AI breaks down your speaking and writing word by word, highlighting exact areas to improve.</p>
+              </div>
+            </motion.div>
+
+            {/* Step 3 */}
+            <motion.div 
+              initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }}
+              className="relative flex items-start gap-8 md:justify-between md:items-center"
+            >
+              <div className="md:w-5/12 md:text-right order-2 md:order-1 ml-16 md:ml-0">
+                <h3 className="text-2xl font-bold text-app-text mb-2">3. Achieve Your Target</h3>
+                <p className="text-app-text-muted leading-relaxed">Focus on your weak points with our targeted practice exercises and crush the real exam.</p>
+              </div>
+              <div className="absolute left-0 md:left-1/2 md:-translate-x-1/2 w-14 h-14 bg-app-bg border border-app-primary rounded-full flex items-center justify-center z-10 shadow-[0_0_15px_rgba(var(--app-primary-rgb),0.3)] order-1 md:order-2">
+                <Target className="text-app-primary" size={24} />
+              </div>
+              <div className="hidden md:block md:w-5/12 order-3" />
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Grid */}
       <section className="relative z-10 py-32 px-6 bg-app-bg">
         <div className="max-w-7xl mx-auto">
@@ -458,6 +564,87 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           <StatItem value="22k+" label="Practice Tasks" />
           <StatItem value="15k+" label="Active Ninjas" />
           <StatItem value="24/7" label="AI Support" />
+        </div>
+      </section>
+
+      {/* Testimonials Grid */}
+      <section className="relative z-10 py-32 px-6 bg-app-bg">
+        <div className="max-w-7xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Success Stories</p>
+            <h3 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">Join 15,000+ Successful Ninjas</h3>
+          </motion.div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { name: "Sarah L.", score: "90", text: "PTE Ninja's AI feedback is incredibly accurate. It identified my speaking flaws perfectly!" },
+              { name: "Ahmed K.", score: "79", text: "I struggled with Writing for months. The instant essay scoring here changed everything." },
+              { name: "Jessica T.", score: "85", text: "The mock tests are identical to the real exam. Felt so confident on test day." },
+              { name: "Raj P.", score: "65+", text: "Got my target score within 2 weeks of using the daily practice tools." },
+              { name: "Maria S.", score: "88", text: "The vocabulary builder and listening modules are next level. Highly recommend!" },
+              { name: "David W.", score: "82", text: "Best investment I made for my visa process. The interface is beautiful." },
+            ].map((t, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                whileHover={{ y: -5 }}
+                className="p-8 bg-app-surface/30 backdrop-blur-sm border border-app-primary/10 rounded-3xl hover:border-app-primary/30 transition-all"
+              >
+                <div className="flex items-center gap-2 mb-4 text-app-primary">
+                  {[...Array(5)].map((_, j) => <Star key={j} size={16} className="fill-current" />)}
+                </div>
+                <p className="text-app-text-muted mb-6 leading-relaxed">"{t.text}"</p>
+                <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-app-primary to-app-accent rounded-full flex items-center justify-center text-app-bg font-bold text-sm">
+                      {t.name.charAt(0)}
+                    </div>
+                    <div className="font-bold text-app-text text-sm">{t.name}</div>
+                  </div>
+                  <div className="text-xs font-bold text-app-primary bg-app-primary/10 px-3 py-1 rounded-full">
+                    Score: {t.score}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="relative z-10 py-32 px-6 border-t border-app-border">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-app-primary/5" />
+        <div className="max-w-4xl mx-auto relative">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="p-12 md:p-16 bg-gradient-to-br from-app-surface to-app-bg border border-app-primary/30 rounded-[3rem] text-center shadow-[0_0_50px_rgba(var(--app-primary-rgb),0.15)] relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1/2 bg-app-primary/20 blur-[100px] rounded-full pointer-events-none" />
+            <h2 className="text-4xl md:text-6xl font-black text-app-text tracking-tighter mb-6 relative z-10">
+              Ready to crush the PTE?
+            </h2>
+            <p className="text-xl text-app-text-muted mb-10 max-w-2xl mx-auto relative z-10">
+              Join thousands of students who achieved their target scores with our AI-powered platform.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative z-10">
+              <button 
+                onClick={onLogin}
+                className="group flex items-center justify-center gap-3 w-full sm:w-auto px-12 py-5 bg-app-primary text-app-bg font-bold text-xl rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.4)]"
+              >
+                Get Started Now
+                <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </motion.div>
         </div>
       </section>
 
