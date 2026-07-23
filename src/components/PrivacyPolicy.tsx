@@ -42,7 +42,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Introduction</h2>
             <p>
-              Welcome to Ninja PTE Prep ("we," "our," or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
+              Welcome to Ninja PTE Prep, a product of AI Geek Advisor Pvt. Ltd. ("we," "our," or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
             </p>
           </section>
 

@@ -504,7 +504,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           </div>
 
           <div className="pt-12 border-t border-app-border flex flex-col md:flex-row items-center justify-between gap-6">
-            <p className="text-xs text-app-text-muted/30">All rights reserved © PTE Ninja, 2026</p>
+            <p className="text-xs text-app-text-muted/30">All rights reserved © AI Geek Advisor Pvt. Ltd., 2026</p>
             
             <a 
               href="https://www.aigeekadvisor.com/" 
