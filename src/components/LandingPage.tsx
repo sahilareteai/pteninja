@@ -224,19 +224,19 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             </p>
             <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12 relative z-10">
               <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
-                <span className="text-4xl filter drop-shadow-md">🇦🇺</span>
+                <img src="https://flagcdn.com/au.svg" alt="Australia" className="w-8 drop-shadow-md rounded-sm" />
                 <span className="font-bold text-app-text uppercase tracking-widest text-xs">Australia</span>
               </div>
               <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
-                <span className="text-4xl filter drop-shadow-md">🇬🇧</span>
+                <img src="https://flagcdn.com/gb.svg" alt="UK" className="w-8 drop-shadow-md rounded-sm" />
                 <span className="font-bold text-app-text uppercase tracking-widest text-xs">UK</span>
               </div>
               <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
-                <span className="text-4xl filter drop-shadow-md">🇨🇦</span>
+                <img src="https://flagcdn.com/ca.svg" alt="Canada" className="w-8 drop-shadow-md rounded-sm" />
                 <span className="font-bold text-app-text uppercase tracking-widest text-xs">Canada</span>
               </div>
               <div className="flex items-center gap-3 bg-app-surface/50 px-4 py-2 rounded-2xl border border-white/5 shadow-sm">
-                <span className="text-4xl filter drop-shadow-md">🇳🇿</span>
+                <img src="https://flagcdn.com/nz.svg" alt="New Zealand" className="w-8 drop-shadow-md rounded-sm" />
                 <span className="font-bold text-app-text uppercase tracking-widest text-xs">New Zealand</span>
               </div>
             </div>
