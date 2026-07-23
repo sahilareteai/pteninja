@@ -54,6 +54,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               <li>Use our practice tools (Voice recordings for speaking tasks, text for writing tasks).</li>
               <li>Set study goals and target scores.</li>
               <li>Make purchases or subscribe to our plans.</li>
+              <li>Visit our platform (IP address is processed temporarily for regional localization, such as displaying the correct currency).</li>
             </ul>
           </section>
 
@@ -65,6 +66,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               <li>Analyze your performance using AI to provide feedback.</li>
               <li>Personalize your study roadmap.</li>
               <li>Process your payments and manage your subscription.</li>
+              <li>Determine your region to display localized pricing.</li>
               <li>Communicate with you about updates or support.</li>
             </ul>
           </section>
@@ -110,7 +112,8 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Google Firebase & Authentication:</strong> Securely hosts our application and manages user identity.</li>
               <li><strong>Google Gemini AI:</strong> Processes text and audio for scoring and feedback. Data is ephemeral and not used to train base models.</li>
-              <li><strong>Stripe:</strong> Securely handles all payment processing. We never store or transmit your raw credit card information on our servers.</li>
+              <li><strong>Razorpay & Stripe:</strong> Securely handles all payment processing. We never store or transmit your raw credit card information on our servers.</li>
+              <li><strong>IP API (ipapi.co):</strong> Processes IP addresses in real-time to determine your general region for localizing currency display. We do not store this IP data.</li>
             </ul>
           </section>
 

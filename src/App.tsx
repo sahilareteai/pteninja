@@ -2248,16 +2248,15 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
       const receiptEmail = (emailInput || user?.email || "").trim() || undefined;
       const _subToken = await auth.currentUser?.getIdToken().catch(() => null);
-      const response = await fetch('/api/create-subscription', {
+      const response = await fetch('/api/create-razorpay-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(_subToken ? { Authorization: `Bearer ${_subToken}` } : {}) },
         body: JSON.stringify({ 
           planId: plan.id,
           planName: plan.name,
-          amount: amountInCents,
-          currency: currency.code.toLowerCase(),
+          amount: amountInCents / 100,
+          currency: currency.code,
           email: receiptEmail,
-          existingCustomerId: user?.stripeCustomerId || undefined,
           promoCode: appliedPromo?.code || undefined,
         }),
       });
@@ -2281,16 +2280,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         toast.error(errorMessage);
         return;
       }
-      
       const data = await response.json();
-      if (data.clientSecret) {
-        setClientSecret(data.clientSecret);
-        setPendingSubscriptionId(data.subscriptionId ?? null);
-        setPendingCustomerId(data.customerId ?? null);
-        setPendingPeriodEnd(data.currentPeriodEnd ?? null);
+      if (data.id) {
+        setClientSecret(data.id);
       } else if (data.immediatelyActive) {
-        // Returning customer: Stripe auto-charged via their saved payment method.
-        // No frontend card form needed — update Firestore directly.
         setPendingSubscriptionId(data.subscriptionId ?? null);
         setPendingCustomerId(data.customerId ?? null);
         setPendingPeriodEnd(data.currentPeriodEnd ?? null);
@@ -2520,7 +2513,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             <>
               <div className="w-full bg-gradient-to-r from-orange-500/20 via-red-500/20 to-orange-500/20 border border-orange-500/30 rounded-2xl p-4 mb-2 flex items-center justify-center gap-3 animate-pulse">
                 <div className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">Limited Time</div>
-                <p className="text-orange-400 font-bold text-sm tracking-wide">SPECIAL RAMADAN & EASTER OFFER: SAVE UP TO 50%!</p>
+                <p className="text-orange-400 font-bold text-sm tracking-wide">SPECIAL OFFER: SAVE UP TO 50%!</p>
               </div>
 
               <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
@@ -2647,59 +2640,23 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               </div>
 
               {clientSecret ? (
-                stripePromise ? (
-                  <Elements 
-                    stripe={stripePromise} 
-                    options={{ 
-                      clientSecret,
-                      appearance: {
-                        theme: isDarkMode ? 'night' : 'stripe',
-                        variables: {
-                          colorPrimary: isDarkMode ? '#45A29E' : '#0D9488',
-                          colorBackground: isDarkMode ? '#1F2833' : '#FFFFFF',
-                          colorText: isDarkMode ? '#C5C6C7' : '#0F172A',
-                          colorDanger: '#df1b41',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          spacingUnit: '4px',
-                          borderRadius: '12px',
-                        },
-                      }
-                    }}
-                  >
-                    <CheckoutForm 
-                      amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
-                      clientSecret={clientSecret}
-                      isSubscription={true}
-                      onCancel={() => {
-                        setSelectedPlan(null);
-                        setClientSecret(null);
-                      }}
-                      onSuccess={async () => {
-                        try {
-                          await handlePaymentSuccess();
-                        } catch (e) {
-                          console.error("Failed to process payment success:", e);
-                        }
-                      }}
-                    />
-                  </Elements>
-                ) : (
-                  <div className="p-6 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-orange-500 text-sm space-y-4">
-                    <div className="flex items-center gap-3 font-bold">
-                      <AlertCircle size={20} />
-                      Payment Gateway Not Configured
-                    </div>
-                    <p className="text-xs text-app-text-muted">
-                      The Stripe publishable key is missing. Please configure <code className="bg-black/30 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> in the environment variables to enable payments.
-                    </p>
-                    <button 
-                      onClick={() => setSelectedPlan(null)}
-                      className="w-full py-2 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors"
-                    >
-                      Go Back
-                    </button>
-                  </div>
-                )
+                <CheckoutForm 
+                  amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
+                  clientSecret={clientSecret}
+                  selectedPlanId={selectedPlan.id}
+                  isSubscription={true}
+                  onCancel={() => {
+                    setSelectedPlan(null);
+                    setClientSecret(null);
+                  }}
+                  onSuccess={async () => {
+                    try {
+                      await handlePaymentSuccess();
+                    } catch (e) {
+                      console.error("Payment success error", e);
+                    }
+                  }}
+                />
               ) : (
                 <div className="py-20 flex flex-col items-center justify-center space-y-4">
                   <Loader2 className="animate-spin text-app-primary" size={40} />

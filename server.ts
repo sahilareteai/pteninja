@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Stripe from "stripe";
+import Razorpay from "razorpay";
 import dotenv from "dotenv";
 import { cert, getApps, initializeApp as initAdminApp } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -783,6 +784,18 @@ const getStripe = () => {
   return stripe;
 };
 
+// Lazy Razorpay initialization
+let razorpayInstance: any = null;
+const getRazorpay = () => {
+  if (!razorpayInstance && process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpayInstance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpayInstance;
+};
+
 // Lazy Firebase Admin initialization
 // FIREBASE_DATABASE_ID defaults to the project's custom database (same value as in firebase-applet-config.json)
 const FIREBASE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID ?? "pteninja-prod";
@@ -992,7 +1005,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV, vercel: !!process.env.VERCEL });
 });
 
-// ─── Create Subscription ───────────────────────────────────────────────────────
+// ─── Create Subscription (Legacy Stripe) ───────────────────────────────────────────────────────
 // Creates a Stripe Customer (if needed) and a Subscription.
 // Card details are stored securely by Stripe (PCI DSS Level 1 certified).
 // We never receive or store raw card data.
@@ -2737,6 +2750,163 @@ function createMailTransport() {
 
   return null;
 }
+
+// ─── Admin Emails ─────────────────────────────────────────────────────────────
+app.post("/api/admin/send-email", async (req, res) => {
+  const authResult = await requireAuth(req, res, { requireAdmin: true });
+  if (!authResult) return;
+
+  const { to, subject, body } = req.body;
+  if (!to || !subject || !body) return res.status(400).json({ error: "Missing email details" });
+
+  const transporter = createTransporter();
+  if (!transporter) return res.status(500).json({ error: "SMTP not configured" });
+
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
+      to,
+      subject,
+      text: body,
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Failed to send email:", error);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+app.post("/api/admin/trigger-migration-emails", async (req, res) => {
+  const authResult = await requireAuth(req, res, { requireAdmin: true });
+  if (!authResult) return;
+
+  const transporter = createTransporter();
+  if (!transporter) return res.status(500).json({ error: "SMTP not configured" });
+
+  try {
+    const db = authResult.adminInstance.firestore();
+    const usersSnapshot = await db.collection("users").where("subscriptionStatus", "==", "active").get();
+    
+    let sentCount = 0;
+    const batch = [];
+    
+    for (const doc of usersSnapshot.docs) {
+      const data = doc.data();
+      if (!data.paymentProvider || data.paymentProvider === "stripe") {
+        const emailBody = `Important: Please update your payment method\n\nWe are transitioning to a new secure payment provider to give you a better experience. To continue your PTE Ninja subscription seamlessly, please login to your account and update your payment method before your next renewal date.\n\nThank you,\nThe PTE Ninja Team`;
+        
+        if (data.email) {
+          batch.push(
+            transporter.sendMail({
+              from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
+              to: data.email,
+              subject: "Important: Update your PTE Ninja Payment Method",
+              text: emailBody,
+            }).then(() => { sentCount++; }).catch(e => console.error("Failed to send to", data.email, e))
+          );
+        }
+      }
+    }
+    
+    await Promise.all(batch);
+    res.json({ success: true, sentCount });
+  } catch (error: any) {
+    console.error("Migration email error:", error);
+    res.status(500).json({ error: "Failed to trigger emails" });
+  }
+});
+
+// ─── Razorpay Endpoints ───────────────────────────────────────────────────────
+app.post("/api/create-razorpay-order", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
+  const rzp = getRazorpay();
+  if (!rzp) {
+    return res.status(500).json({ error: "Razorpay is not configured on the server." });
+  }
+
+  const { planId, amount, currency = "INR" } = req.body;
+  if (!planId || !amount || amount <= 0) {
+    return res.status(400).json({ error: "Invalid plan or amount" });
+  }
+
+  const recurring = PLAN_INTERVALS[planId];
+  if (!recurring) {
+    return res.status(400).json({ error: "Unknown plan ID" });
+  }
+
+  try {
+    const options = {
+      amount: Math.round(amount * 100), // Amount in smallest unit (paise)
+      currency,
+      receipt: `rcptid_${authResult.decodedToken.uid.slice(0, 10)}_${Date.now()}`,
+      notes: {
+        planId,
+        uid: authResult.decodedToken.uid,
+      }
+    };
+    
+    const order = await rzp.orders.create(options);
+    res.json(order);
+  } catch (error: any) {
+    console.error("Razorpay Order Error:", error);
+    res.status(500).json({ error: error.message || "Failed to create order" });
+  }
+});
+
+app.post("/api/verify-razorpay-payment", subscriptionLimiter, async (req, res) => {
+  const authResult = await requireAuth(req, res);
+  if (!authResult) return;
+
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId } = req.body;
+  
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !planId) {
+    return res.status(400).json({ error: "Missing verification data" });
+  }
+
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret) return res.status(500).json({ error: "Razorpay secret missing" });
+
+  const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const expectedSignature = createHmac("sha256", secret).update(body).digest("hex");
+
+  if (expectedSignature === razorpay_signature) {
+    try {
+      const db = authResult.adminInstance.firestore();
+      const userRef = db.collection("users").doc(authResult.decodedToken.uid);
+      
+      const recurring = PLAN_INTERVALS[planId];
+      if (!recurring) return res.status(400).json({ error: "Unknown plan ID" });
+      
+      const now = new Date();
+      if (recurring.interval === 'month') {
+        now.setMonth(now.getMonth() + recurring.interval_count);
+      } else if (recurring.interval === 'year') {
+        now.setFullYear(now.getFullYear() + recurring.interval_count);
+      } else if (recurring.interval === 'day') {
+        now.setDate(now.getDate() + recurring.interval_count);
+      } else if (recurring.interval === 'week') {
+        now.setDate(now.getDate() + (recurring.interval_count * 7));
+      }
+      
+      await userRef.update({
+        subscriptionStatus: "active",
+        planId,
+        paymentProvider: "razorpay",
+        razorpaySubscriptionId: razorpay_order_id,
+        subscriptionEndsAt: now.toISOString(),
+      });
+      
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed to update user after Razorpay success", error);
+      return res.status(500).json({ error: "Failed to update user profile" });
+    }
+  } else {
+    return res.status(400).json({ error: "Invalid signature" });
+  }
+});
 
 app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   const { userDetails, conversation } = req.body as {

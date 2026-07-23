@@ -505,9 +505,21 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
 
           <div className="pt-12 border-t border-app-border flex flex-col md:flex-row items-center justify-between gap-6">
             <p className="text-xs text-app-text-muted/30">All rights reserved © PTE Ninja, 2026</p>
+            
+            <a 
+              href="https://www.aigeekadvisor.com/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 border-l border-app-border pl-6 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-sm text-app-text-muted font-medium">Developed by</span>
+              <img src="/ai-geek-logo.png" alt="AI Geek Advisor" className="h-8 rounded-[4px] shadow-sm" />
+              <span className="text-lg font-bold text-[#004e82]">AI Geek Advisor</span>
+            </a>
+
             <div className="flex items-center gap-6">
               <span className="text-[10px] font-bold text-app-primary uppercase tracking-widest flex items-center gap-2">
-                <Shield size={12} /> Secure Payments with Stripe
+                <Shield size={12} /> Secure Payments with Razorpay
               </span>
             </div>
           </div>

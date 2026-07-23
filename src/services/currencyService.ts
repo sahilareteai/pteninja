@@ -41,26 +41,37 @@ export class CurrencyService {
       }
       
       if (!this.currentCurrency || this.currentCurrency === SUPPORTED_CURRENCIES.AUD) {
-        // Fallback to browser locale
-        const locale = navigator.language;
-        const currencyMap: Record<string, string> = {
-          'en-GB': 'GBP',
-          'en-AU': 'AUD',
-          'en-CA': 'CAD',
-          'en-SG': 'SGD',
-          'en-IN': 'INR',
-          'hi-IN': 'INR',
-          'de-DE': 'EUR',
-          'fr-FR': 'EUR',
-          'it-IT': 'EUR',
-          'es-ES': 'EUR',
-          'zh-CN': 'CNY',
-          'ja-JP': 'JPY',
-        };
+        // Fallback to Timezone
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        
+        if (timeZone.startsWith('Australia/')) {
+          this.currentCurrency = SUPPORTED_CURRENCIES.AUD;
+        } else if (timeZone.startsWith('Europe/London')) {
+          this.currentCurrency = SUPPORTED_CURRENCIES.GBP;
+        } else if (timeZone.startsWith('Asia/Kolkata') || timeZone.startsWith('Asia/Calcutta')) {
+          this.currentCurrency = SUPPORTED_CURRENCIES.INR;
+        } else {
+          // Fallback to browser locale
+          const locale = navigator.language;
+          const currencyMap: Record<string, string> = {
+            'en-GB': 'GBP',
+            'en-AU': 'AUD',
+            'en-CA': 'CAD',
+            'en-SG': 'SGD',
+            'en-IN': 'INR',
+            'hi-IN': 'INR',
+            'de-DE': 'EUR',
+            'fr-FR': 'EUR',
+            'it-IT': 'EUR',
+            'es-ES': 'EUR',
+            'zh-CN': 'CNY',
+            'ja-JP': 'JPY',
+          };
 
-        const detectedCode = currencyMap[locale];
-        if (detectedCode && SUPPORTED_CURRENCIES[detectedCode]) {
-          this.currentCurrency = SUPPORTED_CURRENCIES[detectedCode];
+          const detectedCode = currencyMap[locale];
+          if (detectedCode && SUPPORTED_CURRENCIES[detectedCode]) {
+            this.currentCurrency = SUPPORTED_CURRENCIES[detectedCode];
+          }
         }
       }
 

@@ -19,6 +19,7 @@ import {
   BarChart3,
   TrendingUp,
   MessageSquare,
+  Mail,
   Key,
   Activity,
   Zap,
@@ -98,6 +99,13 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Email modal state
+  const [selectedEmailUser, setSelectedEmailUser] = useState<AdminUser | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isSendingMigrationEmails, setIsSendingMigrationEmails] = useState(false);
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
@@ -919,6 +927,36 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         <RefreshCw size={14} />
                         Refresh
                       </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm("Are you sure you want to trigger migration emails to ALL paid Stripe users? This will be done once.")) return;
+                          setIsSendingMigrationEmails(true);
+                          try {
+                            const token = await auth.currentUser?.getIdToken();
+                            const res = await fetch('/api/admin/trigger-migration-emails', {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${token}` }
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              toast.success(`Successfully sent ${data.successCount} migration emails`);
+                            } else {
+                              toast.error(data.error || "Failed to send migration emails");
+                            }
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Failed to trigger migration emails");
+                          } finally {
+                            setIsSendingMigrationEmails(false);
+                          }
+                        }}
+                        disabled={isSendingMigrationEmails}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-blue-500/20 rounded-xl text-blue-400 hover:text-blue-500 hover:border-blue-500/40 transition-all disabled:opacity-50"
+                        title="Send migration emails to Stripe users"
+                      >
+                        {isSendingMigrationEmails ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                        Trigger Migration Emails
+                      </button>
                       {guestCount > 0 && (
                         <button
                           onClick={handlePurgeStaleGuests}
@@ -1009,6 +1047,13 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                             </td>
                             <td className="px-4 py-4">
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setSelectedEmailUser(user)}
+                                  className="p-2 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"
+                                  title="Send Email"
+                                >
+                                  <Mail size={16} />
+                                </button>
                                 <button
                                   onClick={() => setSelectedUser(user)}
                                   className="p-2 rounded-xl bg-app-primary/10 text-app-primary hover:bg-app-primary/20 transition-all"
@@ -1681,6 +1726,127 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
               >
                 {isOverridingSubscription ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                 Confirm Changes
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      {/* Send Email Modal */}
+      {selectedEmailUser && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface border border-app-primary/20 rounded-2xl p-6 w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500">
+                <Mail size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-app-text">Send Email</h3>
+                <p className="text-xs text-app-text-muted">To: {selectedEmailUser.email}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Templates</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setEmailSubject('Payment Gateway Updated to Razorpay');
+                      setEmailBody(`Hi ${selectedEmailUser.displayName || 'there'},\n\nWe have updated our payment gateway from Stripe to Razorpay to provide a smoother checkout experience. As part of this transition, your existing subscription will continue until its expiry date.\n\nThank you for learning with PTENinja!`);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-app-bg border border-app-primary/20 rounded-lg hover:border-app-primary/50 transition-colors text-app-text"
+                  >
+                    Payment Update
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEmailSubject('Sorry for the inconvenience caused');
+                      setEmailBody(`Hi ${selectedEmailUser.displayName || 'there'},\n\nWe recently experienced some maintenance issues on our platform. We sincerely apologize for any inconvenience this may have caused you.\n\nEverything is fully operational now, and you should be able to browse smoothly.\n\nHappy Learning!`);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-app-bg border border-app-primary/20 rounded-lg hover:border-app-primary/50 transition-colors text-app-text"
+                  >
+                    Maintenance Issue
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Subject</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email subject..."
+                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5 flex-1 flex flex-col">
+                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Message</label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  placeholder="Type your message here..."
+                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-3 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors resize-none h-40"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-6 mt-auto border-t border-app-primary/10">
+              <button
+                onClick={() => setSelectedEmailUser(null)}
+                disabled={isSendingEmail}
+                className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!emailSubject || !emailBody) {
+                    toast.error("Please enter a subject and a message.");
+                    return;
+                  }
+                  setIsSendingEmail(true);
+                  try {
+                    const token = await auth.currentUser?.getIdToken();
+                    const res = await fetch('/api/admin/send-email', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        to: selectedEmailUser.email,
+                        subject: emailSubject,
+                        html: emailBody.replace(/\\n/g, '<br/>')
+                      })
+                    });
+                    
+                    if (res.ok) {
+                      toast.success("Email sent successfully!");
+                      setSelectedEmailUser(null);
+                      setEmailSubject('');
+                      setEmailBody('');
+                    } else {
+                      const errData = await res.json();
+                      toast.error(errData.error || "Failed to send email");
+                    }
+                  } catch (err) {
+                    console.error("Error sending email:", err);
+                    toast.error("Failed to send email");
+                  } finally {
+                    setIsSendingEmail(false);
+                  }
+                }}
+                disabled={isSendingEmail || !emailSubject || !emailBody}
+                className="flex items-center gap-2 bg-blue-500 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-blue-600 transition-all disabled:opacity-50"
+              >
+                {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                Send Email
               </button>
             </div>
           </motion.div>

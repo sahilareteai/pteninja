@@ -1,96 +1,108 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSubscription } from './SubscriptionProvider';
-import {
-  PaymentElement,
-  useStripe,
-  useElements
-} from '@stripe/react-stripe-js';
-import { Loader2, ShieldCheck, AlertCircle, ExternalLink } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { auth } from '../firebase';
 
-export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess, isSubscription = true }: { amount: number, clientSecret: string, onCancel: () => void, onSuccess: () => void, isSubscription?: boolean }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const { formatPrice } = useSubscription();
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
+export function CheckoutForm({ amount, clientSecret: orderId, selectedPlanId, onCancel, onSuccess, isSubscription = true }: { amount: number, clientSecret: string, selectedPlanId: string, onCancel: () => void, onSuccess: () => void, isSubscription?: boolean }) {
+  const { formatPrice, currency } = useSubscription();
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [manualRedirectUrl, setManualRedirectUrl] = useState<string | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    const loadRazorpay = () => {
+      if (window.Razorpay) {
+        setScriptLoaded(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => setScriptLoaded(true);
+      script.onerror = () => setMessage("Failed to load payment gateway. Please check your internet connection.");
+      document.body.appendChild(script);
+    };
+    loadRazorpay();
+  }, []);
 
-    if (!stripe || !elements) {
+  const handlePayment = async () => {
+    if (!scriptLoaded || !window.Razorpay) {
+      setMessage("Payment gateway is still loading. Please wait a moment.");
       return;
     }
 
     setIsLoading(true);
     setMessage(null);
-    setManualRedirectUrl(null);
 
-    try {
-      const result = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.origin,
-        },
-        redirect: 'if_required'
-      });
+    const _subToken = await auth.currentUser?.getIdToken().catch(() => null);
 
-      if (result.error) {
-        if (result.error.type === "card_error" || result.error.type === "validation_error") {
-          setMessage(result.error.message || "An error occurred");
-        } else {
-          setMessage(result.error.message || "An unexpected error occurred.");
-        }
-      } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-        onSuccess();
-      } else if (result.paymentIntent && result.paymentIntent.status === 'requires_action') {
-        if (result.paymentIntent.next_action?.redirect_to_url?.url) {
-          setManualRedirectUrl(result.paymentIntent.next_action.redirect_to_url.url);
-          setMessage("Your bank requires additional verification.");
-        }
-      }
-    } catch (error: any) {
-      console.error("Stripe confirmation error:", error);
-      
-      // Handle the specific iframe navigation error and its variations
-      const errorMessage = error.message || "";
-      const isNavigationError = 
-        errorMessage.includes("permission to navigate") || 
-        errorMessage.includes("set a named property 'href'") ||
-        error.name === "SecurityError" ||
-        errorMessage.includes("Location.href");
-
-      if (isNavigationError) {
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID || "",
+      amount: Math.round(amount * 100),
+      currency: currency.code,
+      name: "PTE Ninja",
+      description: isSubscription ? "Subscription Upgrade" : "Payment",
+      order_id: orderId,
+      handler: async function (response: any) {
         try {
-          // Try to retrieve the payment intent to get the redirect URL
-          const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecret);
-          if (paymentIntent?.next_action?.redirect_to_url?.url) {
-            setManualRedirectUrl(paymentIntent.next_action.redirect_to_url.url);
-            setMessage("Your bank requires additional verification. A security restriction in the preview prevented an automatic redirect. Please use the button below to complete the payment in a new tab.");
-          } else if (paymentIntent?.status === 'succeeded') {
+          const verifyRes = await fetch('/api/verify-razorpay-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(_subToken ? { Authorization: `Bearer ${_subToken}` } : {}) },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              planId: selectedPlanId,
+            })
+          });
+          const verifyData = await verifyRes.json();
+          if (verifyRes.ok && verifyData.success) {
             onSuccess();
           } else {
-            setMessage("A security restriction in the preview prevented the payment redirect. Please try opening the app in a new tab (using the icon in the top right) to complete the purchase.");
+            setMessage(verifyData.error || "Payment verification failed.");
+            setIsLoading(false);
           }
-        } catch (retrieveError) {
-          console.error("Error retrieving payment intent:", retrieveError);
-          setMessage("A security restriction in the preview prevented the payment redirect. Please try opening the app in a new tab to complete the purchase.");
+        } catch (err) {
+          console.error("Verification error", err);
+          setMessage("An error occurred during payment verification.");
+          setIsLoading(false);
         }
-      } else {
-        setMessage(error.message || "An error occurred while processing your payment. Please try again.");
+      },
+      modal: {
+        ondismiss: function() {
+          setIsLoading(false);
+        }
+      },
+      prefill: {
+        email: auth.currentUser?.email || "",
+      },
+      theme: {
+        color: "#45A29E"
       }
-    }
+    };
 
-    setIsLoading(false);
+    try {
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any){
+        setMessage(response.error.description || "Payment failed.");
+        setIsLoading(false);
+      });
+      rzp.open();
+    } catch (e: any) {
+      console.error(e);
+      setMessage("Failed to open payment gateway.");
+      setIsLoading(false);
+    }
   };
 
   return (
-    <form id="payment-form" onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-[#0B0C10] p-6 rounded-2xl border border-[#45A29E]/20">
-        <PaymentElement id="payment-element" options={{ layout: 'tabs' }} />
-      </div>
-      
+    <div className="space-y-6">
       {message && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm">
           <AlertCircle size={18} className="shrink-0" />
@@ -98,35 +110,22 @@ export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess, isSubs
         </div>
       )}
 
-      {manualRedirectUrl && (
-        <a
-          href={manualRedirectUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full py-4 bg-[#66FCF1] text-[#0B0C10] font-bold rounded-xl hover:bg-white transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(102,252,241,0.3)]"
-        >
-          <ExternalLink size={20} />
-          Complete Verification
-        </a>
-      )}
-
       <div className="flex flex-col gap-3">
-        {!manualRedirectUrl && (
-          <button
-            disabled={isLoading || !stripe || !elements}
-            id="submit"
-            className="w-full py-4 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(69,162,158,0.2)]"
-          >
-            {isLoading ? (
-              <Loader2 className="animate-spin" size={20} />
-            ) : (
-              <>
-                <ShieldCheck size={20} />
-                {isSubscription ? `Subscribe — ${formatPrice(amount)}` : `Pay ${formatPrice(amount)} Now`}
-              </>
-            )}
-          </button>
-        )}
+        <button
+          onClick={handlePayment}
+          disabled={isLoading || !scriptLoaded}
+          className="w-full py-4 bg-[#45A29E] text-[#0B0C10] font-bold rounded-xl hover:bg-[#66FCF1] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(69,162,158,0.2)]"
+        >
+          {isLoading ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : (
+            <>
+              <ShieldCheck size={20} />
+              {isSubscription ? `Subscribe — ${formatPrice(amount)}` : `Pay ${formatPrice(amount)} Now`}
+            </>
+          )}
+        </button>
+
         <button
           type="button"
           onClick={onCancel}
@@ -139,13 +138,13 @@ export function CheckoutForm({ amount, clientSecret, onCancel, onSuccess, isSubs
       {isSubscription && (
         <p className="text-[10px] text-[#C5C6C7]/40 text-center leading-relaxed">
           Your subscription renews automatically. You can cancel anytime from your account.
-          Card details are stored securely by Stripe — PTENinja never sees your card number.
+          Card details are stored securely — PTENinja never sees your card number.
         </p>
       )}
       
       <p className="text-[10px] text-[#C5C6C7]/30 text-center uppercase tracking-widest">
-        Secure encrypted payment powered by Stripe
+        Secure encrypted payment powered by Razorpay
       </p>
-    </form>
+    </div>
   );
 }
