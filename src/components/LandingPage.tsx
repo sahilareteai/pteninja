@@ -224,14 +224,16 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       </header>
 
       {/* Infinite Marquee Section */}
-      <section className="relative z-10 py-10 border-y border-white/[0.03] bg-black/10 backdrop-blur-sm overflow-hidden flex items-center">
-        <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-app-bg to-transparent z-10" />
-        <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-app-bg to-transparent z-10" />
-        <motion.div 
-          className="flex whitespace-nowrap gap-16 md:gap-32 items-center px-8"
-          animate={{ x: [0, -2000] }}
-          transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
-        >
+      <section className="relative z-10 py-10 border-y border-white/[0.03] bg-black/10 backdrop-blur-sm overflow-hidden flex flex-col items-center">
+        <p className="text-[10px] font-bold text-app-text-muted uppercase tracking-[0.2em] mb-6 text-center">PTE scores accepted by top universities including:</p>
+        <div className="relative w-full flex items-center">
+          <div className="absolute left-0 top-0 w-32 h-full bg-gradient-to-r from-app-bg to-transparent z-10" />
+          <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-app-bg to-transparent z-10" />
+          <motion.div 
+            className="flex whitespace-nowrap gap-16 md:gap-32 items-center px-8"
+            animate={{ x: [0, -2000] }}
+            transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
+          >
           {/* Repeat twice for seamless infinite scroll */}
           {[...Array(2)].map((_, i) => (
             <React.Fragment key={i}>
@@ -242,7 +244,8 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               <div className="flex items-center gap-3 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-default"><Award size={24} className="text-app-text"/><span className="text-xl font-bold text-app-text tracking-wide uppercase">Australian National University</span></div>
             </React.Fragment>
           ))}
-        </motion.div>
+          </motion.div>
+        </div>
       </section>
 
       {/* Global Opportunities Section */}
@@ -581,12 +584,9 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { name: "Sarah L.", score: "90", text: "PTE Ninja's AI feedback is incredibly accurate. It identified my speaking flaws perfectly!" },
-              { name: "Ahmed K.", score: "79", text: "I struggled with Writing for months. The instant essay scoring here changed everything." },
-              { name: "Jessica T.", score: "85", text: "The mock tests are identical to the real exam. Felt so confident on test day." },
-              { name: "Raj P.", score: "65+", text: "Got my target score within 2 weeks of using the daily practice tools." },
-              { name: "Maria S.", score: "88", text: "The vocabulary builder and listening modules are next level. Highly recommend!" },
-              { name: "David W.", score: "82", text: "Best investment I made for my visa process. The interface is beautiful." },
+              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
+              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
+              { name: "[Student Name]", score: "[Score]", text: "[Important: Replace this placeholder with a genuine review from a real user of your platform. Using fake or generated reviews is against consumer protection laws.]" },
             ].map((t, i) => (
               <motion.div 
                 key={i}
