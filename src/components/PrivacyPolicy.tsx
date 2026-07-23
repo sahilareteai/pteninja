@@ -35,14 +35,14 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               Independent Status Disclaimer
             </h2>
             <p className="text-app-text font-semibold italic">
-              Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+              PTE Ninja is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Introduction</h2>
             <p>
-              Welcome to Ninja PTE Prep, a product of AI Geek Advisor Pvt. Ltd. ("we," "our," or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
+              Welcome to PTE Ninja, a product of AI Geek Advisor Pvt. Ltd. ("we," "our," or "us"). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
             </p>
           </section>
 

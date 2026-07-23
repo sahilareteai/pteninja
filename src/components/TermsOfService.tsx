@@ -35,21 +35,21 @@ export function TermsOfService({ onBack }: { onBack: () => void }) {
               Independent Status Disclaimer
             </h2>
             <p className="text-app-text font-semibold italic">
-              Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+              PTE Ninja is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Ninja PTE Prep ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service.
+              By accessing or using PTE Ninja ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">2. Use of Service</h2>
             <p>
-              Ninja PTE Prep provides educational tools for PTE Academic preparation. You agree to use the Service only for lawful purposes and in a way that does not infringe the rights of others or restrict their use of the Service.
+              PTE Ninja provides educational tools for PTE Academic preparation. You agree to use the Service only for lawful purposes and in a way that does not infringe the rights of others or restrict their use of the Service.
             </p>
           </section>
 
@@ -70,14 +70,14 @@ export function TermsOfService({ onBack }: { onBack: () => void }) {
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">5. Intellectual Property</h2>
             <p>
-              All content, features, and functionality of the Service are the exclusive property of Ninja PTE Prep and its licensors. You may not reproduce, distribute, or create derivative works from our content without express written permission.
+              All content, features, and functionality of the Service are the exclusive property of PTE Ninja and its licensors. You may not reproduce, distribute, or create derivative works from our content without express written permission.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">6. Limitation of Liability</h2>
             <p>
-              Ninja PTE Prep is provided "as is" without any warranties. We do not guarantee that your use of the Service will result in a specific PTE score. We are not liable for any damages arising from your use of the Service.
+              PTE Ninja is provided "as is" without any warranties. We do not guarantee that your use of the Service will result in a specific PTE score. We are not liable for any damages arising from your use of the Service.
             </p>
           </section>
 

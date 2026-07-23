@@ -4,9 +4,9 @@ export const POLICIES = {
     content: `
       <div class="space-y-4">
         <div class="p-4 bg-app-primary/5 border border-app-primary/10 rounded-xl italic font-semibold text-app-text">
-          Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+          PTE Ninja is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
         </div>
-        <p>The information provided by AI Geek Advisor Pvt. Ltd. (operating as Ninja PTE Prep) ("we," "us," or "our") on our website and mobile application is for general informational purposes only. All information on the Site and our mobile application is provided in good faith, however we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the Site or our mobile application.</p>
+        <p>The information provided by AI Geek Advisor Pvt. Ltd. (operating as PTE Ninja) ("we," "us," or "our") on our website and mobile application is for general informational purposes only. All information on the Site and our mobile application is provided in good faith, however we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the Site or our mobile application.</p>
         
         <p>UNDER NO CIRCUMSTANCE SHALL WE HAVE ANY LIABILITY TO YOU FOR ANY LOSS OR DAMAGE OF ANY KIND INCURRED AS A RESULT OF THE USE OF THE SITE OR OUR MOBILE APPLICATION OR RELIANCE ON ANY INFORMATION PROVIDED ON THE SITE AND OUR MOBILE APPLICATION. YOUR USE OF THE SITE AND OUR MOBILE APPLICATION AND YOUR RELIANCE ON ANY INFORMATION ON THE SITE AND OUR MOBILE APPLICATION IS SOLELY AT YOUR OWN RISK.</p>
         
@@ -19,9 +19,9 @@ export const POLICIES = {
     content: `
       <div class="space-y-4">
         <div class="p-4 bg-app-primary/5 border border-app-primary/10 rounded-xl italic font-semibold text-app-text">
-          Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc.
+          PTE Ninja is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc.
         </div>
-        <p>By accessing or using Ninja PTE Prep, you agree to be bound by these Terms and Conditions. If you disagree with any part of the terms, then you may not access the service.</p>
+        <p>By accessing or using PTE Ninja, you agree to be bound by these Terms and Conditions. If you disagree with any part of the terms, then you may not access the service.</p>
         
         <h3 class="text-app-text font-bold mt-4">1. Accounts</h3>
         <p>When you create an account with us, you must provide information that is accurate, complete, and current at all times. Failure to do so constitutes a breach of the Terms, which may result in immediate termination of your account on our Service.</p>
@@ -44,7 +44,7 @@ export const POLICIES = {
     title: "Privacy Policy",
     content: `
       <div class="space-y-4">
-        <p>At AI Geek Advisor Pvt. Ltd. (operating as Ninja PTE Prep), we are committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our website and mobile application.</p>
+        <p>At AI Geek Advisor Pvt. Ltd. (operating as PTE Ninja), we are committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our website and mobile application.</p>
         
         <h3 class="text-app-text font-bold mt-4">1. Information Collection</h3>
         <p>We collect information you provide directly to us, such as when you create an account, submit practice tasks, or contact support. This includes your name, email address (via Google Auth), and audio/text submissions for AI analysis.</p>
@@ -67,7 +67,7 @@ export const POLICIES = {
     title: "Refund / Cancellation Policy",
     content: `
       <div class="space-y-4">
-        <p>We want you to be satisfied with your experience with AI Geek Advisor Pvt. Ltd. (operating as Ninja PTE Prep). Please review our refund and cancellation policy below.</p>
+        <p>We want you to be satisfied with your experience with AI Geek Advisor Pvt. Ltd. (operating as PTE Ninja). Please review our refund and cancellation policy below.</p>
         
         <h3 class="text-app-text font-bold mt-4">1. Subscriptions</h3>
         <p>Our subscription plans are billed on a recurring basis. You can cancel your subscription at any time through your account settings.</p>

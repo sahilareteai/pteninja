@@ -525,7 +525,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           </div>
           
           <p className="text-[10px] text-app-text-muted/20 text-center mt-8 max-w-2xl mx-auto leading-relaxed italic">
-            Ninja PTE Prep is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
+            PTE Ninja is an independent preparation platform. We are NOT affiliated with, approved by, or endorsed by Pearson PLC or Pearson Education, Inc. "PTE Academic" is a registered trademark of Pearson PLC.
           </p>
         </div>
       </footer>
