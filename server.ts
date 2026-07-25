@@ -2827,8 +2827,8 @@ app.post("/api/create-razorpay-order", subscriptionLimiter, async (req, res) => 
   }
 
   const { planId, amount, currency = "INR" } = req.body;
-  if (!planId || !amount || amount <= 0) {
-    return res.status(400).json({ error: "Invalid plan or amount" });
+  if (!planId || !amount || amount <= 0 || (Math.round(amount * 100) < 100)) {
+    return res.status(400).json({ error: "Invalid plan or amount. Minimum amount is 1 INR (100 paise)." });
   }
 
   const recurring = PLAN_INTERVALS[planId];
@@ -2870,8 +2870,10 @@ app.post("/api/verify-razorpay-payment", subscriptionLimiter, async (req, res) =
 
   const body = razorpay_order_id + "|" + razorpay_payment_id;
   const expectedSignature = createHmac("sha256", secret).update(body).digest("hex");
+  const isSignatureValid = expectedSignature.length === razorpay_signature.length && 
+    timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(razorpay_signature));
 
-  if (expectedSignature === razorpay_signature) {
+  if (isSignatureValid) {
     try {
       const db = authResult.adminInstance.firestore();
       const userRef = db.collection("users").doc(authResult.decodedToken.uid);
