@@ -16,19 +16,12 @@ export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 
-// Connection test
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firestore connection successful.");
-  } catch (error) {
-    console.error("Firestore connection test failed:", error);
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client is reporting as offline.");
-    }
-  }
+// Connection test (Development mode only)
+if (import.meta.env.DEV) {
+  getDocFromServer(doc(db, 'test', 'connection'))
+    .then(() => {})
+    .catch(() => {});
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',
