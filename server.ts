@@ -2892,18 +2892,18 @@ app.post("/api/verify-razorpay-payment", subscriptionLimiter, async (req, res) =
         now.setDate(now.getDate() + (recurring.interval_count * 7));
       }
       
-      await userRef.update({
+      await userRef.set({
         subscriptionStatus: "active",
         planId,
         paymentProvider: "razorpay",
         razorpaySubscriptionId: razorpay_order_id,
         subscriptionEndsAt: now.toISOString(),
-      });
+      }, { merge: true });
       
       return res.json({ success: true });
     } catch (error: any) {
-      console.error("Failed to update user after Razorpay success", error);
-      return res.status(500).json({ error: "Failed to update user profile" });
+      console.error("Failed to update user after Razorpay success:", error);
+      return res.status(500).json({ error: error.message || "Failed to update user profile" });
     }
   } else {
     return res.status(400).json({ error: "Invalid signature" });
