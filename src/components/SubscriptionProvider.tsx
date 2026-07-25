@@ -352,6 +352,52 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
+const formatAuthError = (error: any): string => {
+  if (!error) return "An unexpected error occurred. Please try again.";
+  
+  const code = typeof error === 'object' && error.code ? error.code : '';
+  const rawMessage = typeof error === 'string' ? error : error.message || String(error);
+
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return "An account with this email address already exists. Please sign in instead.";
+    case 'auth/invalid-email':
+      return "Please enter a valid email address.";
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+    case 'auth/user-not-found':
+      return "Incorrect email or password. Please check your details and try again.";
+    case 'auth/weak-password':
+      return "Password is too weak. Please use at least 6 characters with letters and numbers.";
+    case 'auth/user-disabled':
+      return "This account has been disabled. Please contact support.";
+    case 'auth/too-many-requests':
+      return "Too many failed sign-in attempts. Please wait a few minutes or reset your password.";
+    case 'auth/network-request-failed':
+      return "Network error. Please check your internet connection and try again.";
+    case 'auth/invalid-phone-number':
+      return "Please enter a valid mobile number with country code (e.g. +1 234 567 8900).";
+    case 'auth/invalid-verification-code':
+      return "The verification code is incorrect. Please check the 6-digit SMS code and try again.";
+    case 'auth/code-expired':
+      return "The SMS verification code has expired. Please request a new code.";
+    case 'auth/quota-exceeded':
+      return "SMS limit reached. Please try again later or sign in with Email or Google.";
+    case 'auth/popup-closed-by-user':
+      return "Sign-in window was closed before completing authentication.";
+    case 'auth/popup-blocked':
+    case 'auth/cancelled-popup-request':
+      return "Sign-in popup was blocked by your browser. Please allow popups to continue.";
+    default:
+      const cleanMessage = rawMessage
+        .replace(/^Firebase:\s*/i, '')
+        .replace(/Error\s*\(auth\/[^)]+\):?\s*/i, '')
+        .replace(/\(auth\/[^)]+\)/g, '')
+        .trim();
+      return cleanMessage || "Authentication failed. Please check your details and try again.";
+  }
+};
+
   const login = async () => {
     setAuthError(null);
     setInfoMessage(null);
@@ -379,7 +425,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
       setIsAuthenticating(false);
-      setAuthError(error.message || "Google sign-in failed.");
+      setAuthError(formatAuthError(error));
     }
   };
 
@@ -394,7 +440,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         await sendPasswordResetEmail(auth, authEmail.trim());
         setInfoMessage("Password reset email sent! Check your inbox.");
       } catch (err: any) {
-        setAuthError(err.message || "Failed to send password reset email.");
+        setAuthError(formatAuthError(err));
       }
       return;
     }
@@ -407,7 +453,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setShowAuthModal(false);
       } catch (err: any) {
         setIsAuthenticating(false);
-        setAuthError(err.message || "Invalid email or password.");
+        setAuthError(formatAuthError(err));
       }
       return;
     }
@@ -464,7 +510,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setShowAuthModal(false);
       } catch (err: any) {
         setIsAuthenticating(false);
-        setAuthError(err.message || "Failed to create account.");
+        setAuthError(formatAuthError(err));
       }
     }
   };
@@ -486,7 +532,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setInfoMessage("Verification code sent to your phone!");
     } catch (err: any) {
       setIsAuthenticating(false);
-      setAuthError(err.message || "Failed to send SMS OTP. Ensure number includes country code.");
+      setAuthError(formatAuthError(err));
     }
   };
 
@@ -527,7 +573,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setShowAuthModal(false);
     } catch (err: any) {
       setIsAuthenticating(false);
-      setAuthError(err.message || "Invalid OTP verification code.");
+      setAuthError(formatAuthError(err));
     }
   };
 
