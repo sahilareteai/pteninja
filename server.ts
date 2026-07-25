@@ -2756,8 +2756,9 @@ app.post("/api/admin/send-email", async (req, res) => {
   const authResult = await requireAuth(req, res, { requireAdmin: true });
   if (!authResult) return;
 
-  const { to, subject, body } = req.body;
-  if (!to || !subject || !body) return res.status(400).json({ error: "Missing email details" });
+  const { to, subject, body, html } = req.body;
+  const content = html || body;
+  if (!to || !subject || !content) return res.status(400).json({ error: "Missing email details" });
 
   const transporter = createTransporter();
   if (!transporter) return res.status(500).json({ error: "SMTP not configured" });
@@ -2767,12 +2768,12 @@ app.post("/api/admin/send-email", async (req, res) => {
       from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
       to,
       subject,
-      text: body,
+      ...(html ? { html } : { text: content }),
     });
     res.json({ success: true });
   } catch (error: any) {
     console.error("Failed to send email:", error);
-    res.status(500).json({ error: "Failed to send email" });
+    res.status(500).json({ error: error.message || "Failed to send email" });
   }
 });
 

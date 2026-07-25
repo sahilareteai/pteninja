@@ -1822,7 +1822,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       body: JSON.stringify({
                         to: selectedEmailUser.email,
                         subject: emailSubject,
-                        html: emailBody.replace(/\\n/g, '<br/>')
+                        body: emailBody,
+                        html: emailBody.replace(/\n/g, '<br/>')
                       })
                     });
                     
