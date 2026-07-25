@@ -7,6 +7,13 @@ import {
   getRedirectResult,
   signInAnonymously, 
   onAuthStateChanged, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
   User as FirebaseUser 
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc, deleteField } from 'firebase/firestore';
@@ -54,9 +61,6 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  // resource-exhausted means the write stream is temporarily overwhelmed.
-  // The Firebase SDK automatically closes and reopens the stream with exponential
-  // backoff, retrying all queued writes — no action needed from application code.
   if (error instanceof FirebaseError && error.code === 'resource-exhausted') {
     console.warn('Firestore write stream temporarily exhausted; Firebase is retrying automatically.', { operationType, path });
     return;
@@ -84,5 +88,28 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously, doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where, setDoc, addDoc, deleteField };
-export type { FirebaseUser };
+export { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signInAnonymously, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  doc, 
+  getDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  setDoc, 
+  addDoc, 
+  deleteField 
+};
+export type { FirebaseUser, ConfirmationResult };

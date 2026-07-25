@@ -1,10 +1,32 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { auth, db, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously, googleProvider, handleFirestoreError, OperationType, collection, query, where, getDocs } from '../firebase';
+import { 
+  auth, 
+  db, 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signInAnonymously, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+  googleProvider, 
+  handleFirestoreError, 
+  OperationType, 
+  collection, 
+  query, 
+  where, 
+  getDocs 
+} from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut, Loader2 } from 'lucide-react';
+import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
 import { getLocalDateStr } from '../lib/utils';
 import { Logo } from './Logo';
 
@@ -319,11 +341,27 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
   }, []);
 
+  const [authTab, setAuthTab] = useState<'email' | 'phone' | 'google'>('email');
+  const [emailMode, setEmailMode] = useState<'signin' | 'register' | 'forgot'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
+  const [phoneStep, setPhoneStep] = useState<'number' | 'otp'>('number');
+  const [otpCode, setOtpCode] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
   const login = async () => {
+    setAuthError(null);
+    setInfoMessage(null);
+    setShowAuthModal(true);
+  };
+
+  const handleGoogleLogin = async () => {
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError(null);
-    setSessionError(null);
     
     const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     localStorage.setItem('pte_session_id', newSessionId);
@@ -332,7 +370,6 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
-      // If popup is blocked by browser or interrupted, fall back automatically to redirect sign-in
       if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
         try {
           await signInWithRedirect(auth, googleProvider);
@@ -341,30 +378,156 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           console.error("Fallback redirect sign-in error:", redirectErr);
         }
       }
-
       setIsAuthenticating(false);
-      
-      // Handle known Firebase Auth errors gracefully
-      if (error.code === 'auth/popup-closed-by-user') {
-        setAuthError("The sign-in window was closed. Please try again to continue.");
-        return;
-      }
-      
-      if (error.code === 'auth/unauthorized-domain') {
-        const currentDomain = window.location.hostname;
-        setAuthError(`This domain (${currentDomain}) is not authorized for login. Please add it to the 'Authorized domains' list in the Firebase Console (Authentication > Settings > Authorized domains). 
+      setAuthError(error.message || "Google sign-in failed.");
+    }
+  };
 
-Required domains:
-1. ${currentDomain}
-2. ais-dev-hto7hpsjflk4jaqmoohjpi-723280175369.asia-southeast1.run.app
-3. ais-pre-hto7hpsjflk4jaqmoohjpi-723280175369.asia-southeast1.run.app
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setInfoMessage(null);
 
-Console link: https://console.firebase.google.com/project/gen-lang-client-0336907942/authentication/settings`);
-        return;
+    if (emailMode === 'forgot') {
+      if (!authEmail.trim()) return setAuthError("Please enter your email address.");
+      try {
+        await sendPasswordResetEmail(auth, authEmail.trim());
+        setInfoMessage("Password reset email sent! Check your inbox.");
+      } catch (err: any) {
+        setAuthError(err.message || "Failed to send password reset email.");
       }
-      
-      console.error("Login failed:", error);
-      setAuthError("Login failed. Please check your connection and try again.");
+      return;
+    }
+
+    if (emailMode === 'signin') {
+      if (!authEmail.trim() || !authPassword) return setAuthError("Please enter email and password.");
+      setIsAuthenticating(true);
+      try {
+        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        setShowAuthModal(false);
+      } catch (err: any) {
+        setIsAuthenticating(false);
+        setAuthError(err.message || "Invalid email or password.");
+      }
+      return;
+    }
+
+    if (emailMode === 'register') {
+      if (!authName.trim() || !authEmail.trim() || !authPassword) {
+        return setAuthError("Please fill out all required fields.");
+      }
+      if (authPassword.length < 6) {
+        return setAuthError("Password must be at least 6 characters.");
+      }
+      setIsAuthenticating(true);
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const firebaseUser = cred.user;
+        
+        await updateProfile(firebaseUser, { displayName: authName.trim() });
+
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const now = new Date();
+        const trialEnds = new Date();
+        trialEnds.setDate(trialEnds.getDate() + 7);
+
+        const newUser: UserData = {
+          uid: firebaseUser.uid,
+          email: authEmail.trim().toLowerCase(),
+          phoneNumber: authPhone.trim() || null,
+          displayName: authName.trim(),
+          createdAt: now.toISOString(),
+          accessType: 'user',
+          subscriptionStatus: 'trial',
+          trialEndsAt: trialEnds.toISOString(),
+          activityLog: [getLocalDateStr(now)],
+          completedTasks: [],
+          completedTasksDetailed: [],
+          taskScores: {},
+          favoriteWords: [],
+          schedule: [],
+          goals: []
+        };
+
+        await setDoc(userRef, newUser);
+
+        firebaseUser.getIdToken().then(idToken => {
+          fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`,
+            },
+          }).catch(err => console.warn("Failed to trigger welcome email:", err));
+        });
+
+        setShowAuthModal(false);
+      } catch (err: any) {
+        setIsAuthenticating(false);
+        setAuthError(err.message || "Failed to create account.");
+      }
+    }
+  };
+
+  const handleSendPhoneOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    if (!authPhone.trim()) return setAuthError("Please enter a valid phone number with country code (e.g. +1 234 567 8900).");
+
+    setIsAuthenticating(true);
+    try {
+      const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible'
+      });
+      const result = await signInWithPhoneNumber(auth, authPhone.trim(), recaptchaVerifier);
+      setConfirmationResult(result);
+      setPhoneStep('otp');
+      setIsAuthenticating(false);
+      setInfoMessage("Verification code sent to your phone!");
+    } catch (err: any) {
+      setIsAuthenticating(false);
+      setAuthError(err.message || "Failed to send SMS OTP. Ensure number includes country code.");
+    }
+  };
+
+  const handleVerifyPhoneOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    if (!otpCode.trim() || !confirmationResult) return setAuthError("Please enter the 6-digit code.");
+
+    setIsAuthenticating(true);
+    try {
+      const cred = await confirmationResult.confirm(otpCode.trim());
+      const firebaseUser = cred.user;
+
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        const now = new Date();
+        const trialEnds = new Date();
+        trialEnds.setDate(trialEnds.getDate() + 7);
+        const newUser: UserData = {
+          uid: firebaseUser.uid,
+          phoneNumber: firebaseUser.phoneNumber || authPhone.trim(),
+          displayName: `Ninja ${firebaseUser.phoneNumber?.slice(-4) || 'User'}`,
+          createdAt: now.toISOString(),
+          accessType: 'user',
+          subscriptionStatus: 'trial',
+          trialEndsAt: trialEnds.toISOString(),
+          activityLog: [getLocalDateStr(now)],
+          completedTasks: [],
+          completedTasksDetailed: [],
+          taskScores: {},
+          favoriteWords: [],
+          schedule: [],
+          goals: []
+        };
+        await setDoc(userRef, newUser);
+      }
+      setShowAuthModal(false);
+    } catch (err: any) {
+      setIsAuthenticating(false);
+      setAuthError(err.message || "Invalid OTP verification code.");
     }
   };
 
@@ -660,6 +823,315 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
                   Dismiss
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Multi-Option Auth Modal */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div id="recaptcha-container"></div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden relative my-8"
+            >
+              <button 
+                onClick={() => setShowAuthModal(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors z-10"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 bg-app-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Logo size={40} />
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                  Sign in to PTE Ninja
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Choose your preferred sign-in method
+                </p>
+              </div>
+
+              {/* Method Switcher Tabs */}
+              <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl mb-6 text-xs font-bold">
+                <button
+                  onClick={() => { setAuthTab('email'); setAuthError(null); setInfoMessage(null); }}
+                  className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${authTab === 'email' ? 'bg-white dark:bg-gray-800 text-app-primary shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                >
+                  <Mail size={14} />
+                  Email
+                </button>
+                <button
+                  onClick={() => { setAuthTab('phone'); setAuthError(null); setInfoMessage(null); }}
+                  className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${authTab === 'phone' ? 'bg-white dark:bg-gray-800 text-app-primary shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                >
+                  <Phone size={14} />
+                  Phone OTP
+                </button>
+                <button
+                  onClick={() => { setAuthTab('google'); setAuthError(null); setInfoMessage(null); }}
+                  className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${authTab === 'google' ? 'bg-white dark:bg-gray-800 text-app-primary shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                >
+                  Google
+                </button>
+              </div>
+
+              {/* TAB 1: Email & Password Auth */}
+              {authTab === 'email' && (
+                <div className="space-y-4">
+                  {/* Email Sub-mode Selector (Sign In vs Register vs Forgot Password) */}
+                  <div className="flex justify-between items-center text-xs font-bold pb-2 border-b border-gray-200 dark:border-gray-700">
+                    <button
+                      onClick={() => { setEmailMode('signin'); setAuthError(null); setInfoMessage(null); }}
+                      className={emailMode === 'signin' ? 'text-app-primary font-black border-b-2 border-app-primary pb-1' : 'text-gray-500'}
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => { setEmailMode('register'); setAuthError(null); setInfoMessage(null); }}
+                      className={emailMode === 'register' ? 'text-app-primary font-black border-b-2 border-app-primary pb-1' : 'text-gray-500'}
+                    >
+                      Create Account
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleEmailAuthSubmit} className="space-y-4">
+                    {emailMode === 'register' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                          Full Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={authName}
+                          onChange={(e) => setAuthName(e.target.value)}
+                          placeholder="e.g. Sahil Gupta"
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+
+                    {emailMode !== 'forgot' && (
+                      <div>
+                        <div className="flex justify-between items-center mb-1 ml-1">
+                          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                            Password <span className="text-red-500">*</span>
+                          </label>
+                          {emailMode === 'signin' && (
+                            <button
+                              type="button"
+                              onClick={() => { setEmailMode('forgot'); setAuthError(null); setInfoMessage(null); }}
+                              className="text-[11px] text-app-primary hover:underline font-semibold"
+                            >
+                              Forgot password?
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          type="password"
+                          required
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {emailMode === 'register' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                          Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="tel"
+                          value={authPhone}
+                          onChange={(e) => setAuthPhone(e.target.value)}
+                          placeholder="+1 234 567 8900"
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {authError && (
+                      <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                        {authError}
+                      </p>
+                    )}
+
+                    {infoMessage && (
+                      <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30">
+                        {infoMessage}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isAuthenticating}
+                      className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isAuthenticating ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        emailMode === 'signin' ? "Sign In with Email" : emailMode === 'register' ? "Create Account" : "Send Reset Email"
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* TAB 2: Phone OTP Auth */}
+              {authTab === 'phone' && (
+                <div className="space-y-4">
+                  {phoneStep === 'number' ? (
+                    <form onSubmit={handleSendPhoneOTP} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                          Mobile Phone Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={authPhone}
+                          onChange={(e) => setAuthPhone(e.target.value)}
+                          placeholder="+1 234 567 8900 (Include Country Code)"
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                        />
+                        <p className="text-[11px] text-gray-500 mt-1.5 ml-1">
+                          We will send a 6-digit verification code via SMS.
+                        </p>
+                      </div>
+
+                      {authError && (
+                        <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                          {authError}
+                        </p>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={isAuthenticating || !authPhone.trim()}
+                        className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isAuthenticating ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Sending SMS...
+                          </>
+                        ) : (
+                          "Send Verification Code"
+                        )}
+                      </button>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleVerifyPhoneOTP} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                          6-Digit Verification Code <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value)}
+                          placeholder="123456"
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-center tracking-[0.4em] font-mono text-lg font-bold text-gray-900 dark:text-white"
+                        />
+                      </div>
+
+                      {authError && (
+                        <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                          {authError}
+                        </p>
+                      )}
+
+                      {infoMessage && (
+                        <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30">
+                          {infoMessage}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setPhoneStep('number'); setAuthError(null); setInfoMessage(null); }}
+                          className="w-1/3 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:opacity-90 text-xs"
+                        >
+                          Change Number
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isAuthenticating || otpCode.length < 6}
+                          className="w-2/3 py-3 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 text-xs"
+                        >
+                          {isAuthenticating ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : (
+                            "Verify & Sign In"
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: Google One-Click Auth */}
+              {authTab === 'google' && (
+                <div className="space-y-4 py-4 text-center">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    Fast, secure sign-in with your Google Account without managing another password.
+                  </p>
+
+                  {authError && (
+                    <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                      {authError}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={isAuthenticating}
+                    className="w-full py-4 px-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-white border border-gray-300 dark:border-gray-700 rounded-xl font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-md flex items-center justify-center gap-3"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                    Continue with Google
+                  </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
