@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   RecaptchaVerifier,
   signInWithPhoneNumber,
@@ -46,6 +47,9 @@ interface SubscriptionContextType {
   pendingGuestWriteRef: React.RefObject<boolean>;
   isSyncingSubscription: boolean;
   setIsSyncingSubscription: (syncing: boolean) => void;
+  isEmailVerified: boolean;
+  resendEmailVerification: () => Promise<void>;
+  checkEmailVerification: () => Promise<boolean>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -65,6 +69,24 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyInfo>(CurrencyService.getCurrentCurrency());
   const [isSyncingSubscription, setIsSyncingSubscription] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(true);
+  const [verificationResent, setVerificationResent] = useState<boolean>(false);
+
+  const resendEmailVerification = async () => {
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+      setVerificationResent(true);
+    }
+  };
+
+  const checkEmailVerification = async (): Promise<boolean> => {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setIsEmailVerified(auth.currentUser.emailVerified);
+      return auth.currentUser.emailVerified;
+    }
+    return true;
+  };
   // Tracks when a fresh guest write is in-flight so stale Firestore snapshots
   // (from a previous anonymous session) don't trigger the subscription modal.
   const pendingGuestWriteRef = useRef(false);
@@ -110,6 +132,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       hasEnsuredAdminRoleRef.current = false;
 
       if (firebaseUser) {
+        setIsEmailVerified(firebaseUser.emailVerified);
         setLoading(true);
         const userRef = doc(db, 'users', firebaseUser.uid);
         
@@ -475,6 +498,13 @@ const formatAuthError = (error: any): string => {
         
         await updateProfile(firebaseUser, { displayName: authName.trim() });
 
+        try {
+          await sendEmailVerification(firebaseUser);
+        } catch (verr) {
+          console.warn("Failed to send email verification:", verr);
+        }
+        setIsEmailVerified(false);
+
         const userRef = doc(db, 'users', firebaseUser.uid);
         const now = new Date();
         const trialEnds = new Date();
@@ -789,10 +819,91 @@ const formatAuthError = (error: any): string => {
       formatPrice: (amount: number) => CurrencyService.format(CurrencyService.convert(amount)),
       pendingGuestWriteRef,
       isSyncingSubscription,
-      setIsSyncingSubscription
+      setIsSyncingSubscription,
+      isEmailVerified,
+      resendEmailVerification,
+      checkEmailVerification
     }}>
       {children}
-      
+
+      {/* Email Verification Required Overlay */}
+      <AnimatePresence>
+        {user && !isEmailVerified && user.accessType !== 'guest' && (
+          <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 text-center relative overflow-hidden my-8"
+            >
+              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Mail className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+              </div>
+
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2">
+                Verify Your Email Address
+              </h3>
+              
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
+                We sent a verification link to <span className="font-bold text-gray-900 dark:text-white">{user.email || auth.currentUser?.email}</span>. Please click the link in your inbox to verify ownership and unlock full access to PTE Ninja.
+              </p>
+
+              {verificationResent && (
+                <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30 mb-4 font-medium">
+                  Verification email resent! Please check your inbox and spam folder.
+                </p>
+              )}
+
+              {authError && (
+                <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30 mb-4 font-medium">
+                  {authError}
+                </p>
+              )}
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAuthError(null);
+                    const verified = await checkEmailVerification();
+                    if (!verified) {
+                      setAuthError("Email not verified yet. Please click the verification link in your email and try again.");
+                    }
+                  }}
+                  className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check size={18} />
+                  I've Verified My Email
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAuthError(null);
+                    try {
+                      await resendEmailVerification();
+                    } catch (err: any) {
+                      setAuthError(formatAuthError(err));
+                    }
+                  }}
+                  className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-all text-xs"
+                >
+                  Resend Verification Link
+                </button>
+
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="w-full py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white font-semibold transition-colors"
+                >
+                  Sign Out / Use Different Email
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Global Auth Loading Overlay */}
       <AnimatePresence>
         {(isAuthenticating || isSyncingSubscription) && (
