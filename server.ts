@@ -2465,23 +2465,22 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
 
   let email = (decodedToken.email || "").toLowerCase();
   let accessType = "user"; // default
+  let guestDisplayName = "";
 
-  // If email is missing from the token (common for anonymous guests),
-  // look it up in Firestore.
-  if (!email) {
-    try {
-      const userDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
-        .collection("users")
-        .doc(decodedToken.uid)
-        .get();
-      if (userDoc.exists) {
-        const data = userDoc.data();
-        email = (data?.email || "").toLowerCase();
-        accessType = data?.accessType || "user";
-      }
-    } catch (err) {
-      console.warn("[WelcomeEmail] Failed to look up guest email in Firestore:", err);
+  // Look up user document in Firestore to fetch email, accessType, and displayName for guests
+  try {
+    const userDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get();
+    if (userDoc.exists) {
+      const data = userDoc.data();
+      if (!email && data?.email) email = data.email.toLowerCase();
+      accessType = data?.accessType || "user";
+      if (data?.displayName) guestDisplayName = data.displayName;
     }
+  } catch (err) {
+    console.warn("[WelcomeEmail] Failed to look up user data in Firestore:", err);
   }
 
   if (!email || !isValidEmail(email)) {
@@ -2495,7 +2494,7 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
     return res.json({ success: true, message: "Welcome email skipped (no SMTP config)." });
   }
 
-  const displayName = decodedToken.name ?? email.split("@")[0];
+  const displayName = decodedToken.name ?? (guestDisplayName || email.split("@")[0]);
   const safeName = escapeHtml(displayName);
   const safeEmail = escapeHtml(email);
   const appUrl = process.env.APP_URL ?? "https://pteninja.com";
@@ -2547,9 +2546,9 @@ app.post("/api/send-welcome-email", welcomeEmailLimiter, async (req, res) => {
           <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:40px 40px 32px;text-align:center;">
-              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:8px 20px;margin-bottom:20px;">
-                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
-                <span style="font-size:22px;color:rgba(255,255,255,0.7);margin-left:2px;">⚡</span>
+              <div style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:8px 24px;margin-bottom:20px;">
+                <img src="https://pteninja.com/favicon-192.png" alt="PTE Ninja Logo" width="26" height="26" style="vertical-align:middle;margin-right:8px;border-radius:6px;display:inline-block;" />
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;vertical-align:middle;">PTE Ninja</span>
               </div>
               <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;line-height:1.3;">Welcome aboard, ${safeName}! 🎉</h1>
               <p style="margin:12px 0 0;color:rgba(255,255,255,0.85);font-size:16px;line-height:1.6;">Your AI-powered PTE Academic journey starts today.</p>
