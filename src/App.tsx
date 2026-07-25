@@ -1248,7 +1248,7 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification } = useSubscription();
 
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
@@ -1734,6 +1734,54 @@ function AppContent() {
         isDarkMode={isDarkMode}
         setIsDarkMode={handleToggleDarkMode}
       />
+    );
+  }
+
+  if (user && user.accessType !== 'guest' && !isEmailVerified) {
+    return (
+      <div className="min-h-screen bg-app-bg text-app-text font-sans flex items-center justify-center p-6">
+        <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">
+          <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Mail className="w-8 h-8 text-amber-500" />
+          </div>
+          <h3 className="text-2xl font-black text-app-text mb-2">Verify Your Email Address</h3>
+          <p className="text-sm text-app-text-muted mb-6 leading-relaxed">
+            We sent a verification link to <span className="font-bold text-app-text">{user.email}</span>. Please click the link in your inbox to activate your account and enter the Dojo.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={async () => {
+                const verified = await checkEmailVerification();
+                if (!verified) {
+                  alert("Email not verified yet. Please check your inbox and click the verification link.");
+                }
+              }}
+              className="w-full py-3.5 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all shadow-lg text-sm"
+            >
+              I've Verified My Email
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await resendEmailVerification();
+                  alert("Verification email resent! Check your inbox.");
+                } catch (e: any) {
+                  alert(e.message || "Failed to resend email.");
+                }
+              }}
+              className="w-full py-3 bg-app-surface border border-app-border text-app-text rounded-xl font-bold hover:bg-app-primary/10 transition-all text-xs"
+            >
+              Resend Verification Link
+            </button>
+            <button
+              onClick={logout}
+              className="w-full py-2.5 text-xs text-app-text-muted hover:text-app-text font-semibold transition-colors"
+            >
+              Sign Out / Try Another Email
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -3464,16 +3512,10 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
             <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10 flex items-center justify-between">
               <div>
                 <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Email Verified</p>
-                <p className="text-base md:text-lg font-bold text-app-text mt-1">{user?.emailVerified ? 'Yes' : 'No'}</p>
+                <p className="text-base md:text-lg font-bold text-green-500 mt-1 flex items-center gap-1.5">
+                  <CheckCircle size={18} /> Yes (Verified)
+                </p>
               </div>
-              {!user?.emailVerified && (
-                <button 
-                  onClick={onLogin}
-                  className="px-4 py-2 bg-app-primary/10 text-app-primary font-bold rounded-xl hover:bg-app-primary hover:text-app-bg transition-all text-xs"
-                >
-                  Verify Email & Get 7-Day Trial
-                </button>
-              )}
             </div>
           </div>
           

@@ -542,6 +542,20 @@ const formatAuthError = (error: any): string => {
 
         setShowAuthModal(false);
       } catch (err: any) {
+        if (err.code === 'auth/email-already-in-use') {
+          try {
+            const signinCred = await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+            if (signinCred.user && !signinCred.user.emailVerified) {
+              await sendEmailVerification(signinCred.user);
+              setIsEmailVerified(false);
+              setShowAuthModal(false);
+              setIsAuthenticating(false);
+              return;
+            }
+          } catch (signinErr) {
+            // Password didn't match
+          }
+        }
         setIsAuthenticating(false);
         setAuthError(formatAuthError(err));
       }
