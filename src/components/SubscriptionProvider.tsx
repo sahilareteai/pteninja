@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { auth, db, onAuthStateChanged, signInWithPopup, signInAnonymously, googleProvider, handleFirestoreError, OperationType, collection, query, where, getDocs } from '../firebase';
+import { auth, db, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously, googleProvider, handleFirestoreError, OperationType, collection, query, where, getDocs } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
@@ -305,23 +305,46 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, []);
 
+  // Handle redirect sign-in results (when popup was blocked or mobile redirect was used)
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          setShowAuthModal(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect sign-in result error:", err);
+      });
+  }, []);
+
   const login = async () => {
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError(null);
     setSessionError(null);
+    
+    const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('pte_session_id', newSessionId);
+
     try {
-      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('pte_session_id', newSessionId);
-      
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
+      // If popup is blocked by browser or interrupted, fall back automatically to redirect sign-in
+      if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectErr: any) {
+          console.error("Fallback redirect sign-in error:", redirectErr);
+        }
+      }
+
       setIsAuthenticating(false);
       
       // Handle known Firebase Auth errors gracefully
       if (error.code === 'auth/popup-closed-by-user') {
-        // Silent error as it's user-initiated, but we can set a friendly message if needed
         setAuthError("The sign-in window was closed. Please try again to continue.");
         return;
       }
@@ -340,14 +363,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       }
       
       console.error("Login failed:", error);
-      
-      if (error.code === 'auth/cancelled-popup-request') {
-        setAuthError("Sign-in was interrupted. Please try again.");
-      } else if (error.code === 'auth/popup-blocked') {
-        setAuthError("The sign-in popup was blocked by your browser. Please allow popups for this site.");
-      } else {
-        setAuthError("Login failed. Please check your connection and try again.");
-      }
+      setAuthError("Login failed. Please check your connection and try again.");
     }
   };
 

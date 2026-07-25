@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously, 
   onAuthStateChanged, 
   User as FirebaseUser 
@@ -82,5 +84,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { onAuthStateChanged, signInWithPopup, signInAnonymously, doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where, setDoc, addDoc, deleteField };
+export { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously, doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where, setDoc, addDoc, deleteField };
 export type { FirebaseUser };
