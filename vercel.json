@@ -31,6 +31,9 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/ads.txt", "destination": "/ads.txt" },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
+    { "source": "/((?!ads\\.txt|robots\\.txt|sitemap\\.xml|.*\\.).*)", "destination": "/index.html" }
   ]
 }

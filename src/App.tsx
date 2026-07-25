@@ -1206,16 +1206,24 @@ function AppContent() {
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('isDarkMode');
-      if (saved !== null) {
-        return JSON.parse(saved);
+      const userToggled = localStorage.getItem('user_manual_theme_toggle');
+      if (userToggled === 'true') {
+        const saved = localStorage.getItem('isDarkMode');
+        if (saved !== null) {
+          return JSON.parse(saved);
+        }
       }
       const hour = new Date().getHours();
-      // Default to light mode between 6 AM and 6 PM
+      // Default: Light Mode during Day (6 AM to 6 PM), Dark Mode during Night (6 PM to 6 AM)
       return hour < 6 || hour >= 18;
     }
-    return true;
+    return false;
   });
+
+  const handleToggleDarkMode = (value?: boolean) => {
+    localStorage.setItem('user_manual_theme_toggle', 'true');
+    setIsDarkMode((prev) => (typeof value === 'boolean' ? value : !prev));
+  };
   
   useEffect(() => {
     localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
@@ -1724,7 +1732,7 @@ function AppContent() {
         authError={authError} 
         onClearError={() => setAuthError(null)} 
         isDarkMode={isDarkMode}
-        setIsDarkMode={setIsDarkMode}
+        setIsDarkMode={handleToggleDarkMode}
       />
     );
   }
@@ -1745,7 +1753,7 @@ function AppContent() {
           
           <div className="flex items-center gap-2 sm:gap-4">
             <button 
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={() => handleToggleDarkMode()}
               className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
               title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >

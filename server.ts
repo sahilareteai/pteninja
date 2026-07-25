@@ -3601,6 +3601,16 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   }
 });
 
+app.get("/ads.txt", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain");
+  res.send("google.com, pub-9025413323620577, DIRECT, f08c47fec0942fa0\n");
+});
+
+app.get("/robots.txt", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain");
+  res.send("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nUser-agent: Mediapartners-Google\nAllow: /\n\nUser-agent: Googlebot\nAllow: /\n\nSitemap: https://pteninja.com/sitemap.xml\n");
+});
+
 // Vite setup for local development ONLY
 async function setupVite() {
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {

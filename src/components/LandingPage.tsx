@@ -574,48 +574,38 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Complete Overview</p>
             <h2 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">PTE Academic Test Structure</h2>
             <p className="text-app-text-muted text-base max-w-2xl mx-auto">
-              Understand the 4 core test components evaluated by Pearson Test of English Academic.
+              Understand the 3 official test sections evaluated in the Pearson Test of English Academic.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
               <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
                 <Mic size={24} />
-                <span>1. Speaking (54–67 Minutes)</span>
+                <span>1. Speaking & Writing (54–67 Mins)</span>
               </div>
               <p className="text-sm text-app-text-muted leading-relaxed">
-                Evaluates oral fluency, pronunciation, and content accuracy across 5 key question types: Read Aloud, Repeat Sentence, Describe Image, Re-tell Lecture, and Answer Short Question.
-              </p>
-            </div>
-
-            <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
-              <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
-                <PenTool size={24} />
-                <span>2. Writing (54–67 Minutes)</span>
-              </div>
-              <p className="text-sm text-app-text-muted leading-relaxed">
-                Measures written communication, vocabulary usage, and grammatical structure through Summarize Written Text and Write Essay tasks.
+                Tested together in a single section. Evaluates oral fluency, pronunciation, written discourse, and vocabulary across Read Aloud, Repeat Sentence, Describe Image, Re-tell Lecture, Summarize Written Text, and Write Essay.
               </p>
             </div>
 
             <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
               <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
                 <CheckCircle size={24} />
-                <span>3. Reading (29–30 Minutes)</span>
+                <span>2. Reading (29–30 Mins)</span>
               </div>
               <p className="text-sm text-app-text-muted leading-relaxed">
-                Tests comprehension, passage analysis, and collocations with Fill in the Blanks, Multiple Choice, and Re-order Paragraphs.
+                Tests passage comprehension, collocations, and structural reasoning with Reading Fill in the Blanks, Reading & Writing Fill in the Blanks, Multiple Choice, and Re-order Paragraphs.
               </p>
             </div>
 
             <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
               <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
                 <Clock size={24} />
-                <span>4. Listening (30–43 Minutes)</span>
+                <span>3. Listening (30–43 Mins)</span>
               </div>
               <p className="text-sm text-app-text-muted leading-relaxed">
-                Assesses auditory comprehension through Summarize Spoken Text, Write from Dictation, Highlight Incorrect Words, and Fill in the Blanks.
+                Assesses auditory processing through Summarize Spoken Text, Multiple Choice, Fill in the Blanks, Highlight Correct Summary, Select Missing Word, Highlight Incorrect Words, and Write from Dictation.
               </p>
             </div>
           </div>
