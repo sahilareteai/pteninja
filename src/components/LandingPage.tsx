@@ -79,7 +79,7 @@ function StatItem({ value, label }: { value: string, label: string }) {
 }
 
 export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkMode, setIsDarkMode }: { 
-  onLogin: () => void, 
+  onLogin: (mode?: 'signin' | 'register') => void, 
   onGuest: () => void, 
   authError: string | null, 
   onClearError: () => void,
@@ -165,9 +165,9 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          <button onClick={onLogin} className="hidden sm:block text-sm font-bold text-app-text hover:text-app-primary transition-colors">Sign In</button>
+          <button onClick={() => onLogin('signin')} className="hidden sm:block text-sm font-bold text-app-text hover:text-app-primary transition-colors">Sign In</button>
           <button 
-            onClick={onLogin}
+            onClick={() => onLogin('register')}
             className="px-4 sm:px-6 py-2 sm:py-2 bg-app-primary text-app-bg font-bold text-sm sm:text-base rounded-full hover:bg-app-accent transition-all shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.2)]"
           >
             Get Started
@@ -199,7 +199,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           </motion.p>
           <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
             <button 
-              onClick={onLogin}
+              onClick={() => onLogin('register')}
               className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
             >
               Start Training Now
@@ -665,35 +665,49 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       </section>
 
 
-
       {/* Final CTA */}
       <section className="relative z-10 py-32 px-6 border-t border-app-border">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-app-primary/5" />
         <div className="max-w-4xl mx-auto relative">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="p-12 md:p-16 bg-gradient-to-br from-app-surface to-app-bg border border-app-primary/30 rounded-[3rem] text-center shadow-[0_0_50px_rgba(var(--app-primary-rgb),0.15)] relative overflow-hidden"
-          >
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1/2 bg-app-primary/20 blur-[100px] rounded-full pointer-events-none" />
-            <h2 className="text-4xl md:text-6xl font-black text-app-text tracking-tighter mb-6 relative z-10">
-              Ready to crush the PTE?
-            </h2>
-            <p className="text-xl text-app-text-muted mb-10 max-w-2xl mx-auto relative z-10">
-              Join thousands of students who achieved their target scores with our AI-powered platform.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative z-10">
-              <button 
-                onClick={onLogin}
-                className="group flex items-center justify-center gap-3 w-full sm:w-auto px-12 py-5 bg-app-primary text-app-bg font-bold text-xl rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.4)]"
-              >
-                Get Started Now
-                <ArrowRight className="group-hover:translate-x-1 transition-transform" />
-              </button>
-            </div>
-          </motion.div>
+              <div className="mt-12 text-center">
+            <button 
+              onClick={() => onLogin('register')}
+              className="inline-flex items-center gap-3 px-8 py-4 bg-app-surface/50 border border-app-primary/20 text-app-primary font-bold text-sm rounded-xl hover:bg-app-primary/10 transition-all"
+            >
+              Explore All Features
+              <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
+      </section>
+
+      {/* Footer CTA */}
+      <section className="relative z-10 py-24 px-6 max-w-5xl mx-auto text-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          className="bg-app-surface/40 backdrop-blur-xl border border-app-primary/20 rounded-3xl p-12 md:p-16 relative overflow-hidden shadow-2xl"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-app-primary/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-app-accent/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <h2 className="text-4xl md:text-6xl font-black text-app-text tracking-tighter mb-6 relative z-10">
+            Ready to crush the PTE?
+          </h2>
+          <p className="text-xl text-app-text-muted mb-10 max-w-2xl mx-auto relative z-10">
+            Join thousands of students who achieved their target scores with our AI-powered platform.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative z-10">
+            <button 
+              onClick={() => onLogin('register')}
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-12 py-5 bg-app-primary text-app-bg font-bold text-xl rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.4)]"
+            >
+              Get Started Now
+              <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        </motion.div>
       </section>
 
       {/* Footer */}

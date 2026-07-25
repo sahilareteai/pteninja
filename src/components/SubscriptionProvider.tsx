@@ -33,7 +33,7 @@ import { Logo } from './Logo';
 interface SubscriptionContextType {
   user: UserData | null;
   loading: boolean;
-  login: () => Promise<void>;
+  login: (initialMode?: 'signin' | 'register') => Promise<void>;
   logout: () => Promise<void>;
   continueAsGuest: () => Promise<void>;
   isAccessRestricted: boolean;
@@ -400,9 +400,10 @@ const formatAuthError = (error: any): string => {
   }
 };
 
-  const login = async () => {
+  const login = async (initialMode: 'signin' | 'register' = 'signin') => {
     setAuthError(null);
     setInfoMessage(null);
+    setEmailMode(initialMode);
     setShowAuthModal(true);
   };
 
