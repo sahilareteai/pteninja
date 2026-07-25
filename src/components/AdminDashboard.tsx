@@ -430,7 +430,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         u.displayName?.toLowerCase().includes(searchQuery.toLowerCase());
+                         u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         u.phoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     if (userFilter === 'paid') return u.subscriptionStatus === 'active';
     if (userFilter === 'guests') return u.accessType === 'guest';
@@ -998,7 +999,10 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                                       <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-black uppercase tracking-tighter border border-gray-200 dark:border-gray-700">Guest</span>
                                     )}
                                   </div>
-                                  <div className="text-xs text-app-text-muted">{user.email || 'No email provided'}</div>
+                                  <div className="text-xs text-app-text-muted">
+                                    {user.email || 'No email provided'}
+                                    {user.phoneNumber ? ` • 📞 ${user.phoneNumber}` : ''}
+                                  </div>
                                 </div>
                               </div>
                             </td>

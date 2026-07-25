@@ -37,6 +37,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [guestConsent, setGuestConsent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -384,7 +385,10 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
 
   const handleGuestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestName.trim()) return;
+    if (!guestName.trim() || !guestEmail.trim()) {
+      setAuthError("Name and Email address are required to continue.");
+      return;
+    }
     if (!guestConsent) {
       setAuthError("You must agree to the Privacy Policy to continue.");
       return;
@@ -441,6 +445,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
       const newUser: UserData = {
         uid: firebaseUser.uid,
         email: cleanEmail || null,
+        phoneNumber: guestPhone.trim() || null,
         displayName: guestName.trim(),
         createdAt,
         accessType: 'guest',
@@ -702,13 +707,26 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5 ml-1">
-                    Email Address <span className="text-gray-400 font-normal">(Optional)</span>
+                    Email Address <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
+                    required
                     value={guestEmail}
                     onChange={(e) => setGuestEmail(e.target.value)}
                     placeholder="your@email.com"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5 ml-1">
+                    Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    placeholder="+1 234 567 8900"
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   />
                 </div>
@@ -735,7 +753,7 @@ Console link: https://console.firebase.google.com/project/gen-lang-client-033690
 
                 <button
                   type="submit"
-                  disabled={isAuthenticating || !guestName.trim()}
+                  disabled={isAuthenticating || !guestName.trim() || !guestEmail.trim()}
                   className="w-full py-4 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
                 >
                   {isAuthenticating ? (

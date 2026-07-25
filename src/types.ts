@@ -97,6 +97,7 @@ export interface MockTestSavedSession {
 export interface UserData {
   uid: string;
   email?: string | null;
+  phoneNumber?: string | null;
   emailVerified?: boolean;
   displayName?: string | null;
   createdAt: string;
