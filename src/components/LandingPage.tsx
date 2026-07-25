@@ -121,16 +121,16 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             exit={{ opacity: 0, y: -50 }}
             className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-6"
           >
-            <div className="bg-red-500/10 border border-red-500/20 backdrop-blur-xl p-4 rounded-2xl flex items-start gap-4 shadow-2xl shadow-red-500/10">
-              <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center shrink-0">
-                <Shield size={20} className="text-red-500" />
+            <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800/50 p-4 rounded-2xl flex items-start gap-4 shadow-2xl shadow-red-500/10">
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center shrink-0">
+                <Shield size={20} className="text-red-600 dark:text-red-400" />
               </div>
               <div className="flex-1 space-y-1">
-                <h4 className="text-sm font-bold text-white">Access Error</h4>
-                <p className="text-xs text-red-200/70 leading-relaxed whitespace-pre-wrap">
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Access Error</h4>
+                <p className="text-xs text-red-600 dark:text-red-300 leading-relaxed whitespace-pre-wrap">
                   {authError.split(/(https?:\/\/[^\s]+)/g).map((part, i) => 
                     part.match(/^https?:\/\//) ? (
-                      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-white underline hover:text-app-primary transition-colors">
+                      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-red-700 dark:text-red-200 font-bold underline hover:text-app-primary transition-colors">
                         {part}
                       </a>
                     ) : part
@@ -139,9 +139,9 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               </div>
               <button 
                 onClick={onClearError}
-                className="p-1 hover:bg-white/5 rounded-lg transition-colors"
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               >
-                <X size={18} className="text-white/40" />
+                <X size={18} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
               </button>
             </div>
           </motion.div>
