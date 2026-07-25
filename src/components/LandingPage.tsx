@@ -562,6 +562,118 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
         </div>
       </section>
 
+      {/* PTE Academic Task Breakdown Section */}
+      <section className="relative z-10 py-24 px-6 bg-app-surface/10 border-t border-app-border">
+        <div className="max-w-7xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Complete Overview</p>
+            <h2 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">PTE Academic Test Structure</h2>
+            <p className="text-app-text-muted text-base max-w-2xl mx-auto">
+              Understand the 4 core test components evaluated by Pearson Test of English Academic.
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
+              <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
+                <Mic size={24} />
+                <span>1. Speaking (54–67 Minutes)</span>
+              </div>
+              <p className="text-sm text-app-text-muted leading-relaxed">
+                Evaluates oral fluency, pronunciation, and content accuracy across 5 key question types: Read Aloud, Repeat Sentence, Describe Image, Re-tell Lecture, and Answer Short Question.
+              </p>
+            </div>
+
+            <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
+              <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
+                <PenTool size={24} />
+                <span>2. Writing (54–67 Minutes)</span>
+              </div>
+              <p className="text-sm text-app-text-muted leading-relaxed">
+                Measures written communication, vocabulary usage, and grammatical structure through Summarize Written Text and Write Essay tasks.
+              </p>
+            </div>
+
+            <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
+              <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
+                <CheckCircle size={24} />
+                <span>3. Reading (29–30 Minutes)</span>
+              </div>
+              <p className="text-sm text-app-text-muted leading-relaxed">
+                Tests comprehension, passage analysis, and collocations with Fill in the Blanks, Multiple Choice, and Re-order Paragraphs.
+              </p>
+            </div>
+
+            <div className="p-8 bg-app-surface/40 border border-app-border rounded-3xl space-y-4">
+              <div className="flex items-center gap-3 text-app-primary font-bold text-xl">
+                <Clock size={24} />
+                <span>4. Listening (30–43 Minutes)</span>
+              </div>
+              <p className="text-sm text-app-text-muted leading-relaxed">
+                Assesses auditory comprehension through Summarize Spoken Text, Write from Dictation, Highlight Incorrect Words, and Fill in the Blanks.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Comprehensive FAQ Section */}
+      <section className="relative z-10 py-24 px-6 bg-app-bg border-t border-app-border">
+        <div className="max-w-4xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Frequently Asked Questions</p>
+            <h2 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">Everything You Need to Know</h2>
+          </motion.div>
+
+          <div className="space-y-6">
+            {[
+              {
+                q: "What is PTE Academic and who accepts it?",
+                a: "PTE Academic (Pearson Test of English) is a computer-based English language proficiency exam accepted by thousands of universities, colleges, and government agencies worldwide for study, work, and visa applications (including Australia, UK, Canada, and New Zealand)."
+              },
+              {
+                q: "How does PTE Ninja's AI scoring engine work?",
+                a: "PTE Ninja uses advanced speech recognition and natural language processing models to replicate Pearson's official scoring algorithms. It provides real-time scoring on Oral Fluency, Pronunciation, Grammar, Content, and Vocabulary."
+              },
+              {
+                q: "How are the mock tests structured?",
+                a: "Our full scored mock tests follow the exact timing, question sequencing, and scoring rubrics of the actual PTE Academic exam to give you an accurate baseline score before test day."
+              },
+              {
+                q: "What target scores can I prepare for?",
+                a: "Whether your target is 65+ (Competent English for visa points), 79+ (Proficient English), or 90 (Superior English), PTE Ninja offers tailored practice modules and weak-area diagnostics."
+              },
+              {
+                q: "Can I practice for free?",
+                a: "Yes! PTE Ninja offers free access to practice tasks, vocabulary builders, and AI evaluations so you can test the platform before upgrading."
+              }
+            ].map((faq, index) => (
+              <motion.div 
+                key={index}
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+                className="p-6 bg-app-surface/40 border border-app-border rounded-2xl space-y-2"
+              >
+                <h3 className="text-lg font-bold text-app-text">{faq.q}</h3>
+                <p className="text-sm text-app-text-muted leading-relaxed">{faq.a}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
 
 
       {/* Final CTA */}
