@@ -2751,6 +2751,84 @@ function createMailTransport() {
   return null;
 }
 
+// ─── Branded Email Template Generator ─────────────────────────────────────────
+function buildBrandedPteNinjaEmailHtml(options: {
+  title: string;
+  preheader?: string;
+  recipientName?: string;
+  contentHtml: string;
+  ctaText?: string;
+  ctaUrl?: string;
+}) {
+  const { title, preheader, recipientName, contentHtml, ctaText, ctaUrl } = options;
+  const greeting = recipientName ? `Hi ${recipientName},` : "Hi,";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0f172a;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  ${preheader ? `<div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${preheader}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+
+          <!-- Header Banner -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #0d9488 0%, #0f172a 100%);padding:40px 32px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:8px 24px;margin-bottom:16px;">
+                <span style="font-size:24px;font-weight:900;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
+                <span style="font-size:22px;color:#2dd4bf;margin-left:4px;">⚡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:800;line-height:1.3;letter-spacing:-0.5px;">${title}</h1>
+            </td>
+          </tr>
+
+          <!-- Email Content Body -->
+          <tr>
+            <td style="padding:40px 36px 32px;background:#ffffff;">
+              <p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1e293b;line-height:1.6;">${greeting}</p>
+              
+              <div style="font-size:15px;color:#475569;line-height:1.7;margin-bottom:28px;">
+                ${contentHtml}
+              </div>
+
+              ${ctaText && ctaUrl ? `
+              <div style="text-align:center;margin:32px 0 24px;">
+                <a href="${ctaUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg, #0d9488 0%, #0f766e 100%);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:12px;box-shadow:0 4px 14px rgba(13,148,136,0.35);">
+                  ${ctaText} &rarr;
+                </a>
+              </div>` : ''}
+
+              <div style="margin-top:32px;padding-top:24px;border-top:1px solid #f1f5f9;font-size:15px;color:#475569;line-height:1.6;">
+                Happy Learning!<br/>
+                <strong style="color:#0f172a;">The PTE Ninja Team</strong>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:24px 36px;text-align:center;border-top:1px solid #e2e8f0;">
+              <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">
+                PTE Ninja — AI-Powered PTE Preparation<br/>
+                © ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ─── Admin Emails ─────────────────────────────────────────────────────────────
 app.post("/api/admin/send-email", async (req, res) => {
   const authResult = await requireAuth(req, res, { requireAdmin: true });
@@ -2763,12 +2841,24 @@ app.post("/api/admin/send-email", async (req, res) => {
   const transporter = createMailTransport();
   if (!transporter) return res.status(500).json({ error: "SMTP/Gmail not configured in environment variables (SMTP_HOST or GMAIL_USER missing)." });
 
+  const isFullHtml = content.trim().toLowerCase().startsWith("<!doctype html>") || content.trim().toLowerCase().startsWith("<html");
+
+  const formattedHtml = isFullHtml
+    ? content
+    : buildBrandedPteNinjaEmailHtml({
+        title: subject,
+        contentHtml: content.split("\n\n").map((p: string) => `<p style="margin:0 0 16px;">${p.replace(/\n/g, "<br/>")}</p>`).join(""),
+        ctaText: "Open PTE Ninja",
+        ctaUrl: "https://pteninja.com"
+      });
+
   try {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
       to,
       subject,
-      ...(html ? { html } : { text: content }),
+      html: formattedHtml,
+      text: body || content.replace(/<[^>]+>/g, ""),
     });
     res.json({ success: true });
   } catch (error: any) {
@@ -2794,15 +2884,24 @@ app.post("/api/admin/trigger-migration-emails", async (req, res) => {
     for (const doc of usersSnapshot.docs) {
       const data = doc.data();
       if (!data.paymentProvider || data.paymentProvider === "stripe") {
-        const emailBody = `Important: Please update your payment method\n\nWe are transitioning to a new secure payment provider to give you a better experience. To continue your PTE Ninja subscription seamlessly, please login to your account and update your payment method before your next renewal date.\n\nThank you,\nThe PTE Ninja Team`;
+        const emailContent = `We are transitioning to a new secure payment provider to give you a better experience. To continue your PTE Ninja subscription seamlessly, please login to your account and update your payment method before your next renewal date.`;
         
+        const htmlBody = buildBrandedPteNinjaEmailHtml({
+          title: "Important: Update your Payment Method",
+          recipientName: data.displayName || "PTE Ninja Student",
+          contentHtml: `<p style="margin:0 0 16px;">${emailContent}</p>`,
+          ctaText: "Update Payment Method",
+          ctaUrl: "https://pteninja.com"
+        });
+
         if (data.email) {
           batch.push(
             transporter.sendMail({
               from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
               to: data.email,
               subject: "Important: Update your PTE Ninja Payment Method",
-              text: emailBody,
+              html: htmlBody,
+              text: emailContent,
             }).then(() => { sentCount++; }).catch(e => console.error("Failed to send to", data.email, e))
           );
         }
@@ -2901,6 +3000,31 @@ app.post("/api/verify-razorpay-payment", subscriptionLimiter, async (req, res) =
         subscriptionEndsAt: now.toISOString(),
       }, { merge: true });
       
+      // Optionally send payment confirmation email via Razorpay
+      const transporter = createMailTransport();
+      if (transporter && authResult.decodedToken.email) {
+        const planName = PLAN_INTERVALS[planId]?.name || planId;
+        const receiptHtml = buildBrandedPteNinjaEmailHtml({
+          title: "Payment Confirmed! ✅",
+          recipientName: authResult.decodedToken.name || "Ninja Student",
+          contentHtml: `<p style="margin:0 0 16px;">Thank you for your payment. Your PTE Ninja subscription is now active.</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:20px;">
+            <tr style="background:#f8fafc;"><td style="padding:12px 16px;font-weight:700;color:#475569;" colspan="2">Order Receipt</td></tr>
+            <tr><td style="padding:12px 16px;color:#64748b;border-bottom:1px solid #f1f5f9;">Plan</td><td style="padding:12px 16px;font-weight:600;color:#0f172a;border-bottom:1px solid #f1f5f9;">${planName}</td></tr>
+            <tr><td style="padding:12px 16px;color:#64748b;">Payment Method</td><td style="padding:12px 16px;font-weight:600;color:#0f172a;">Razorpay</td></tr>
+          </table>`,
+          ctaText: "Start Practice Now",
+          ctaUrl: "https://pteninja.com"
+        });
+
+        transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
+          to: authResult.decodedToken.email,
+          subject: "Payment Confirmed - PTE Ninja",
+          html: receiptHtml,
+        }).catch(err => console.error("Failed to send Razorpay confirmation email:", err));
+      }
+
       return res.json({ success: true });
     } catch (error: any) {
       console.error("Failed to update user after Razorpay success:", error);
