@@ -2999,6 +2999,21 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   };
 
   const handleCancelSubscription = async () => {
+    if (user?.paymentProvider === 'razorpay') {
+      setIsCanceling(true);
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { cancelAtPeriodEnd: true });
+        setShowCancelDialog(false);
+        setCancelStep('offer');
+        toast.success('Subscription cancelled. You keep full access until the end of your billing period.');
+      } catch (err) {
+        toast.error('Failed to update subscription settings');
+      } finally {
+        setIsCanceling(false);
+      }
+      return;
+    }
+
     if (!user?.stripeSubscriptionId && !user?.stripeCustomerId) {
       toast.error('Subscription information not found. Please contact support to cancel your subscription.');
       return;
