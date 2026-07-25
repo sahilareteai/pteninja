@@ -2754,14 +2754,24 @@ function createMailTransport() {
 // ─── Branded Email Template Generator ─────────────────────────────────────────
 function buildBrandedPteNinjaEmailHtml(options: {
   title: string;
+  subtitle?: string;
   preheader?: string;
   recipientName?: string;
   contentHtml: string;
   ctaText?: string;
   ctaUrl?: string;
+  unsubscribeUrl?: string;
 }) {
-  const { title, preheader, recipientName, contentHtml, ctaText, ctaUrl } = options;
-  const greeting = recipientName ? `Hi ${recipientName},` : "Hi,";
+  const { title, subtitle, preheader, recipientName, contentHtml, ctaText, ctaUrl, unsubscribeUrl } = options;
+  
+  // Clean greeting logic: Only render greeting if contentHtml doesn't already start with Hi/Dear/Hello
+  const cleanContent = contentHtml.trim();
+  const startsWithGreeting = /^(hi|dear|hello)\b/i.test(cleanContent.replace(/<[^>]+>/g, "").trim());
+  const greetingHtml = (!startsWithGreeting && recipientName)
+    ? `<p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a1a2e;line-height:1.6;">Hi <strong>${recipientName}</strong>,</p>`
+    : "";
+
+  const effectiveUnsubscribeUrl = unsubscribeUrl || "https://pteninja.com/?action=unsubscribe";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -2770,53 +2780,57 @@ function buildBrandedPteNinjaEmailHtml(options: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#0f172a;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   ${preheader ? `<div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${preheader}</div>` : ''}
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:40px 16px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:32px 16px;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(108,99,255,0.12);">
 
           <!-- Header Banner -->
           <tr>
-            <td style="background:linear-gradient(135deg, #0d9488 0%, #0f172a 100%);padding:40px 32px;text-align:center;">
-              <div style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:8px 24px;margin-bottom:16px;">
-                <span style="font-size:24px;font-weight:900;color:#ffffff;letter-spacing:1px;">PTE Ninja</span>
-                <span style="font-size:22px;color:#2dd4bf;margin-left:4px;">⚡</span>
+            <td style="background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);padding:40px 40px 32px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:8px 24px;margin-bottom:20px;">
+                <img src="https://pteninja.com/favicon-192.png" alt="PTE Ninja Logo" width="26" height="26" style="vertical-align:middle;margin-right:8px;border-radius:6px;display:inline-block;" />
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:1px;vertical-align:middle;">PTE Ninja</span>
               </div>
-              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:800;line-height:1.3;letter-spacing:-0.5px;">${title}</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;line-height:1.3;">${title}</h1>
+              ${subtitle ? `<p style="margin:12px 0 0;color:rgba(255,255,255,0.88);font-size:16px;line-height:1.6;">${subtitle}</p>` : ''}
             </td>
           </tr>
 
-          <!-- Email Content Body -->
+          <!-- Email Body -->
           <tr>
-            <td style="padding:40px 36px 32px;background:#ffffff;">
-              <p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1e293b;line-height:1.6;">${greeting}</p>
+            <td style="padding:36px 40px 28px;background:#ffffff;">
+              ${greetingHtml}
               
-              <div style="font-size:15px;color:#475569;line-height:1.7;margin-bottom:28px;">
-                ${contentHtml}
+              <div style="font-size:15px;color:#374151;line-height:1.7;margin-bottom:28px;">
+                ${cleanContent}
               </div>
 
               ${ctaText && ctaUrl ? `
               <div style="text-align:center;margin:32px 0 24px;">
-                <a href="${ctaUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg, #0d9488 0%, #0f766e 100%);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:12px;box-shadow:0 4px 14px rgba(13,148,136,0.35);">
+                <a href="${ctaUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#6c63ff 0%,#4f46e5 100%);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:50px;box-shadow:0 4px 15px rgba(108,99,255,0.35);letter-spacing:0.3px;">
                   ${ctaText} &rarr;
                 </a>
               </div>` : ''}
 
-              <div style="margin-top:32px;padding-top:24px;border-top:1px solid #f1f5f9;font-size:15px;color:#475569;line-height:1.6;">
+              <div style="margin-top:32px;padding-top:20px;border-top:1px solid #f3f4f6;font-size:15px;color:#374151;line-height:1.6;">
                 Happy Learning!<br/>
-                <strong style="color:#0f172a;">The PTE Ninja Team</strong>
+                <strong style="color:#1a1a2e;">The PTE Ninja Team</strong>
               </div>
             </td>
           </tr>
 
-          <!-- Footer -->
+          <!-- Compliance Footer -->
           <tr>
-            <td style="background:#f8fafc;padding:24px 36px;text-align:center;border-top:1px solid #e2e8f0;">
-              <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">
+            <td style="background:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 6px;font-size:13px;color:#6b7280;line-height:1.5;">
                 PTE Ninja — AI-Powered PTE Preparation<br/>
                 © ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.
+              </p>
+              <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">
+                Don't want to receive these emails? <a href="${effectiveUnsubscribeUrl}" style="color:#6c63ff;text-decoration:underline;">Unsubscribe here</a>.
               </p>
             </td>
           </tr>
