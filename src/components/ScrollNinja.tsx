@@ -18,10 +18,10 @@ export function ScrollNinja() {
   const leftSwordOpacity = useTransform(scrollYProgress, v => (Math.floor(v * 15) % 2 !== 0 ? 1 : 0));
   
   return (
-    <div className="fixed right-2 md:right-12 top-1/3 z-50 pointer-events-none scale-75 md:scale-100 origin-right">
+    <div className="fixed right-2 md:right-12 top-1/3 z-50 pointer-events-none scale-75 md:scale-100 origin-right transform-gpu will-change-transform">
       <motion.div 
         style={{ y: yPos }}
-        className="relative w-32 h-32"
+        className="relative w-32 h-32 transform-gpu"
       >
         <div className="absolute inset-0 bg-app-primary/20 blur-xl rounded-full" />
         

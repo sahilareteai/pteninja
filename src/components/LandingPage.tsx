@@ -148,18 +148,10 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
         )}
       </AnimatePresence>
       
-      {/* Background Glows and Abstract Shapes */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }} 
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-app-primary/20 blur-[150px] rounded-full" 
-        />
-        <motion.div 
-          animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }} 
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-app-accent/20 blur-[150px] rounded-full" 
-        />
+      {/* Background Glows and Abstract Shapes (Hardware-Accelerated for Desktop 60 FPS) */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none transform-gpu z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[65vw] h-[65vw] bg-[radial-gradient(circle_at_center,_var(--color-app-primary)_0%,_transparent_65%)] opacity-15 rounded-full pointer-events-none transform-gpu will-change-transform" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[65vw] h-[65vw] bg-[radial-gradient(circle_at_center,_var(--color-app-accent)_0%,_transparent_65%)] opacity-10 rounded-full pointer-events-none transform-gpu will-change-transform" />
       </div>
 
       {/* Navbar */}
