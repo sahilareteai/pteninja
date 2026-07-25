@@ -876,7 +876,7 @@ const formatAuthError = (error: any): string => {
         )}
       </AnimatePresence>
 
-      {/* Multi-Option Auth Modal */}
+      {/* Unified Auth Modal */}
       <AnimatePresence>
         {showAuthModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
@@ -906,229 +906,145 @@ const formatAuthError = (error: any): string => {
                 </p>
               </div>
 
-              {/* Primary Method Switcher (Email vs Phone OTP) */}
-              <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl mb-6 text-xs font-bold">
-                <button
-                  onClick={() => { setAuthTab('email'); setAuthError(null); setInfoMessage(null); }}
-                  className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${authTab === 'email' ? 'bg-white dark:bg-gray-800 text-app-primary shadow-sm font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                >
-                  <Mail size={14} />
-                  Email & Password
-                </button>
-                <button
-                  onClick={() => { setAuthTab('phone'); setAuthError(null); setInfoMessage(null); }}
-                  className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${authTab === 'phone' ? 'bg-white dark:bg-gray-800 text-app-primary shadow-sm font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                >
-                  <Phone size={14} />
-                  Phone OTP
-                </button>
-              </div>
-
-              {/* TAB 1: Email & Password Auth */}
-              {authTab === 'email' && (
-                <div className="space-y-4">
-                  <form onSubmit={handleEmailAuthSubmit} className="space-y-4">
-                    {emailMode === 'register' && (
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
-                          Full Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={authName}
-                          onChange={(e) => setAuthName(e.target.value)}
-                          placeholder="e.g. Sahil Gupta"
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
-                        />
-                      </div>
-                    )}
-
+              <div className="space-y-4">
+                <form onSubmit={handleEmailAuthSubmit} className="space-y-4">
+                  {emailMode === 'register' && (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
-                        Email Address <span className="text-red-500">*</span>
+                        Full Name <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="email"
+                        type="text"
                         required
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        placeholder="your@email.com"
+                        value={authName}
+                        onChange={(e) => setAuthName(e.target.value)}
+                        placeholder="e.g. Sahil Gupta"
                         className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
                       />
                     </div>
+                  )}
 
-                    {emailMode !== 'forgot' && (
-                      <div>
-                        <div className="flex justify-between items-center mb-1 ml-1">
-                          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
-                            Password <span className="text-red-500">*</span>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                      Email Address <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                    />
+                  </div>
+
+                  {emailMode !== 'forgot' && (
+                    <div>
+                      <div className="flex justify-between items-center mb-1 ml-1">
+                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                          Password <span className="text-red-500">*</span>
+                        </label>
+                        {emailMode === 'signin' && (
+                          <button
+                            type="button"
+                            onClick={() => { setEmailMode('forgot'); setAuthError(null); setInfoMessage(null); }}
+                            className="text-[11px] text-app-primary hover:underline font-semibold"
+                          >
+                            Forgot password?
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="password"
+                        required
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+                  )}
+
+                  {emailMode === 'register' && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
+                        Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="tel"
+                          value={authPhone}
+                          onChange={(e) => setAuthPhone(e.target.value)}
+                          placeholder="+61 470 260 503"
+                          className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                        />
+                        {authPhone.trim().length > 6 && phoneStep === 'number' && (
+                          <button
+                            type="button"
+                            onClick={handleSendPhoneOTP}
+                            className="px-3 py-2 bg-app-primary/10 text-app-primary hover:bg-app-primary hover:text-white text-xs font-bold rounded-xl transition-all whitespace-nowrap border border-app-primary/20"
+                          >
+                            Verify SMS
+                          </button>
+                        )}
+                      </div>
+
+                      {phoneStep === 'otp' && (
+                        <div className="mt-3 p-3 bg-app-primary/5 rounded-xl border border-app-primary/20 space-y-2">
+                          <label className="block text-xs font-bold text-app-primary">
+                            Enter 6-Digit SMS Verification Code
                           </label>
-                          {emailMode === 'signin' && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={otpCode}
+                              onChange={(e) => setOtpCode(e.target.value)}
+                              placeholder="123456"
+                              className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-center tracking-widest font-mono text-sm font-bold text-gray-900 dark:text-white"
+                            />
                             <button
                               type="button"
-                              onClick={() => { setEmailMode('forgot'); setAuthError(null); setInfoMessage(null); }}
-                              className="text-[11px] text-app-primary hover:underline font-semibold"
+                              onClick={handleVerifyPhoneOTP}
+                              disabled={otpCode.length < 6}
+                              className="px-4 py-2 bg-app-primary text-white font-bold text-xs rounded-lg disabled:opacity-50"
                             >
-                              Forgot password?
+                              Verify
                             </button>
-                          )}
+                          </div>
                         </div>
-                        <input
-                          type="password"
-                          required
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
-                        />
-                      </div>
-                    )}
-
-                    {emailMode === 'register' && (
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
-                          Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
-                        </label>
-                        <input
-                          type="tel"
-                          value={authPhone}
-                          onChange={(e) => setAuthPhone(e.target.value)}
-                          placeholder="+1 234 567 8900"
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
-                        />
-                      </div>
-                    )}
-
-                    {authError && (
-                      <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
-                        {authError}
-                      </p>
-                    )}
-
-                    {infoMessage && (
-                      <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30">
-                        {infoMessage}
-                      </p>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={isAuthenticating}
-                      className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isAuthenticating ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        emailMode === 'signin' ? "Sign In with Email" : emailMode === 'register' ? "Create Account" : "Send Reset Email"
                       )}
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* TAB 2: Phone OTP Auth */}
-              {authTab === 'phone' && (
-                <div className="space-y-4">
-                  {phoneStep === 'number' ? (
-                    <form onSubmit={handleSendPhoneOTP} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
-                          Mobile Phone Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="tel"
-                          required
-                          value={authPhone}
-                          onChange={(e) => setAuthPhone(e.target.value)}
-                          placeholder="+1 234 567 8900 (Include Country Code)"
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
-                        />
-                        <p className="text-[11px] text-gray-500 mt-1.5 ml-1">
-                          We will send a 6-digit verification code via SMS.
-                        </p>
-                      </div>
-
-                      {authError && (
-                        <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
-                          {authError}
-                        </p>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={isAuthenticating || !authPhone.trim()}
-                        className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {isAuthenticating ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            Sending SMS...
-                          </>
-                        ) : (
-                          "Send Verification Code"
-                        )}
-                      </button>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleVerifyPhoneOTP} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
-                          6-Digit Verification Code <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          maxLength={6}
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value)}
-                          placeholder="123456"
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-center tracking-[0.4em] font-mono text-lg font-bold text-gray-900 dark:text-white"
-                        />
-                      </div>
-
-                      {authError && (
-                        <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
-                          {authError}
-                        </p>
-                      )}
-
-                      {infoMessage && (
-                        <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30">
-                          {infoMessage}
-                        </p>
-                      )}
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setPhoneStep('number'); setAuthError(null); setInfoMessage(null); }}
-                          className="w-1/3 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:opacity-90 text-xs"
-                        >
-                          Change Number
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={isAuthenticating || otpCode.length < 6}
-                          className="w-2/3 py-3 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 text-xs"
-                        >
-                          {isAuthenticating ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Verifying...
-                            </>
-                          ) : (
-                            "Verify & Sign In"
-                          )}
-                        </button>
-                      </div>
-                    </form>
+                    </div>
                   )}
-                </div>
-              )}
+
+                  {authError && (
+                    <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                      {authError}
+                    </p>
+                  )}
+
+                  {infoMessage && (
+                    <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-900/30">
+                      {infoMessage}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isAuthenticating}
+                    className="w-full py-3.5 bg-app-primary text-white rounded-xl font-bold hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isAuthenticating ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      emailMode === 'signin' ? "Sign In with Email" : emailMode === 'register' ? "Create Account" : "Send Reset Email"
+                    )}
+                  </button>
+                </form>
+              </div>
 
               {/* Google Sign-In Placed Nicely Below */}
               <div className="relative my-5 text-center">
@@ -1162,7 +1078,7 @@ const formatAuthError = (error: any): string => {
                     Don't have an account yet?{' '}
                     <button
                       type="button"
-                      onClick={() => { setAuthTab('email'); setEmailMode('register'); setAuthError(null); setInfoMessage(null); }}
+                      onClick={() => { setEmailMode('register'); setAuthError(null); setInfoMessage(null); }}
                       className="text-app-primary font-bold hover:underline ml-0.5"
                     >
                       Sign up for free
@@ -1173,7 +1089,7 @@ const formatAuthError = (error: any): string => {
                     Already have an account?{' '}
                     <button
                       type="button"
-                      onClick={() => { setAuthTab('email'); setEmailMode('signin'); setAuthError(null); setInfoMessage(null); }}
+                      onClick={() => { setEmailMode('signin'); setAuthError(null); setInfoMessage(null); }}
                       className="text-app-primary font-bold hover:underline ml-0.5"
                     >
                       Sign in
