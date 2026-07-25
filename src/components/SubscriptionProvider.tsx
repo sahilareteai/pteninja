@@ -388,6 +388,8 @@ const formatAuthError = (error: any): string => {
     case 'auth/popup-blocked':
     case 'auth/cancelled-popup-request':
       return "Sign-in popup was blocked by your browser. Please allow popups to continue.";
+    case 'auth/operation-not-allowed':
+      return "SMS sign-in is not enabled for this country code in Firebase. Please enable the region in Firebase Console or sign in with Email / Google.";
     default:
       const cleanMessage = rawMessage
         .replace(/^Firebase:\s*/i, '')
