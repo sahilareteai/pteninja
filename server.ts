@@ -2760,8 +2760,8 @@ app.post("/api/admin/send-email", async (req, res) => {
   const content = html || body;
   if (!to || !subject || !content) return res.status(400).json({ error: "Missing email details" });
 
-  const transporter = createTransporter();
-  if (!transporter) return res.status(500).json({ error: "SMTP not configured" });
+  const transporter = createMailTransport();
+  if (!transporter) return res.status(500).json({ error: "SMTP/Gmail not configured in environment variables (SMTP_HOST or GMAIL_USER missing)." });
 
   try {
     await transporter.sendMail({
@@ -2781,11 +2781,11 @@ app.post("/api/admin/trigger-migration-emails", async (req, res) => {
   const authResult = await requireAuth(req, res, { requireAdmin: true });
   if (!authResult) return;
 
-  const transporter = createTransporter();
+  const transporter = createMailTransport();
   if (!transporter) return res.status(500).json({ error: "SMTP not configured" });
 
   try {
-    const db = authResult.adminInstance.firestore();
+    const db = getAdminFirestore(authResult.adminInstance, FIREBASE_DATABASE_ID);
     const usersSnapshot = await db.collection("users").where("subscriptionStatus", "==", "active").get();
     
     let sentCount = 0;
@@ -2876,7 +2876,7 @@ app.post("/api/verify-razorpay-payment", subscriptionLimiter, async (req, res) =
 
   if (isSignatureValid) {
     try {
-      const db = authResult.adminInstance.firestore();
+      const db = getAdminFirestore(authResult.adminInstance, FIREBASE_DATABASE_ID);
       const userRef = db.collection("users").doc(authResult.decodedToken.uid);
       
       const recurring = PLAN_INTERVALS[planId];
