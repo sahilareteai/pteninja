@@ -1737,7 +1737,7 @@ function AppContent() {
     );
   }
 
-  if (user && user.accessType !== 'guest' && !isEmailVerified) {
+  if (user && user.accessType !== 'guest' && (!user.email || !isEmailVerified)) {
     return (
       <div className="min-h-screen bg-app-bg text-app-text font-sans flex items-center justify-center p-6">
         <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">

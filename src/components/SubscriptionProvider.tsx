@@ -583,6 +583,8 @@ const formatAuthError = (error: any): string => {
     }
   };
 
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+
   const handleVerifyPhoneOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -590,34 +592,11 @@ const formatAuthError = (error: any): string => {
 
     setIsAuthenticating(true);
     try {
-      const cred = await confirmationResult.confirm(otpCode.trim());
-      const firebaseUser = cred.user;
-
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        const now = new Date();
-        const trialEnds = new Date();
-        trialEnds.setDate(trialEnds.getDate() + 7);
-        const newUser: UserData = {
-          uid: firebaseUser.uid,
-          phoneNumber: firebaseUser.phoneNumber || authPhone.trim(),
-          displayName: `Ninja ${firebaseUser.phoneNumber?.slice(-4) || 'User'}`,
-          createdAt: now.toISOString(),
-          accessType: 'user',
-          subscriptionStatus: 'trial',
-          trialEndsAt: trialEnds.toISOString(),
-          activityLog: [getLocalDateStr(now)],
-          completedTasks: [],
-          completedTasksDetailed: [],
-          taskScores: {},
-          favoriteWords: [],
-          schedule: [],
-          goals: []
-        };
-        await setDoc(userRef, newUser);
-      }
-      setShowAuthModal(false);
+      await confirmationResult.confirm(otpCode.trim());
+      setIsPhoneVerified(true);
+      setPhoneStep('number');
+      setIsAuthenticating(false);
+      setInfoMessage("Phone number verified successfully! Please complete your account details below.");
     } catch (err: any) {
       setIsAuthenticating(false);
       setAuthError(formatAuthError(err));
