@@ -665,22 +665,6 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       </section>
 
 
-      {/* Final CTA */}
-      <section className="relative z-10 py-32 px-6 border-t border-app-border">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-app-primary/5" />
-        <div className="max-w-4xl mx-auto relative">
-              <div className="mt-12 text-center">
-            <button 
-              onClick={() => onLogin('register')}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-app-surface/50 border border-app-primary/20 text-app-primary font-bold text-sm rounded-xl hover:bg-app-primary/10 transition-all"
-            >
-              Explore All Features
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      </section>
-
       {/* Footer CTA */}
       <section className="relative z-10 py-24 px-6 max-w-5xl mx-auto text-center">
         <motion.div
