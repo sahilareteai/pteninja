@@ -186,9 +186,16 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           }}
           className="space-y-8"
         >
-          <motion.div variants={itemVariant} className="inline-flex items-center gap-2 px-4 py-2 bg-app-surface rounded-full border border-app-primary/20 text-xs font-bold tracking-widest text-app-primary uppercase shadow-[0_0_15px_rgba(var(--app-primary-rgb),0.15)]">
-            <Star size={14} className="fill-current" />
-            The Ultimate AI PTE Trainer
+          <motion.div 
+            variants={itemVariant} 
+            whileHover={{ scale: 1.04 }}
+            className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-app-surface/80 border border-app-primary/30 backdrop-blur-xl shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.15)] text-xs font-extrabold tracking-[0.2em] text-app-primary uppercase cursor-default transition-all duration-300"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-app-primary"></span>
+            </span>
+            <span>The Ultimate AI PTE Trainer</span>
           </motion.div>
           <motion.h2 variants={itemVariant} className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
             MASTER THE PTE <br />
