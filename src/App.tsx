@@ -1280,6 +1280,19 @@ function AppContent() {
   useEffect(() => {
     setTasks(PTE_TASKS);
     setIsLoadingTasks(false);
+
+    // Unsubscribe URL query param handler
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const e = params.get('e');
+      const t = params.get('t');
+      const action = params.get('action');
+      if (action === 'unsubscribe' || (e && t)) {
+        if (e && t) {
+          window.location.href = `/api/unsubscribe?e=${encodeURIComponent(e)}&t=${encodeURIComponent(t)}`;
+        }
+      }
+    }
   }, []);
 
   const handleRequestNotificationPermission = async () => {

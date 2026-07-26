@@ -2360,12 +2360,15 @@ app.post("/api/gemini-quota-alert", geminiQuotaAlertLimiter, async (_req, res) =
 });
 
 // ─── Email Unsubscribe ────────────────────────────────────────────────────────
-// GET /api/unsubscribe?e=BASE64URL_EMAIL&t=HMAC_TOKEN
-// No authentication required — the HMAC token is the proof of ownership.
-// Sets emailUnsubscribed: true on the matching Firestore user document.
-// Returns a user-friendly HTML page confirming the unsubscription.
-app.get("/api/unsubscribe", async (req, res) => {
-  const { e: encodedEmail, t: token } = req.query as Record<string, string | undefined>;
+// GET & POST /api/unsubscribe?e=BASE64URL_EMAIL&t=HMAC_TOKEN
+// Supports direct link clicks (GET) and RFC 8058 One-Click Unsubscribe (POST).
+// Sets emailUnsubscribed: true on matching user document(s) AND records entry in `unsubscriptions` collection.
+const handleUnsubscribeRequest = async (req: any, res: any) => {
+  const queryParams = (req.query || {}) as Record<string, string | undefined>;
+  const bodyParams = (req.body || {}) as Record<string, string | undefined>;
+  const encodedEmail = queryParams.e || bodyParams.e;
+  const token = queryParams.t || bodyParams.t;
+  const directEmail = queryParams.email || bodyParams.email;
 
   const appUrl = process.env.APP_URL ?? "https://pteninja.com";
 
@@ -2756,12 +2759,13 @@ function buildBrandedPteNinjaEmailHtml(options: {
   subtitle?: string;
   preheader?: string;
   recipientName?: string;
+  recipientEmail?: string;
   contentHtml: string;
   ctaText?: string;
   ctaUrl?: string;
   unsubscribeUrl?: string;
 }) {
-  const { title, subtitle, preheader, recipientName, contentHtml, ctaText, ctaUrl, unsubscribeUrl } = options;
+  const { title, subtitle, preheader, recipientName, recipientEmail, contentHtml, ctaText, ctaUrl, unsubscribeUrl } = options;
   
   // Clean greeting logic: Only render greeting if contentHtml doesn't already start with Hi/Dear/Hello
   const cleanContent = contentHtml.trim();
@@ -2770,7 +2774,8 @@ function buildBrandedPteNinjaEmailHtml(options: {
     ? `<p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a1a2e;line-height:1.6;">Hi <strong>${recipientName}</strong>,</p>`
     : "";
 
-  const effectiveUnsubscribeUrl = unsubscribeUrl || "https://pteninja.com/?action=unsubscribe";
+  const appUrl = process.env.APP_URL ?? "https://pteninja.com";
+  const effectiveUnsubscribeUrl = unsubscribeUrl || (recipientEmail ? generateUnsubscribeUrl(recipientEmail, appUrl) : `${appUrl}/api/unsubscribe`);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -3516,6 +3521,10 @@ app.post("/api/send-weekly-upgrade-emails", weeklyUpgradeLimiter, async (req, re
           subject,
           text: textBody,
           html: htmlBody,
+          headers: {
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
+          }
         });
         // Update lastUpgradeEmailSentAt (fire-and-forget)
         ref.update({ lastUpgradeEmailSentAt: new Date().toISOString() }).catch(() => {});
