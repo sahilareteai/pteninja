@@ -2426,17 +2426,26 @@ to re-subscribe.</p>
       const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
       // Look up user(s) with this email and mark them unsubscribed
       const snap = await db.collection("users").where("email", "==", email).limit(5).get();
-      const batch = db.batch();
-      snap.docs.forEach(doc => batch.update(doc.ref, { emailUnsubscribed: true }));
-      if (!snap.empty) await batch.commit();
+      if (snap && snap.docs && Array.isArray(snap.docs) && snap.docs.length > 0) {
+        const batch = db.batch();
+        snap.docs.forEach((doc: any) => batch.update(doc.ref, { emailUnsubscribed: true }));
+        await batch.commit();
+      }
     } catch (err) {
       console.error("[Unsubscribe] Firestore update error:", err);
       // Still show success to the user — we've at minimum validated the token
     }
   }
 
+  if (req.method === "POST") {
+    return res.json({ success: true, message: "Unsubscribed successfully" });
+  }
+
   res.type("html").send(successPage(email));
-});
+};
+
+app.get("/api/unsubscribe", handleUnsubscribeRequest);
+app.post("/api/unsubscribe", handleUnsubscribeRequest);
 
 // ─── Welcome Email ────────────────────────────────────────────────────────────
 const welcomeEmailLimiter = rateLimit({
