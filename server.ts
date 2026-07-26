@@ -2241,7 +2241,7 @@ function buildUnsubscribeFooterHtml(unsubscribeUrl: string, recipientEmail: stri
         Don't want these emails?
         <a href="${safeUrl}" style="color:#d1d5db;text-decoration:underline;">Unsubscribe</a>
         &nbsp;|&nbsp;
-        &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+        &copy; ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.
       </p>
     </td>
   </tr>`;
@@ -2256,7 +2256,7 @@ function buildUnsubscribeFooterText(unsubscribeUrl: string): string {
     "---",
     "You are receiving this because you signed up for PTE Ninja.",
     `To unsubscribe from promotional emails: ${unsubscribeUrl}`,
-    `© ${new Date().getFullYear()} PTE Ninja. All rights reserved.`,
+    `© ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.`,
   ].join("\n");
 }
 
@@ -3181,7 +3181,7 @@ app.post("/api/support-ticket", supportTicketLimiter, async (req, res) => {
   Don't want promotional emails?
   <a href="${supportUnsubscribeSafeUrl}" style="color:#d1d5db;text-decoration:underline;">Unsubscribe</a>
   &nbsp;&mdash;&nbsp;
-  &copy; ${new Date().getFullYear()} PTE Ninja. All rights reserved.
+  &copy; ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.
 </p>
 </body></html>`;
 
