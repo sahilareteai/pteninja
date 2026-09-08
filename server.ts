@@ -27,7 +27,11 @@ const ALLOWED_ORIGINS: string[] = (process.env.ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 if (ALLOWED_ORIGINS.length === 0) {
-  ALLOWED_ORIGINS.push("https://pteninja.vercel.app", "https://pteninja.com");
+  ALLOWED_ORIGINS.push("https://pteninja.vercel.app", "https://pteninja.com", "https://localhost", "http://localhost", "capacitor://localhost");
+} else {
+  for (const o of ["https://localhost", "http://localhost", "capacitor://localhost"]) {
+    if (!ALLOWED_ORIGINS.includes(o)) ALLOWED_ORIGINS.push(o);
+  }
 }
 
 app.use((req, res, next) => {
