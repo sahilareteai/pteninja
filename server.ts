@@ -216,6 +216,113 @@ const serverTTSGeminiKeys: ServerKeyState[] = buildServerKeyStates();
   }
 }
 
+// ─── Groq AI Configuration & Helpers ──────────────────────────────────────────
+// Groq provides ultra-fast inference with free-tier rate limits.
+// When GROQ_API_KEY is configured, Groq is used as the primary engine for
+// writing evaluation and support chat, with automatic fallback to Gemini.
+const GROQ_API_KEY = process.env.GROQ_API_KEY?.trim();
+const GROQ_CHAT_MODEL = process.env.GROQ_CHAT_MODEL?.trim() || "qwen/qwen3.8-27b";
+const GROQ_CHAT_MODELS = [
+  process.env.GROQ_CHAT_MODEL?.trim(),
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+].filter(Boolean) as string[];
+
+if (GROQ_API_KEY) {
+  console.log(`[Groq] Groq API enabled as primary engine for writing & chat (model: ${GROQ_CHAT_MODEL}).`);
+} else {
+  console.log(`[Groq] GROQ_API_KEY not configured — using Gemini as primary engine.`);
+}
+
+interface GroqChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface GroqChatOptions {
+  messages: GroqChatMessage[];
+  temperature?: number;
+  max_tokens?: number;
+  jsonMode?: boolean;
+}
+
+async function serverCallGroqChat(opts: GroqChatOptions): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) throw new Error("GROQ_NOT_CONFIGURED");
+
+  let lastError: Error | null = null;
+  for (const model of GROQ_CHAT_MODELS) {
+    try {
+      const body: Record<string, unknown> = {
+        model,
+        messages: opts.messages,
+        temperature: opts.temperature ?? 0.2,
+        max_tokens: opts.max_tokens ?? 1024,
+      };
+      if (opts.jsonMode) {
+        body.response_format = { type: "json_object" };
+      }
+
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = (errData as any)?.error?.message || `Groq HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const data = (await res.json()) as any;
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || content.trim().length === 0) {
+        throw new Error("Empty content returned from Groq");
+      }
+      return content;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Groq] Model ${model} failed (${err.message}) — trying next candidate model if available.`);
+    }
+  }
+  throw lastError ?? new Error("All Groq models failed.");
+}
+
+async function serverCallGroqWhisper(audioBuffer: Buffer, mimeType: string): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) throw new Error("GROQ_NOT_CONFIGURED");
+
+  const ext = mimeType.includes("wav") ? "wav" : mimeType.includes("mp4") ? "mp4" : "webm";
+  const blob = new Blob([audioBuffer], { type: mimeType });
+  const formData = new FormData();
+  formData.append("file", blob, `audio.${ext}`);
+  formData.append("model", "whisper-large-v3");
+
+  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const msg = (errData as any)?.error?.message || `Groq Whisper HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  const data = (await res.json()) as any;
+  return (data.text ?? "").trim();
+}
+
 type GeminiGenerateContentParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GeminiGenerateContentResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
@@ -857,6 +964,7 @@ type AdminAppInstance = NonNullable<ReturnType<typeof getAdminApp>>;
 async function requireAuth(
   req: import("express").Request,
   res: import("express").Response,
+  opts?: { requireAdmin?: boolean },
 ): Promise<{ decodedToken: import("firebase-admin/auth").DecodedIdToken; adminInstance: AdminAppInstance } | null> {
   const adminInstance = getAdminApp();
   if (!adminInstance) {
@@ -871,6 +979,24 @@ async function requireAuth(
   }
   try {
     const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+    if (opts?.requireAdmin) {
+      let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+      if (!isAdmin) {
+        try {
+          const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+            .collection("users")
+            .doc(decodedToken.uid)
+            .get();
+          isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+        } catch {
+          // deny access if we can't verify
+        }
+      }
+      if (!isAdmin) {
+        res.status(403).json({ error: "Forbidden: Admin access required" });
+        return null;
+      }
+    }
     return { decodedToken, adminInstance };
   } catch {
     res.status(401).json({ error: "Invalid or expired token." });
@@ -904,11 +1030,11 @@ async function verifySubscriptionOwnership(
 }
 
 // Map planId → Stripe recurring interval
-const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number }> = {
-  weekly:    { interval: "week",  interval_count: 1 },
-  monthly:   { interval: "month", interval_count: 1 },
-  quarterly: { interval: "month", interval_count: 3 },
-  annual:    { interval: "year",  interval_count: 1 },
+const PLAN_INTERVALS: Record<string, { interval: "day" | "week" | "month" | "year"; interval_count: number; name?: string }> = {
+  weekly:    { interval: "week",  interval_count: 1, name: "Weekly Plan" },
+  monthly:   { interval: "month", interval_count: 1, name: "Monthly Plan" },
+  quarterly: { interval: "month", interval_count: 3, name: "Quarterly Plan" },
+  annual:    { interval: "year",  interval_count: 1, name: "Annual Plan" },
 };
 
 // Minimal subscription shape we need at runtime.
@@ -1922,6 +2048,10 @@ app.get("/api/gemini-key-status", adminStatusLimiter, async (req, res) => {
     geminiKeyCount: serverGeminiKeys.filter((k) => !k.isVertex).length,
     lastSyncedAt: keyStateSyncedAtMap["keys"] || null,
     keys: textKeys,
+    groq: {
+      configured: !!process.env.GROQ_API_KEY?.trim(),
+      model: GROQ_CHAT_MODEL,
+    },
     dailyTokens,
     tts: {
       availableKeys: ttsKeys.filter((k) => k.available).length,
@@ -2292,7 +2422,7 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
     return res.status(400).json({ error: "Message is required." });
   }
 
-  if (serverGeminiKeys.length === 0) {
+  if (serverGeminiKeys.length === 0 && !process.env.GROQ_API_KEY?.trim()) {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
@@ -2310,24 +2440,50 @@ app.post("/api/support-chat", supportChatLimiter, async (req, res) => {
   try {
     const systemInstruction = `${SUPPORT_BOT_SYSTEM_PROMPT}\n\nUser name: ${safeUserName}\nIssue type: ${safeIssueType}`;
 
-    // Build the full contents array: history + new user message
-    const contents = [
-      ...safeHistory.map((h) => ({ role: h.role, parts: h.parts })),
-      { role: "user" as const, parts: [{ text: message.trim() }] },
-    ];
+    let text = "";
 
-    const response = await serverCallGemini({
-      model: TEXT_MODEL,
-      contents,
-      config: { systemInstruction },
-    },
-    serverGeminiKeys,
-    "keys",
-    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
-    TEXT_MODEL,
-    );
+    // 1. Try Groq as primary engine if configured
+    if (process.env.GROQ_API_KEY?.trim()) {
+      try {
+        const groqMessages: GroqChatMessage[] = [
+          { role: "system", content: systemInstruction },
+          ...safeHistory.map((h) => ({
+            role: (h.role === "model" ? "assistant" : "user") as "assistant" | "user",
+            content: h.parts.map((p) => p.text).join("\n"),
+          })),
+          { role: "user", content: message.trim() },
+        ];
+        text = await serverCallGroqChat({ messages: groqMessages, temperature: 0.5 });
+      } catch (groqErr: any) {
+        console.warn(`[SupportChat] Groq call failed (${groqErr.message}) — falling back to Gemini.`);
+      }
+    }
 
-    const text = response.text ?? "";
+    // 2. Fall back to Gemini if Groq was not used or failed
+    if (!text) {
+      if (serverGeminiKeys.length === 0) {
+        return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
+      }
+
+      // Build the full contents array: history + new user message
+      const contents = [
+        ...safeHistory.map((h) => ({ role: h.role, parts: h.parts })),
+        { role: "user" as const, parts: [{ text: message.trim() }] },
+      ];
+
+      const response = await serverCallGemini({
+        model: TEXT_MODEL,
+        contents,
+        config: { systemInstruction },
+      },
+      serverGeminiKeys,
+      "keys",
+      // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+      TEXT_MODEL,
+      );
+
+      text = response.text ?? "";
+    }
 
     // Track support chat topic (fire-and-forget, privacy-safe — no message content stored)
     const adminInst = getAdminApp();
@@ -3634,7 +3790,7 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   if (!taskType || typeof taskType !== "string") {
     return res.status(400).json({ error: "taskType is required." });
   }
-  if (serverGeminiKeys.length === 0) {
+  if (serverGeminiKeys.length === 0 && !process.env.GROQ_API_KEY?.trim()) {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
@@ -3645,40 +3801,127 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
   }
 
   try {
-    const response = await serverCallGemini({
-      model: TEXT_MODEL,
-      contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            overall: { type: Type.NUMBER },
-            fluency: { type: Type.NUMBER },
-            pronunciation: { type: Type.NUMBER },
-            content: { type: Type.NUMBER },
-            transcription: { type: Type.STRING },
-            feedback: { type: Type.ARRAY, items: { type: Type.STRING } },
-            mispronounced: { type: Type.ARRAY, items: { type: Type.STRING } },
-            hesitations: { type: Type.NUMBER },
-            pace: { type: Type.STRING },
-            stress: { type: Type.STRING },
+    let parsed: any = null;
+
+    // 1. Try Gemini first for native multimodal audio acoustics if keys are available
+    if (serverGeminiKeys.length > 0) {
+      try {
+        const response = await serverCallGemini({
+          model: TEXT_MODEL,
+          contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                overall: { type: Type.NUMBER },
+                fluency: { type: Type.NUMBER },
+                pronunciation: { type: Type.NUMBER },
+                content: { type: Type.NUMBER },
+                transcription: { type: Type.STRING },
+                feedback: { type: Type.ARRAY, items: { type: Type.STRING } },
+                mispronounced: { type: Type.ARRAY, items: { type: Type.STRING } },
+                hesitations: { type: Type.NUMBER },
+                pace: { type: Type.STRING },
+                stress: { type: Type.STRING },
+              },
+              required: ["overall", "fluency", "pronunciation", "content", "transcription"],
+            },
           },
-          required: ["overall", "fluency", "pronunciation", "content", "transcription"],
         },
-      },
-    },
-    serverGeminiKeys,
-    "keys",
-    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
-    TEXT_MODEL,
-    );
+        serverGeminiKeys,
+        "keys",
+        TEXT_MODEL,
+        );
 
-    const parsed = JSON.parse(response.text ?? "{}");
+        parsed = JSON.parse(response.text ?? "{}");
+      } catch (geminiErr: any) {
+        if (!process.env.GROQ_API_KEY?.trim()) {
+          throw geminiErr;
+        }
+        console.warn(`[AnalyzeSpeaking] Gemini call failed (${geminiErr.message}) — falling back to Groq Whisper + LLM.`);
+      }
+    }
 
-    // Server-side guard: if Gemini returned empty/blank transcription despite the
-    // prompt instruction, it means no speech was detected. Override all scores to the
-    // minimum to avoid giving unearned high marks for silence.
+    // 2. Fall back to Groq Whisper + Groq LLM if Gemini failed or no Gemini keys exist
+    if (!parsed && process.env.GROQ_API_KEY?.trim()) {
+      try {
+        const audioBuffer = Buffer.from(audioData, "base64");
+        const transcription = await serverCallGroqWhisper(audioBuffer, cleanMimeType);
+
+        if (!transcription || transcription.trim().length < 5) {
+          parsed = {
+            overall: 10,
+            fluency: 10,
+            pronunciation: 10,
+            content: 10,
+            transcription: "",
+            feedback: ["No speech detected. Please record yourself speaking clearly."],
+            mispronounced: [],
+            hesitations: 0,
+            pace: "N/A",
+            stress: "N/A",
+          };
+        } else {
+          const groqSpeakingPrompt = `You are a strict PTE Academic Speaking Examiner. Analyze this student response:
+Task: "${sanitizePromptValue(taskType, 200)}"
+Expected answer (if any): "${sanitizePromptValue(correctAnswer ?? "", 200)}"
+Audio Transcription: "${transcription}"
+
+Score strictly on the 10-90 PTE Academic scale for Content, Oral Fluency, and Pronunciation.
+Provide actionable feedback, list any mispronounced words, estimate hesitations, pace, and stress.
+Return a valid JSON object matching EXACTLY this structure:
+{
+  "overall": number,
+  "fluency": number,
+  "pronunciation": number,
+  "content": number,
+  "transcription": "${transcription.replace(/["\\]/g, " ")}",
+  "feedback": string[],
+  "mispronounced": string[],
+  "hesitations": number,
+  "pace": string,
+  "stress": string
+}`;
+
+          const rawJson = await serverCallGroqChat({
+            messages: [
+              { role: "system", content: "You are a strict PTE Academic Speaking Examiner. Return valid JSON only." },
+              { role: "user", content: groqSpeakingPrompt },
+            ],
+            jsonMode: true,
+            temperature: 0.2,
+          });
+
+          const groqParsed = JSON.parse(rawJson);
+          const clamp = (v: any, def = 50) => {
+            const num = typeof v === "number" ? v : parseInt(v, 10);
+            return isNaN(num) ? def : Math.max(10, Math.min(90, Math.round(num)));
+          };
+          parsed = {
+            overall: clamp(groqParsed.overall),
+            fluency: clamp(groqParsed.fluency),
+            pronunciation: clamp(groqParsed.pronunciation),
+            content: clamp(groqParsed.content),
+            transcription,
+            feedback: Array.isArray(groqParsed.feedback) ? groqParsed.feedback.map(String) : ["Practice speaking with a steady pace."],
+            mispronounced: Array.isArray(groqParsed.mispronounced) ? groqParsed.mispronounced.map(String) : [],
+            hesitations: typeof groqParsed.hesitations === "number" ? groqParsed.hesitations : 0,
+            pace: typeof groqParsed.pace === "string" ? groqParsed.pace : "Normal",
+            stress: typeof groqParsed.stress === "string" ? groqParsed.stress : "Appropriate",
+          };
+        }
+      } catch (whisperErr: any) {
+        console.error("[AnalyzeSpeaking] Groq Whisper fallback failed:", whisperErr);
+        throw whisperErr;
+      }
+    }
+
+    if (!parsed) {
+      throw new Error("GEMINI_QUOTA_EXCEEDED");
+    }
+
+    // Server-side guard: if transcription is empty/blank, override all scores to 10
     const transcription: string = parsed.transcription ?? "";
     if (transcription.trim().length < 5) {
       parsed.overall = 10;
@@ -3715,7 +3958,7 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   if (!taskType || typeof taskType !== "string") {
     return res.status(400).json({ error: "taskType is required." });
   }
-  if (serverGeminiKeys.length === 0) {
+  if (serverGeminiKeys.length === 0 && !process.env.GROQ_API_KEY?.trim()) {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
@@ -3724,33 +3967,94 @@ app.post("/api/analyze-writing", geminiProxyLimiter, async (req, res) => {
   const safeText = sanitizePromptValue(text, 5000);
 
   try {
-    const response = await serverCallGemini({
-      model: TEXT_MODEL,
-      contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            overall: { type: Type.NUMBER },
-            grammar: { type: Type.NUMBER },
-            vocabulary: { type: Type.NUMBER },
-            spelling: { type: Type.NUMBER },
-            content: { type: Type.NUMBER },
-            tips: { type: Type.ARRAY, items: { type: Type.STRING } },
-            mistakes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    let writingResult: any = null;
+
+    // 1. Try Groq as primary engine if configured
+    if (process.env.GROQ_API_KEY?.trim()) {
+      try {
+        const groqPrompt = `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response:
+"""
+${safeText}
+"""
+Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found.
+Return a valid JSON object matching EXACTLY this structure:
+{
+  "overall": number,
+  "grammar": number,
+  "vocabulary": number,
+  "spelling": number,
+  "content": number,
+  "tips": string[],
+  "mistakes": string[]
+}`;
+
+        const rawJson = await serverCallGroqChat({
+          messages: [
+            { role: "system", content: "You are a strict PTE Academic Writing Examiner. Return valid JSON only with required numeric scores and string arrays." },
+            { role: "user", content: groqPrompt },
+          ],
+          jsonMode: true,
+          temperature: 0.2,
+        });
+
+        const parsed = JSON.parse(rawJson);
+        const clamp = (v: any, def = 50) => {
+          const num = typeof v === "number" ? v : parseInt(v, 10);
+          return isNaN(num) ? def : Math.max(10, Math.min(90, Math.round(num)));
+        };
+
+        if (parsed && typeof parsed === "object") {
+          writingResult = {
+            overall: clamp(parsed.overall),
+            grammar: clamp(parsed.grammar),
+            vocabulary: clamp(parsed.vocabulary),
+            spelling: clamp(parsed.spelling),
+            content: clamp(parsed.content),
+            tips: Array.isArray(parsed.tips) ? parsed.tips.map(String) : ["Practice organizing ideas with clear transitional words."],
+            mistakes: Array.isArray(parsed.mistakes) ? parsed.mistakes.map(String) : [],
+          };
+        }
+      } catch (groqErr: any) {
+        console.warn(`[AnalyzeWriting] Groq call failed (${groqErr.message}) — falling back to Gemini.`);
+      }
+    }
+
+    // 2. Fall back to Gemini if Groq was not used or failed
+    if (!writingResult) {
+      if (serverGeminiKeys.length === 0) {
+        return res.status(503).json({ error: "AI service is currently unavailable." });
+      }
+
+      const response = await serverCallGemini({
+        model: TEXT_MODEL,
+        contents: `You are a strict PTE Academic Writing Examiner. Analyze this PTE ${safeTaskType} response: "${safeText}". Score it strictly on the 10-90 PTE Academic scale for Grammar (accuracy and range of grammatical structures), Vocabulary (range and appropriateness of word choice), Spelling (accuracy of spelling), and Content (relevance, completeness, and accuracy relative to the task). A mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Provide specific, actionable improvement tips and list all grammatical, spelling, vocabulary, and content mistakes found. Return JSON.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              overall: { type: Type.NUMBER },
+              grammar: { type: Type.NUMBER },
+              vocabulary: { type: Type.NUMBER },
+              spelling: { type: Type.NUMBER },
+              content: { type: Type.NUMBER },
+              tips: { type: Type.ARRAY, items: { type: Type.STRING } },
+              mistakes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            },
+            required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"],
           },
-          required: ["overall", "grammar", "vocabulary", "spelling", "content", "tips", "mistakes"],
         },
       },
-    },
-    serverGeminiKeys,
-    "keys",
-    // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
-    TEXT_MODEL,
-    );
+      serverGeminiKeys,
+      "keys",
+      // TEXT_MODEL is available on both Vertex AI and Gemini Developer API.
+      TEXT_MODEL,
+      );
 
-    res.json(JSON.parse(response.text ?? "{}"));
+      writingResult = JSON.parse(response.text ?? "{}");
+    }
+
+    res.json(writingResult);
   } catch (error: any) {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {
       return res.status(503).json({ error: "AI service is temporarily unavailable. Please try again later." });
@@ -3772,7 +4076,7 @@ app.get("/robots.txt", (_req, res) => {
 
 // Vite setup for local development ONLY
 async function setupVite() {
-  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL && process.env.NODE_ENV !== "test") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -3783,7 +4087,7 @@ async function setupVite() {
 }
 
 // Only start the server if this file is run directly (local dev)
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL && process.env.NODE_ENV !== "test") {
   setupVite().then(() => {
     const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {

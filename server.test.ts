@@ -794,6 +794,8 @@ describe("GET /api/unsubscribe", () => {
     mockGetApps.mockReturnValue([{}]);
     mockFirestoreCollectionGet.mockReset();
     mockFirestoreBatch.mockReturnValue({
+      delete: vi.fn(),
+      set: vi.fn(),
       update: vi.fn(),
       commit: vi.fn().mockResolvedValue({}),
     });
