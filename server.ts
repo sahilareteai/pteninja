@@ -109,13 +109,13 @@ function buildServerKeyStates(): ServerKeyState[] {
   // Vertex AI Service Account JSON key (highest priority).
   // Set VERTEX_AI_SERVICE_ACCOUNT_JSON to the full contents of your downloaded
   // service account JSON key file. The project_id is read from the JSON itself.
-  // Optionally set VERTEX_AI_LOCATION (defaults to "us-central1").
-  const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON;
+  // Support VERTEX_AI_SERVICE_ACCOUNT_JSON or fall back to FIREBASE_SERVICE_ACCOUNT
+  const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (saJsonRaw) {
     try {
       const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
       const project = saJson.project_id;
-      const location = process.env.VERTEX_AI_LOCATION?.trim() || "us-central1";
+      const location = process.env.VERTEX_AI_LOCATION?.trim() || "global";
       if (!project) throw new Error("project_id missing from service account JSON");
       states.push({
         client: new GoogleGenAI({
