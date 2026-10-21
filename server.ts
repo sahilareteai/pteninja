@@ -82,8 +82,9 @@ const TRANSIENT_RETRY_MAX = 2;
 const TRANSIENT_RETRY_BASE_MS = 1000;
 
 // Model names used across text endpoints (analyze-speaking, analyze-writing, support-chat).
-// The same model ID works on both Gemini Developer API and Vertex AI.
-const TEXT_MODEL = "gemini-2.5-flash-lite";
+// gemini-3.5-flash-lite is the active successor model on Gemini API.
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
+
 
 // TTS model. gemini-2.5-flash-preview-tts is the dedicated TTS model available on both
 // the Gemini Developer API and Vertex AI (Express Mode and service-account backends).
