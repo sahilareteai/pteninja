@@ -104,12 +104,11 @@ interface ServerKeyState {
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
-  const states: ServerKeyState[] = [];
+  const vertexStates: ServerKeyState[] = [];
+  const geminiStates: ServerKeyState[] = [];
 
-  // Vertex AI Service Account JSON key (highest priority).
-  // Set VERTEX_AI_SERVICE_ACCOUNT_JSON to the full contents of your downloaded
-  // service account JSON key file. The project_id is read from the JSON itself.
-  // Support VERTEX_AI_SERVICE_ACCOUNT_JSON or fall back to FIREBASE_SERVICE_ACCOUNT
+  // Vertex AI Service Account JSON key.
+  // Set VERTEX_AI_SERVICE_ACCOUNT_JSON or fall back to FIREBASE_SERVICE_ACCOUNT.
   const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (saJsonRaw) {
     try {
@@ -117,7 +116,7 @@ function buildServerKeyStates(): ServerKeyState[] {
       const project = saJson.project_id;
       const location = process.env.VERTEX_AI_LOCATION?.trim() || "global";
       if (!project) throw new Error("project_id missing from service account JSON");
-      states.push({
+      vertexStates.push({
         client: new GoogleGenAI({
           vertexai: true,
           project,
@@ -133,16 +132,15 @@ function buildServerKeyStates(): ServerKeyState[] {
         nonQuotaErrorCount: 0,
       });
     } catch (err) {
-      console.error("[Vertex] Failed to parse VERTEX_AI_SERVICE_ACCOUNT_JSON — skipping:", err);
+      console.error("[Vertex] Failed to parse service account JSON — skipping:", err);
     }
   }
 
-  // Vertex AI Express Mode key: a simple Google Cloud API key restricted to
-  // Vertex AI APIs. No project/location needed. Set VERTEX_AI_API_KEY to use.
+  // Vertex AI Express Mode key: a Google Cloud API key restricted to Vertex AI.
   const vertexKey = process.env.VERTEX_AI_API_KEY;
   if (vertexKey) {
     try {
-      states.push({
+      vertexStates.push({
         client: new GoogleGenAI({ vertexai: true, apiKey: vertexKey }),
         exhaustedUntil: 0,
         consecutiveExhaustions: 0,
@@ -157,9 +155,7 @@ function buildServerKeyStates(): ServerKeyState[] {
     }
   }
 
-  // Support up to 10 Gemini Developer API keys.
-  // GEMINI_API_KEY is the primary key; GEMINI_API_KEY_2 through GEMINI_API_KEY_10 are backups.
-  // Keys are added in order so they are tried in priority sequence during rotation.
+  // Support up to 10 Gemini Developer API keys (e.g. unbilled free tier keys).
   const geminiKeys = [
     process.env.GEMINI_API_KEY,
     process.env.GEMINI_API_KEY_2,
@@ -173,10 +169,22 @@ function buildServerKeyStates(): ServerKeyState[] {
     process.env.GEMINI_API_KEY_10,
   ].filter(Boolean) as string[];
   for (const key of geminiKeys) {
-    states.push({ client: new GoogleGenAI({ apiKey: key }), exhaustedUntil: 0, consecutiveExhaustions: 0, isVertex: false, callCount: 0, totalInputTokens: 0, totalOutputTokens: 0, nonQuotaErrorCount: 0 });
+    geminiStates.push({
+      client: new GoogleGenAI({ apiKey: key }),
+      exhaustedUntil: 0,
+      consecutiveExhaustions: 0,
+      isVertex: false,
+      callCount: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      nonQuotaErrorCount: 0,
+    });
   }
 
-  return states;
+  // If PREFER_FREE_GEMINI=true, try unbilled Gemini free keys first (1500 calls/day),
+  // then automatically roll over to Vertex AI ($300 credit) upon quota exhaustion.
+  const preferFree = process.env.PREFER_FREE_GEMINI === "true";
+  return preferFree ? [...geminiStates, ...vertexStates] : [...vertexStates, ...geminiStates];
 }
 
 // Text endpoints (analyze-speaking, analyze-writing, support-chat) use this pool.
