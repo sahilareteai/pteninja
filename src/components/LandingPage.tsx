@@ -450,7 +450,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           
           <div className="mt-12 text-center">
             <button 
-              onClick={onLogin}
+              onClick={() => onLogin()}
               className="inline-flex items-center gap-3 px-8 py-4 bg-app-surface/50 border border-app-primary/20 text-app-primary font-bold text-sm rounded-xl hover:bg-app-primary/10 transition-all"
             >
               Explore All Features

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
+process.env.GEMINI_API_KEY = "test_gemini_key";
+
 // ─── Firebase Admin mocks ────────────────────────────────────────────────────
 const mockVerifyIdToken    = vi.hoisted(() => vi.fn());
 const mockFirestoreDocGet  = vi.hoisted(() => vi.fn());
@@ -43,13 +45,16 @@ vi.mock("firebase-admin/firestore", () => ({
         update: mockFirestoreDocUpdate,
       }),
       where: () => ({
-        limit: () => ({ get: mockFirestoreDocGet }),
+        limit: () => ({ get: mockFirestoreCollectionGet }),
         get: mockFirestoreCollectionGet,
       }),
       get: mockFirestoreCollectionGet,
     }),
     batch: mockFirestoreBatch,
   }),
+  FieldValue: {
+    increment: vi.fn((n) => n),
+  },
 }));
 
 vi.mock("firebase-admin/app", () => ({
@@ -119,7 +124,7 @@ vi.mock("@google/genai", () => {
 
 
 // Import app after mocks are set up
-const { app } = await import("./server.ts");
+const { app, serverGeminiKeys } = await import("./server.ts");
 
 // ─── Global Firebase auth setup ───────────────────────────────────────────────
 // All tests run with a valid auth token. The Firestore user doc intentionally
@@ -713,6 +718,10 @@ describe("POST /api/support-chat", () => {
     mockGenerateContent.mockReset();
     mockGetApps.mockReturnValue([{}]); // so getAdminApp returns truthy
     mockFirestoreDocSet.mockReset();
+    for (const k of serverGeminiKeys) {
+      k.exhaustedUntil = 0;
+      k.consecutiveExhaustions = 0;
+    }
   });
 
   it("returns AI response successfully", async () => {

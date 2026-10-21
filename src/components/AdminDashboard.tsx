@@ -412,7 +412,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
       const updatedFields = {
         subscriptionStatus: overrideStatus,
-        planId: overridePlan || undefined,
+        planId: (overridePlan || undefined) as UserData['planId'],
         subscriptionEndsAt: overrideEndsAt ? new Date(overrideEndsAt).toISOString() : undefined
       };
 

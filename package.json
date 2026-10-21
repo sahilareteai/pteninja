@@ -11,7 +11,9 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "build:mobile": "vite build && cap sync android",
-    "cap:sync": "cap sync android"
+    "cap:sync": "cap sync android",
+    "migrate:db": "node scripts/migrate.mjs",
+    "migrate:auth": "node scripts/migrate-auth.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

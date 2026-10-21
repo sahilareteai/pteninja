@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0336907942",
-  "appId": "1:1088917080196:web:72204518a23634400e5ad1",
-  "apiKey": "AIzaSyCx_QPvjLHLuDsCyTGl8ZXZiqxOpqju9AU",
-  "authDomain": "gen-lang-client-0336907942.firebaseapp.com",
-  "firestoreDatabaseId": "pteninja-prod",
-  "storageBucket": "gen-lang-client-0336907942.firebasestorage.app",
-  "messagingSenderId": "1088917080196",
-  "measurementId": ""
+  "projectId": "pteninja-prod",
+  "appId": "1:352036646207:web:029c837663e4e33090778a",
+  "apiKey": "AIzaSyBw76JO71XzliWkZ3ZNsH9nbjD1SH6-jdI",
+  "authDomain": "pteninja-prod.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "pteninja-prod.firebasestorage.app",
+  "messagingSenderId": "352036646207",
+  "measurementId": "G-CRN0RGFJ1P"
 }
