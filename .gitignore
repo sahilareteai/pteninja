@@ -10,3 +10,4 @@ firebase-applet-config.json
 *service-account*.json
 *backup*.json
 *auth*.json
+backups/
