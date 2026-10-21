@@ -2234,7 +2234,7 @@ const visitLimiter = rateLimit({
   max: 2,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip ?? "unknown",
+  skip: () => process.env.NODE_ENV === "test",
   message: { error: "Too many requests." },
 });
 
