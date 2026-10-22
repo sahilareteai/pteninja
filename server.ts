@@ -3169,8 +3169,14 @@ app.post("/api/create-razorpay-order", subscriptionLimiter, async (req, res) => 
     const order = await rzp.orders.create(options);
     res.json(order);
   } catch (error: any) {
-    console.error("Razorpay Order Error:", error);
-    res.status(500).json({ error: error.message || "Failed to create order" });
+    console.error("Razorpay Order Error:", JSON.stringify(error, null, 2));
+    const rzpDesc = error?.error?.description || error?.description || error?.message;
+    const statusCode = error?.statusCode || 500;
+    let userMsg = rzpDesc || "Failed to create order";
+    if (statusCode === 401 || rzpDesc?.toLowerCase().includes("authentication failed")) {
+      userMsg = "Razorpay authentication failed: Invalid Key ID or Secret. Please check your active RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel settings.";
+    }
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({ error: userMsg });
   }
 });
 
