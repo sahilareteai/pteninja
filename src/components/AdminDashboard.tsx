@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, 
@@ -37,12 +37,52 @@ import {
   Target,
   Calendar,
   Award,
+  Smartphone,
+  Laptop,
+  Share2,
+  Download,
+  Copy,
+  Check,
+  Filter,
+  ExternalLink,
+  Briefcase,
+  GraduationCap,
+  ChevronRight,
+  Menu,
 } from 'lucide-react';
 import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS, PTE_TASKS } from '../types';
 import { PromoCode } from '../services/promoService';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+
+export interface ReferralStudentDetail {
+  uid: string;
+  displayName: string;
+  email: string;
+  createdAt: string;
+  platform: 'mobile' | 'web';
+  subscriptionStatus: UserData['subscriptionStatus'];
+  planId?: string;
+  tasksCount: number;
+}
+
+export interface ReferralGroup {
+  code: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerUid?: string;
+  isBusinessPartner: boolean;
+  partnerNotes?: string;
+  totalReferred: number;
+  mobileInstalls: number;
+  webSignups: number;
+  paidUsers: number;
+  conversionRate: number;
+  estimatedRevenue: number;
+  students: ReferralStudentDetail[];
+  lastReferredAt?: string;
+}
 
 interface AdminUser extends UserData {
   uid: string;
@@ -93,12 +133,30 @@ interface GeminiKeyStatus {
 const TASK_CATEGORY_MAP = Object.fromEntries(PTE_TASKS.map(t => [t.id, t.category]));
 
 export function AdminDashboard({ onClose }: { onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'users' | 'promoCodes' | 'apiKeys'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'users' | 'referrals' | 'promoCodes' | 'apiKeys'>('analytics');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userFilter, setUserFilter] = useState<'all' | 'paid' | 'guests'>('all');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Referral & Affiliates state
+  const [referralLogs, setReferralLogs] = useState<any[]>([]);
+  const [referralSearch, setReferralSearch] = useState('');
+  const [referralFilter, setReferralFilter] = useState<'all' | 'partners' | 'high_converting' | 'mobile_leads'>('all');
+  const [selectedReferralGroup, setSelectedReferralGroup] = useState<ReferralGroup | null>(null);
+  const [selectedStudentFilter, setSelectedStudentFilter] = useState<'all' | 'paid' | 'mobile'>('all');
+  const [isAddingPartner, setIsAddingPartner] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [newPartner, setNewPartner] = useState({
+    code: '',
+    partnerName: '',
+    email: '',
+    discountPercent: 10,
+    notes: ''
+  });
+  const hasFetchedReferrals = useRef(false);
 
   // Email modal state
   const [selectedEmailUser, setSelectedEmailUser] = useState<AdminUser | null>(null);
@@ -135,6 +193,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       fetchAnalytics();
     } else if (activeTab === 'users') {
       fetchData(false);
+    } else if (activeTab === 'referrals') {
+      fetchReferralData();
     } else if (activeTab === 'promoCodes') {
       fetchData(false);
       seedInitialCodes();
@@ -275,6 +335,264 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       setIsLoading(false);
     }
   };
+
+  const fetchReferralData = async (force = false) => {
+    if (hasFetchedReferrals.current && !force && users.length > 0) return;
+    setIsLoading(true);
+    try {
+      const [usersSnap, promosSnap, logsSnap] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'promoCodes')),
+        getDocs(collection(db, 'referralLogs')).catch(() => ({ forEach: () => {} } as any)),
+      ]);
+      const usersList: AdminUser[] = [];
+      usersSnap.forEach((doc) => {
+        usersList.push({ uid: doc.id, ...doc.data() } as AdminUser);
+      });
+      setUsers(usersList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+
+      const promoList: PromoCode[] = [];
+      promosSnap.forEach((doc) => {
+        promoList.push(doc.data() as PromoCode);
+      });
+      setPromoCodes(promoList);
+
+      const logsList: any[] = [];
+      if (logsSnap && logsSnap.forEach) {
+        logsSnap.forEach((doc: any) => {
+          logsList.push({ id: doc.id, ...doc.data() });
+        });
+      }
+      setReferralLogs(logsList);
+      hasFetchedUsers.current = true;
+      hasFetchedPromos.current = true;
+      hasFetchedReferrals.current = true;
+    } catch (error) {
+      console.error('Error fetching referral data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreatePartnerCode = async () => {
+    if (!newPartner.code || !newPartner.partnerName) {
+      toast.error('Please provide both code and partner name');
+      return;
+    }
+    const cleanCode = newPartner.code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    try {
+      const partnerData: PromoCode = {
+        code: cleanCode,
+        discountPercent: Number(newPartner.discountPercent) || 10,
+        description: `${newPartner.partnerName} (${newPartner.notes || 'Business Partner'})`,
+        isActive: true,
+        isReferral: true,
+        referrerName: newPartner.partnerName.trim(),
+      };
+      await setDoc(doc(db, 'promoCodes', cleanCode), partnerData);
+      setPromoCodes(prev => [...prev.filter(p => p.code !== cleanCode), partnerData]);
+      setIsAddingPartner(false);
+      setNewPartner({ code: '', partnerName: '', email: '', discountPercent: 10, notes: '' });
+      toast.success(`Partner code ${cleanCode} created for ${partnerData.referrerName}!`);
+    } catch (err) {
+      console.error('Failed to create partner code:', err);
+      toast.error('Failed to create partner code');
+    }
+  };
+
+  const handleCopyCode = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCode(text);
+    toast.success(`Copied "${text}" to clipboard`);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleExportReferralCSV = () => {
+    if (referralGroups.length === 0) {
+      toast.error('No referral data to export');
+      return;
+    }
+    const headers = ['Referral Code', 'Partner / Referrer', 'Email', 'Total Referred', 'Mobile Installs', 'Web Signups', 'Paid Users', 'Conversion Rate %', 'Est Revenue ($)', 'Last Referred Date'];
+    const rows = referralGroups.map(g => [
+      `"${g.code}"`,
+      `"${g.ownerName.replace(/"/g, '""')}"`,
+      `"${g.ownerEmail}"`,
+      g.totalReferred,
+      g.mobileInstalls,
+      g.webSignups,
+      g.paidUsers,
+      `${g.conversionRate}%`,
+      g.estimatedRevenue,
+      `"${g.lastReferredAt || 'N/A'}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `pteninja_referrals_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Referral report exported successfully!');
+  };
+
+  const referralGroups = useMemo(() => {
+    const codeMap: Record<string, {
+      code: string;
+      students: ReferralStudentDetail[];
+    }> = {};
+
+    promoCodes.forEach(p => {
+      const c = p.code.toUpperCase();
+      if (!codeMap[c]) codeMap[c] = { code: c, students: [] };
+    });
+
+    users.forEach(u => {
+      if (u.referralCode) {
+        const c = u.referralCode.toUpperCase();
+        if (!codeMap[c]) codeMap[c] = { code: c, students: [] };
+      }
+    });
+
+    users.forEach(student => {
+      const refCode = student.referredBy ? student.referredBy.trim().toUpperCase() : null;
+      if (!refCode) return;
+      if (!codeMap[refCode]) {
+        codeMap[refCode] = { code: refCode, students: [] };
+      }
+      const platform: 'mobile' | 'web' = student.signupPlatform === 'mobile' ? 'mobile' : 'web';
+      const completedCount = student.completedTasks?.length || 0;
+      codeMap[refCode].students.push({
+        uid: student.uid,
+        displayName: student.displayName || 'Anonymous Student',
+        email: student.email || 'No email',
+        createdAt: student.createdAt,
+        platform,
+        subscriptionStatus: student.subscriptionStatus || 'trial',
+        planId: student.planId,
+        tasksCount: completedCount,
+      });
+    });
+
+    const planValues: Record<string, number> = {
+      weekly: 11,
+      monthly: 35,
+      quarterly: 85,
+      annual: 199,
+    };
+
+    const groups: ReferralGroup[] = Object.values(codeMap).map(item => {
+      const code = item.code;
+      const ownerUser = users.find(u => u.referralCode?.toUpperCase() === code);
+      const partnerPromo = promoCodes.find(p => p.code?.toUpperCase() === code);
+
+      const ownerName = ownerUser?.displayName || partnerPromo?.referrerName || partnerPromo?.description || (ownerUser ? 'Student' : 'Partner Campaign');
+      const ownerEmail = ownerUser?.email || '';
+      const isBusiness = !ownerUser || Boolean(partnerPromo?.isReferral) || code.includes('-EDU') || code.includes('PARTNER') || code.length < 9;
+      const partnerNotes = partnerPromo?.description;
+
+      const totalReferred = item.students.length;
+      const mobileInstalls = item.students.filter(s => s.platform === 'mobile').length;
+      const webSignups = item.students.filter(s => s.platform === 'web').length;
+      const paidStudents = item.students.filter(s => s.subscriptionStatus === 'active' || Boolean(s.planId));
+      const paidUsers = paidStudents.length;
+      const conversionRate = totalReferred > 0 ? Math.round((paidUsers / totalReferred) * 100) : 0;
+      
+      const estimatedRevenue = paidStudents.reduce((acc, s) => {
+        const planVal = s.planId ? (planValues[s.planId] || 35) : 35;
+        return acc + planVal;
+      }, 0);
+
+      item.students.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      const lastReferredAt = item.students[0]?.createdAt;
+
+      return {
+        code,
+        ownerName,
+        ownerEmail,
+        ownerUid: ownerUser?.uid,
+        isBusinessPartner: isBusiness,
+        partnerNotes,
+        totalReferred,
+        mobileInstalls,
+        webSignups,
+        paidUsers,
+        conversionRate,
+        estimatedRevenue,
+        students: item.students,
+        lastReferredAt,
+      };
+    });
+
+    return groups.sort((a, b) => {
+      if (b.totalReferred !== a.totalReferred) {
+        return b.totalReferred - a.totalReferred;
+      }
+      return b.paidUsers - a.paidUsers;
+    });
+  }, [users, promoCodes, referralLogs]);
+
+  const referralStats = useMemo(() => {
+    let totalReferred = 0;
+    let totalPaid = 0;
+    let totalMobile = 0;
+    let totalRevenue = 0;
+
+    referralGroups.forEach(g => {
+      totalReferred += g.totalReferred;
+      totalPaid += g.paidUsers;
+      totalMobile += g.mobileInstalls;
+      totalRevenue += g.estimatedRevenue;
+    });
+
+    const globalConversionRate = totalReferred > 0 ? Math.round((totalPaid / totalReferred) * 100) : 0;
+    const topPerformer = referralGroups.find(g => g.totalReferred > 0);
+
+    return {
+      totalReferred,
+      totalPaid,
+      totalMobile,
+      totalRevenue,
+      globalConversionRate,
+      topPerformer,
+      activeCodesCount: referralGroups.filter(g => g.totalReferred > 0).length,
+      totalPartnersCount: referralGroups.length,
+    };
+  }, [referralGroups]);
+
+  const filteredReferralGroups = useMemo(() => {
+    return referralGroups.filter(g => {
+      if (referralSearch) {
+        const q = referralSearch.toLowerCase();
+        const matchCode = g.code.toLowerCase().includes(q);
+        const matchName = g.ownerName.toLowerCase().includes(q);
+        const matchEmail = g.ownerEmail.toLowerCase().includes(q);
+        const matchStudent = g.students.some(s => s.displayName.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+        if (!matchCode && !matchName && !matchEmail && !matchStudent) return false;
+      }
+
+      if (referralFilter === 'partners') {
+        return g.isBusinessPartner || g.totalReferred >= 2;
+      }
+      if (referralFilter === 'high_converting') {
+        return g.conversionRate >= 20 && g.totalReferred >= 1;
+      }
+      if (referralFilter === 'mobile_leads') {
+        return g.mobileInstalls > 0;
+      }
+      return true;
+    });
+  }, [referralGroups, referralSearch, referralFilter]);
+
+  const filteredStudentsInGroup = useMemo(() => {
+    if (!selectedReferralGroup) return [];
+    return selectedReferralGroup.students.filter(s => {
+      if (selectedStudentFilter === 'paid') return s.subscriptionStatus === 'active' || Boolean(s.planId);
+      if (selectedStudentFilter === 'mobile') return s.platform === 'mobile';
+      return true;
+    });
+  }, [selectedReferralGroup, selectedStudentFilter]);
 
   const togglePromoStatus = async (promo: PromoCode) => {
     try {
@@ -582,56 +900,215 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     return { totalAttempts, tasksPracticed, sectionAttempts, sectionAvgScore, topTasks: topTasks.slice(0, 5) };
   }
 
+  const navigationItems = [
+    { 
+      id: 'analytics' as const, 
+      label: 'Analytics', 
+      desc: 'Platform engagement & practice trends', 
+      icon: BarChart3,
+      badge: undefined
+    },
+    { 
+      id: 'users' as const, 
+      label: 'Users & Students', 
+      desc: 'Directory, paid plans & account access', 
+      icon: Users,
+      badge: users.length > 0 ? users.length : undefined
+    },
+    { 
+      id: 'referrals' as const, 
+      label: 'Referrals & Affiliates', 
+      desc: 'Partner codes, mobile app & conversion tracking', 
+      icon: TrendingUp,
+      badge: referralStats.totalReferred > 0 ? referralStats.totalReferred : undefined
+    },
+    { 
+      id: 'promoCodes' as const, 
+      label: 'Promo Codes', 
+      desc: 'Discounts, special offers & coupons', 
+      icon: Ticket,
+      badge: promoCodes.length > 0 ? promoCodes.length : undefined
+    },
+    { 
+      id: 'apiKeys' as const, 
+      label: 'API Keys & Quota', 
+      desc: 'Gemini, Vertex & TTS engine health', 
+      icon: Key,
+      badge: geminiStatus ? `${geminiStatus.availableKeys} avail` : undefined
+    },
+  ];
+
+  const currentTabInfo = {
+    analytics: {
+      title: 'Platform Analytics',
+      subtitle: 'Real-time overview of users, task completions, test attempts, and support trends.',
+    },
+    users: {
+      title: 'User Management',
+      subtitle: `Directory of all ${users.length} registered students, trial members, and paid subscribers.`,
+    },
+    referrals: {
+      title: 'Referrals & Business Affiliates',
+      subtitle: 'Complete tracking of referral codes, partner coaching institutes, mobile app downloads, and paid conversions.',
+    },
+    promoCodes: {
+      title: 'Promotional Discounts',
+      subtitle: 'Create, monitor, and toggle discount codes for marketing campaigns.',
+    },
+    apiKeys: {
+      title: 'AI Key Monitor & Quota',
+      subtitle: 'Gemini Developer & Vertex AI key exhaustion status, daily token usage, and TTS engine health.',
+    },
+  }[activeTab];
+
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-app-bg/95 backdrop-blur-xl">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-6xl h-[90vh] bg-app-surface border border-app-primary/20 rounded-3xl flex flex-col overflow-hidden shadow-2xl"
-      >
-        {/* Header */}
-        <div className="p-5 border-b border-app-primary/10 flex items-center justify-between bg-app-surface/50 shrink-0">
+    <div className="fixed inset-0 z-[120] bg-app-bg text-app-text flex flex-col lg:flex-row overflow-hidden font-sans">
+      {/* ── Left Side Panel (Sidebar) ── */}
+      <aside className={cn(
+        "bg-app-surface border-r border-app-primary/10 flex flex-col shrink-0 lg:h-full z-30 transition-all duration-300",
+        "w-full lg:w-72",
+        isMobileMenuOpen ? "fixed inset-0 lg:static z-50 flex" : "hidden lg:flex"
+      )}>
+        {/* Sidebar Brand Header */}
+        <div className="p-5 border-b border-app-primary/10 flex items-center justify-between shrink-0 bg-app-surface">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary">
-              <Shield size={22} />
+            <div className="w-10 h-10 bg-gradient-to-br from-app-primary to-app-accent rounded-2xl flex items-center justify-center text-app-bg shadow-md shadow-app-primary/20">
+              <Shield size={22} className="stroke-[2.5]" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-app-text">Admin Dashboard</h2>
-              <p className="text-xs text-app-text-muted">Analytics · Users · Promotions · API Health</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-black text-app-text tracking-tight">Admin Portal</h2>
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-app-primary/20 text-app-primary border border-app-primary/30">
+                  PRO
+                </span>
+              </div>
+              <p className="text-[11px] text-app-text-muted">PTE Ninja Command Center</p>
             </div>
           </div>
           <button 
-            onClick={onClose}
-            className="p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
           >
-            <XCircle size={24} />
+            <XCircle size={22} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-app-primary/10 px-4 shrink-0 overflow-x-auto">
-          {([
-            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            { id: 'users', label: 'Users', icon: Users },
-            { id: 'promoCodes', label: 'Promo Codes', icon: Ticket },
-            { id: 'apiKeys', label: 'API Keys', icon: Key },
-          ] as const).map(tab => (
-            <button 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 px-5 py-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
-                activeTab === tab.id ? "border-app-primary text-app-primary" : "border-transparent text-app-text-muted hover:text-app-text"
-              )}
-            >
-              <tab.icon size={16} />
-              {tab.label}
-            </button>
-          ))}
+        {/* Sidebar Navigation Menu Items in Grid / List Cards */}
+        <div className="p-3.5 flex-1 overflow-y-auto space-y-2 custom-scrollbar">
+          <div className="px-2 py-1 text-[10px] font-black uppercase tracking-widest text-app-text-muted/80">
+            Control Center
+          </div>
+
+          <div className="grid grid-cols-1 gap-1.5">
+            {navigationItems.map(item => {
+              const isActive = activeTab === item.id;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-all group relative border",
+                    isActive 
+                      ? "bg-app-primary text-app-bg font-bold border-app-primary shadow-lg shadow-app-primary/25 translate-x-1" 
+                      : "bg-app-bg/40 hover:bg-app-surface border-app-primary/5 hover:border-app-primary/20 text-app-text-muted hover:text-app-text"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
+                    isActive 
+                      ? "bg-app-bg text-app-primary shadow-sm" 
+                      : "bg-app-primary/10 text-app-primary group-hover:bg-app-primary/20"
+                  )}>
+                    <Icon size={19} className="stroke-[2.2]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={cn("text-xs font-black truncate", isActive ? "text-app-bg" : "text-app-text")}>
+                        {item.label}
+                      </span>
+                      {item.badge !== undefined && (
+                        <span className={cn(
+                          "text-[10px] font-black px-2 py-0.5 rounded-full shrink-0",
+                          isActive
+                            ? "bg-app-bg text-app-primary"
+                            : "bg-app-primary/15 text-app-primary"
+                        )}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className={cn(
+                      "text-[10px] truncate mt-0.5",
+                      isActive ? "text-app-bg/85 font-medium" : "text-app-text-muted"
+                    )}>
+                      {item.desc}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        {/* Sidebar Footer - Admin Info & Exit Button */}
+        <div className="p-4 border-t border-app-primary/10 bg-app-surface/60 space-y-3 shrink-0">
+          <div className="flex items-center gap-3 px-1">
+            <div className="w-9 h-9 rounded-xl bg-app-primary/15 border border-app-primary/30 flex items-center justify-center text-xs font-black text-app-primary shrink-0">
+              {auth.currentUser?.displayName?.charAt(0) || 'A'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-app-text truncate">{auth.currentUser?.displayName || 'Administrator'}</p>
+              <p className="text-[10px] text-app-text-muted truncate">{auth.currentUser?.email || 'admin@pteninja.com'}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-app-bg hover:bg-app-primary/10 border border-app-primary/20 rounded-xl text-xs font-bold text-app-text transition-all group shadow-sm"
+          >
+            <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform text-app-primary" />
+            <span>Return to Student App</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main Dashboard Body ── */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-app-bg/50 relative">
+        {/* Top Header Bar */}
+        <header className="px-5 py-4 border-b border-app-primary/10 bg-app-surface/50 backdrop-blur-md flex items-center justify-between shrink-0 z-10">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 bg-app-bg border border-app-primary/20 rounded-xl text-app-text hover:bg-app-primary/10 transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu size={18} />
+            </button>
+            <div>
+              <h1 className="text-lg font-black text-app-text tracking-tight flex items-center gap-2">
+                {currentTabInfo.title}
+              </h1>
+              <p className="text-xs text-app-text-muted hidden sm:block">{currentTabInfo.subtitle}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-app-surface hover:bg-app-primary/10 border border-app-primary/20 rounded-xl text-xs font-bold text-app-text transition-colors"
+              title="Close Admin and return to application"
+            >
+              <XCircle size={15} className="text-app-text-muted" />
+              <span className="hidden sm:inline">Exit Admin</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Scrollable Content View */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
           {isLoading && (activeTab !== 'apiKeys') ? (
             <div className="h-full flex flex-col items-center justify-center space-y-4">
               <Loader2 className="animate-spin text-app-primary" size={40} />
@@ -1082,6 +1559,252 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                 </>
               )}
 
+              {/* ── REFERRALS & AFFILIATES TAB ── */}
+              {activeTab === 'referrals' && (
+                <div className="space-y-6">
+                  {/* Top KPI Metrics Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="bg-app-surface border border-app-primary/10 rounded-2xl p-4 flex flex-col gap-1.5 shadow-sm">
+                      <div className="w-8 h-8 rounded-xl bg-app-primary/10 flex items-center justify-center text-app-primary">
+                        <Share2 size={16} />
+                      </div>
+                      <div className="text-2xl font-black text-app-text">{referralStats.totalReferred}</div>
+                      <div className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">Total Referred</div>
+                    </div>
+
+                    <div className="bg-app-surface border border-app-primary/10 rounded-2xl p-4 flex flex-col gap-1.5 shadow-sm">
+                      <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400">
+                        <CheckCircle size={16} />
+                      </div>
+                      <div className="text-2xl font-black text-green-400">{referralStats.totalPaid}</div>
+                      <div className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">Paid Subscribers</div>
+                    </div>
+
+                    <div className="bg-app-surface border border-app-primary/10 rounded-2xl p-4 flex flex-col gap-1.5 shadow-sm">
+                      <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                        <TrendingUp size={16} />
+                      </div>
+                      <div className="text-2xl font-black text-blue-400">{referralStats.globalConversionRate}%</div>
+                      <div className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">Conversion Rate</div>
+                    </div>
+
+                    <div className="bg-app-surface border border-app-primary/10 rounded-2xl p-4 flex flex-col gap-1.5 shadow-sm">
+                      <div className="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                        <Smartphone size={16} />
+                      </div>
+                      <div className="text-2xl font-black text-purple-400">{referralStats.totalMobile}</div>
+                      <div className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">Mobile App Users</div>
+                    </div>
+
+                    <div className="bg-app-surface border border-app-primary/10 rounded-2xl p-4 flex flex-col gap-1.5 shadow-sm col-span-2 sm:col-span-1">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
+                        <Award size={16} />
+                      </div>
+                      <div className="text-base sm:text-lg font-black text-amber-400 truncate">
+                        {referralStats.topPerformer ? referralStats.topPerformer.code : 'None yet'}
+                      </div>
+                      <div className="text-[10px] font-bold text-app-text-muted uppercase tracking-wider">Top Performing Code</div>
+                    </div>
+                  </div>
+
+                  {/* Actions & Filters Bar */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="relative max-w-md flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-app-text-muted" size={18} />
+                      <input 
+                        type="text" 
+                        placeholder="Search by code, partner, student name or email..."
+                        value={referralSearch}
+                        onChange={(e) => setReferralSearch(e.target.value)}
+                        className="w-full bg-app-surface border border-app-primary/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:border-app-primary transition-all text-app-text placeholder:text-app-text-muted/60"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1 bg-app-surface p-1 rounded-xl border border-app-primary/10">
+                        <button 
+                          onClick={() => setReferralFilter('all')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", referralFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                        >
+                          All ({referralGroups.length})
+                        </button>
+                        <button 
+                          onClick={() => setReferralFilter('partners')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", referralFilter === 'partners' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                        >
+                          Partners
+                        </button>
+                        <button 
+                          onClick={() => setReferralFilter('high_converting')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", referralFilter === 'high_converting' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                        >
+                          High Converting
+                        </button>
+                        <button 
+                          onClick={() => setReferralFilter('mobile_leads')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", referralFilter === 'mobile_leads' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                        >
+                          Mobile Leads
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={handleExportReferralCSV}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-surface border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all shadow-sm"
+                        title="Export CSV report"
+                      >
+                        <Download size={14} />
+                        <span className="hidden sm:inline">Export CSV</span>
+                      </button>
+
+                      <button
+                        onClick={() => fetchReferralData(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-surface border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all shadow-sm"
+                        title="Refresh referral data"
+                      >
+                        <RefreshCw size={14} />
+                        <span className="hidden sm:inline">Refresh</span>
+                      </button>
+
+                      <button
+                        onClick={() => setIsAddingPartner(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-app-primary text-app-bg rounded-xl hover:bg-app-accent transition-all shadow-md shadow-app-primary/20"
+                      >
+                        <Plus size={16} />
+                        <span>Add Partner Code</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Referrals & Partners Table */}
+                  <div className="bg-app-surface border border-app-primary/10 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-app-bg/60 border-b border-app-primary/10 text-[11px] font-black uppercase tracking-wider text-app-text-muted">
+                          <tr>
+                            <th className="py-3.5 px-4">Referral Code & Partner</th>
+                            <th className="py-3.5 px-4">Category</th>
+                            <th className="py-3.5 px-4 text-center">Total Students</th>
+                            <th className="py-3.5 px-4">Platform Split</th>
+                            <th className="py-3.5 px-4 text-center">Paid Conversions</th>
+                            <th className="py-3.5 px-4">Conversion Rate</th>
+                            <th className="py-3.5 px-4 text-right">Est. Revenue</th>
+                            <th className="py-3.5 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-app-primary/5">
+                          {filteredReferralGroups.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="py-12 text-center text-app-text-muted text-xs">
+                                No referral codes match your search or filter.
+                              </td>
+                            </tr>
+                          ) : filteredReferralGroups.map(group => (
+                            <tr key={group.code} className="hover:bg-app-primary/5 transition-colors group">
+                              <td className="py-4 px-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-black text-xs text-app-primary bg-app-bg px-2.5 py-1 rounded-lg border border-app-primary/20">
+                                    {group.code}
+                                  </span>
+                                  <button
+                                    onClick={() => handleCopyCode(group.code)}
+                                    className="text-app-text-muted hover:text-app-primary p-1 rounded transition-colors"
+                                    title="Copy referral code"
+                                  >
+                                    {copiedCode === group.code ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                  </button>
+                                </div>
+                                <div className="mt-1">
+                                  <p className="text-xs font-bold text-app-text">{group.ownerName}</p>
+                                  {group.ownerEmail && (
+                                    <p className="text-[10px] text-app-text-muted">{group.ownerEmail}</p>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-4">
+                                {group.isBusinessPartner ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                    <Briefcase size={11} /> Business / Institute
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <GraduationCap size={11} /> Student Ambassador
+                                  </span>
+                                )}
+                                {group.partnerNotes && (
+                                  <p className="text-[10px] text-app-text-muted mt-1 truncate max-w-xs">{group.partnerNotes}</p>
+                                )}
+                              </td>
+
+                              <td className="py-4 px-4 text-center">
+                                <span className="text-base font-black text-app-text">{group.totalReferred}</span>
+                                <div className="text-[10px] text-app-text-muted">students</div>
+                              </td>
+
+                              <td className="py-4 px-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <Smartphone size={13} className="text-purple-400" />
+                                    <span className="font-bold text-app-text">{group.mobileInstalls}</span>
+                                    <span className="text-[10px] text-app-text-muted">Mobile App</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <Laptop size={13} className="text-blue-400" />
+                                    <span className="font-bold text-app-text">{group.webSignups}</span>
+                                    <span className="text-[10px] text-app-text-muted">Web Portal</span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-4 text-center">
+                                <span className={cn(
+                                  "text-xs font-black px-2.5 py-1 rounded-lg inline-block",
+                                  group.paidUsers > 0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : "text-app-text-muted bg-app-bg"
+                                )}>
+                                  {group.paidUsers} Paid
+                                </span>
+                              </td>
+
+                              <td className="py-4 px-4">
+                                <div className="w-28 space-y-1">
+                                  <div className="flex justify-between text-xs font-black text-app-text">
+                                    <span>{group.conversionRate}%</span>
+                                  </div>
+                                  <div className="h-1.5 bg-app-bg rounded-full overflow-hidden">
+                                    <div 
+                                      className={cn("h-full rounded-full transition-all duration-500", group.conversionRate >= 20 ? "bg-green-400" : "bg-app-primary")} 
+                                      style={{ width: `${Math.min(group.conversionRate, 100)}%` }} 
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-4 text-right font-mono font-black text-sm text-app-text">
+                                ${group.estimatedRevenue.toLocaleString()}
+                              </td>
+
+                              <td className="py-4 px-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    setSelectedReferralGroup(group);
+                                    setSelectedStudentFilter('all');
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-app-primary/10 hover:bg-app-primary text-app-primary hover:text-app-bg text-xs font-bold rounded-xl transition-all"
+                                >
+                                  <span>View Students ({group.totalReferred})</span>
+                                  <ChevronRight size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* ── PROMO CODES TAB ── */}
               {activeTab === 'promoCodes' && (
                 <>
@@ -1412,7 +2135,285 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
             </>
           )}
         </div>
-      </motion.div>
+      </main>
+
+      {/* ── REFERRAL STUDENT DEEP DIVE MODAL ── */}
+      {selectedReferralGroup && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-app-surface border border-app-primary/20 rounded-3xl p-6 sm:p-8 w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-5 border-b border-app-primary/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-app-primary/10 rounded-2xl flex items-center justify-center text-app-primary shrink-0">
+                  <TrendingUp size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-sm font-black px-2.5 py-0.5 rounded-lg bg-app-primary/20 text-app-primary border border-app-primary/30">
+                      {selectedReferralGroup.code}
+                    </span>
+                    <h3 className="text-lg font-black text-app-text">
+                      {selectedReferralGroup.ownerName}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-app-text-muted mt-0.5">
+                    Detailed list of all students and subscriptions attributed to this referral code
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedReferralGroup(null)}
+                className="p-2 hover:bg-app-primary/10 rounded-xl text-app-text-muted transition-colors"
+              >
+                <XCircle size={24} />
+              </button>
+            </div>
+
+            {/* KPI Highlights in Modal */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 border-b border-app-primary/10 shrink-0">
+              <div className="bg-app-bg p-3 rounded-xl border border-app-primary/5">
+                <div className="text-xs text-app-text-muted font-bold">Total Referred</div>
+                <div className="text-xl font-black text-app-text mt-0.5">{selectedReferralGroup.totalReferred}</div>
+              </div>
+              <div className="bg-app-bg p-3 rounded-xl border border-app-primary/5">
+                <div className="text-xs text-app-text-muted font-bold">Paid Conversions</div>
+                <div className="text-xl font-black text-green-400 mt-0.5">{selectedReferralGroup.paidUsers}</div>
+              </div>
+              <div className="bg-app-bg p-3 rounded-xl border border-app-primary/5">
+                <div className="text-xs text-app-text-muted font-bold">Mobile App Users</div>
+                <div className="text-xl font-black text-purple-400 mt-0.5">{selectedReferralGroup.mobileInstalls}</div>
+              </div>
+              <div className="bg-app-bg p-3 rounded-xl border border-app-primary/5">
+                <div className="text-xs text-app-text-muted font-bold">Est. Plan Revenue</div>
+                <div className="text-xl font-black text-app-primary mt-0.5">${selectedReferralGroup.estimatedRevenue}</div>
+              </div>
+            </div>
+
+            {/* Filter Tabs in Modal */}
+            <div className="flex items-center justify-between py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedStudentFilter('all')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    selectedStudentFilter === 'all' ? "bg-app-primary text-app-bg" : "bg-app-bg text-app-text-muted hover:text-app-text"
+                  )}
+                >
+                  All Students ({selectedReferralGroup.students.length})
+                </button>
+                <button
+                  onClick={() => setSelectedStudentFilter('paid')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    selectedStudentFilter === 'paid' ? "bg-app-primary text-app-bg" : "bg-app-bg text-app-text-muted hover:text-app-text"
+                  )}
+                >
+                  Paid Only ({selectedReferralGroup.paidUsers})
+                </button>
+                <button
+                  onClick={() => setSelectedStudentFilter('mobile')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    selectedStudentFilter === 'mobile' ? "bg-app-primary text-app-bg" : "bg-app-bg text-app-text-muted hover:text-app-text"
+                  )}
+                >
+                  Mobile App ({selectedReferralGroup.mobileInstalls})
+                </button>
+              </div>
+
+              <span className="text-xs text-app-text-muted">
+                Showing {filteredStudentsInGroup.length} of {selectedReferralGroup.students.length}
+              </span>
+            </div>
+
+            {/* Student List Table */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar border border-app-primary/10 rounded-2xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-app-bg sticky top-0 text-app-text-muted font-black uppercase text-[10px] tracking-wider border-b border-app-primary/10 z-10">
+                  <tr>
+                    <th className="p-3">Student</th>
+                    <th className="p-3">Signup Date</th>
+                    <th className="p-3">Platform</th>
+                    <th className="p-3">Subscription</th>
+                    <th className="p-3 text-center">Practice Activity</th>
+                    <th className="p-3 text-right">Contact</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-primary/5">
+                  {filteredStudentsInGroup.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-app-text-muted">
+                        No students in this view.
+                      </td>
+                    </tr>
+                  ) : filteredStudentsInGroup.map(student => {
+                    const isPaid = student.subscriptionStatus === 'active' || Boolean(student.planId);
+                    return (
+                      <tr key={student.uid} className="hover:bg-app-primary/5 transition-colors">
+                        <td className="p-3">
+                          <p className="font-bold text-app-text text-sm">{student.displayName}</p>
+                          <p className="text-[11px] text-app-text-muted">{student.email}</p>
+                        </td>
+                        <td className="p-3 text-app-text-muted">
+                          {student.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="p-3">
+                          {student.platform === 'mobile' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              <Smartphone size={11} /> Mobile App
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              <Laptop size={11} /> Web
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {isPaid ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                              <CheckCircle size={10} /> Paid {student.planId ? `(${student.planId})` : ''}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-app-bg text-app-text-muted border border-app-primary/10">
+                              {student.subscriptionStatus || 'trial'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="font-bold text-app-text">{student.tasksCount}</span>
+                          <span className="text-app-text-muted text-[10px] ml-1">tasks</span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => {
+                              const targetAdminUser = users.find(u => u.uid === student.uid) || ({
+                                uid: student.uid,
+                                displayName: student.displayName,
+                                email: student.email,
+                                createdAt: student.createdAt,
+                                accessType: 'user',
+                                subscriptionStatus: student.subscriptionStatus,
+                              } as AdminUser);
+                              setSelectedEmailUser(targetAdminUser);
+                            }}
+                            className="p-1.5 hover:bg-app-primary/10 rounded-lg text-app-text-muted hover:text-app-primary transition-colors"
+                            title="Send email to this student"
+                          >
+                            <Mail size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── ADD BUSINESS PARTNER MODAL ── */}
+      {isAddingPartner && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface border border-app-primary/20 rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl space-y-5"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-app-primary/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400">
+                  <Briefcase size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-app-text">Register Business Partner Code</h3>
+                  <p className="text-xs text-app-text-muted">Create a trackable referral code for coaching institutes or affiliates</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAddingPartner(false)} className="text-app-text-muted hover:text-app-text">
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-app-text-muted uppercase">Business / Partner Name</label>
+                <input
+                  type="text"
+                  value={newPartner.partnerName}
+                  onChange={(e) => setNewPartner({ ...newPartner, partnerName: e.target.value })}
+                  placeholder="e.g. Kangaroo Education Melbourne"
+                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/40"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-app-text-muted uppercase">Custom Code</label>
+                  <input
+                    type="text"
+                    value={newPartner.code}
+                    onChange={(e) => setNewPartner({ ...newPartner, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. KANGAROO"
+                    className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-app-primary focus:outline-none focus:border-app-primary/40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-app-text-muted uppercase">Student Discount %</label>
+                  <input
+                    type="number"
+                    value={newPartner.discountPercent}
+                    onChange={(e) => setNewPartner({ ...newPartner, discountPercent: Number(e.target.value) })}
+                    className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/40"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-app-text-muted uppercase">Contact Email</label>
+                <input
+                  type="email"
+                  value={newPartner.email}
+                  onChange={(e) => setNewPartner({ ...newPartner, email: e.target.value })}
+                  placeholder="e.g. director@kangaroo.edu.au"
+                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/40"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-app-text-muted uppercase">Partner Notes / Details</label>
+                <textarea
+                  value={newPartner.notes}
+                  onChange={(e) => setNewPartner({ ...newPartner, notes: e.target.value })}
+                  placeholder="e.g. Expected 50 students from Nov 2026 intake. 10% commission agreement."
+                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2 text-sm text-app-text focus:outline-none focus:border-app-primary/40 resize-none h-20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-app-primary/10">
+              <button
+                onClick={() => setIsAddingPartner(false)}
+                className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePartnerCode}
+                className="px-5 py-2.5 bg-app-primary text-app-bg rounded-xl text-sm font-black hover:bg-app-accent transition-all shadow-md shadow-app-primary/20"
+              >
+                Create Partner Code
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Delete User Confirmation Modal */}
       {userToDelete && (

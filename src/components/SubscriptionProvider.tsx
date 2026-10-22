@@ -30,6 +30,7 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { generateUserReferralCode } from '../services/promoService';
+import { isNativeMobile } from '../lib/mobile';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
 import { getLocalDateStr, formatAuthError } from '../lib/utils';
@@ -231,6 +232,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               userData.referralCode = assignedCode;
             }
 
+            if (!userData.signupPlatform && !firebaseUser.isAnonymous) {
+              const currentPlatform = isNativeMobile() ? 'mobile' : 'web';
+              updateDoc(userRef, { signupPlatform: currentPlatform }).catch(() => {});
+              userData.signupPlatform = currentPlatform;
+            }
+
             setUser(userData);
 
             // Ensure admin role for protected accounts (once per auth session)
@@ -253,6 +260,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const createdAt = now.toISOString();
             const pendingRef = !isGuest ? localStorage.getItem('pte_pending_referral') : null;
             const assignedRefCode = !isGuest ? generateUserReferralCode(firebaseUser.displayName, firebaseUser.uid) : undefined;
+            const currentPlatform = isNativeMobile() ? 'mobile' : 'web';
             
             const newUser: UserData = {
               uid: firebaseUser.uid,
@@ -266,6 +274,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               referralCode: assignedRefCode,
               referredBy: pendingRef || null,
               referralCount: 0,
+              signupPlatform: currentPlatform,
               activityLog: [getLocalDateStr(now)],
               completedTasks: [],
               completedTasksDetailed: [],
@@ -526,6 +535,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           referralCode: assignedRefCode,
           referredBy: pendingRef || null,
           referralCount: 0,
+          signupPlatform: isNativeMobile() ? 'mobile' : 'web',
           activityLog: [getLocalDateStr(now)],
           completedTasks: [],
           completedTasksDetailed: [],

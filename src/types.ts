@@ -128,6 +128,7 @@ export interface UserData {
   referralCode?: string;
   referredBy?: string | null;
   referralCount?: number;
+  signupPlatform?: 'web' | 'mobile' | 'ios' | 'android';
 }
 
 export const SUBSCRIPTION_PLANS = [
