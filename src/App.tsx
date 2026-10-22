@@ -1910,8 +1910,10 @@ function AppContent() {
             </button>
 
             <button 
-              onClick={() => setIsMenuOpen(true)}
-              className="md:hidden p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
+              onClick={() => setIsMenuOpen(prev => !prev)}
+              className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary flex items-center justify-center"
+              title="Menu"
+              aria-label="Toggle navigation menu"
             >
               <Menu size={20} />
             </button>
@@ -2073,38 +2075,83 @@ function AppContent() {
       {/* Modals */}
       <AnimatePresence>
         {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-[100] bg-app-bg flex flex-col"
-          >
-            <div className="flex items-center justify-between p-6 border-b border-app-border">
-              <Logo showText={true} size={40} />
-              <button onClick={() => setIsMenuOpen(false)} className="p-2 hover:bg-app-surface rounded-full">
-                <X size={24} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-2">
-              <MenuLink icon={BarChart3} label="Dojo" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMenuOpen(false); }} />
-              <MenuLink icon={Trophy} label="Mock Tests" active={activeTab === 'mock-tests'} onClick={() => { setActiveTab('mock-tests'); setIsMenuOpen(false); }} />
-              <MenuLink icon={Book} label="Vocabulary" active={activeTab === 'vocabulary'} onClick={() => { setActiveTab('vocabulary'); setIsMenuOpen(false); }} />
-              <MenuLink icon={Map} label="Roadmap" active={activeTab === 'roadmap'} onClick={() => { setActiveTab('roadmap'); setIsMenuOpen(false); }} />
-              <MenuLink icon={Mic} label="Speaking" active={activeTab === 'speaking'} onClick={() => { setActiveTab('speaking'); setIsMenuOpen(false); }} />
-              <MenuLink icon={PenTool} label="Writing" active={activeTab === 'writing'} onClick={() => { setActiveTab('writing'); setIsMenuOpen(false); }} />
-              <MenuLink icon={BookOpen} label="Reading" active={activeTab === 'reading'} onClick={() => { setActiveTab('reading'); setIsMenuOpen(false); }} />
-              <MenuLink icon={Headphones} label="Listening" active={activeTab === 'listening'} onClick={() => { setActiveTab('listening'); setIsMenuOpen(false); }} />
-              <MenuLink icon={AlertCircle} label="FAQ" active={activeTab === 'faq'} onClick={() => { setActiveTab('faq'); setIsMenuOpen(false); }} />
-              <div className="pt-4 border-t border-app-border">
-                <MenuLink icon={Settings} label="Settings" active={activeTab === 'help'} onClick={() => { setActiveTab('help'); setIsMenuOpen(false); }} />
-                <MenuLink icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsMenuOpen(false); }} />
-                {user?.role === 'admin' && (
-                  <MenuLink icon={Shield} label="Admin Dashboard" active={false} onClick={() => { setIsAdminDashboardOpen(true); setIsMenuOpen(false); }} />
-                )}
+          <div className="fixed inset-0 z-[120] flex justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            {/* Drawer Panel */}
+            <motion.div
+              initial={{ opacity: 0, x: '100%' }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="relative w-full max-w-sm sm:max-w-md h-full bg-app-bg border-l border-app-border shadow-2xl flex flex-col z-10"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-app-border bg-app-surface/30">
+                <Logo showText={true} size={36} />
+                <button 
+                  onClick={() => setIsMenuOpen(false)} 
+                  className="p-2 hover:bg-app-surface rounded-full text-app-text-muted hover:text-app-text transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X size={22} />
+                </button>
               </div>
-            </div>
-          </motion.div>
+              <div className="flex-1 overflow-y-auto p-5 space-y-1.5">
+                <MenuLink icon={BarChart3} label="Dojo" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMenuOpen(false); }} />
+                <MenuLink icon={Trophy} label="Mock Tests" active={activeTab === 'mock-tests'} onClick={() => { setActiveTab('mock-tests'); setIsMenuOpen(false); }} />
+                <MenuLink icon={Book} label="Vocabulary" active={activeTab === 'vocabulary'} onClick={() => { setActiveTab('vocabulary'); setIsMenuOpen(false); }} />
+                <MenuLink icon={Map} label="Roadmap" active={activeTab === 'roadmap'} onClick={() => { setActiveTab('roadmap'); setIsMenuOpen(false); }} />
+                <MenuLink icon={Mic} label="Speaking" active={activeTab === 'speaking'} onClick={() => { setActiveTab('speaking'); setIsMenuOpen(false); }} />
+                <MenuLink icon={PenTool} label="Writing" active={activeTab === 'writing'} onClick={() => { setActiveTab('writing'); setIsMenuOpen(false); }} />
+                <MenuLink icon={BookOpen} label="Reading" active={activeTab === 'reading'} onClick={() => { setActiveTab('reading'); setIsMenuOpen(false); }} />
+                <MenuLink icon={Headphones} label="Listening" active={activeTab === 'listening'} onClick={() => { setActiveTab('listening'); setIsMenuOpen(false); }} />
+                <MenuLink icon={AlertCircle} label="FAQ" active={activeTab === 'faq'} onClick={() => { setActiveTab('faq'); setIsMenuOpen(false); }} />
+                
+                <div className="pt-3 mt-2 border-t border-app-border space-y-1.5">
+                  <MenuLink icon={Settings} label="Settings & Help" active={activeTab === 'help'} onClick={() => { setActiveTab('help'); setIsMenuOpen(false); }} />
+                  <MenuLink icon={User} label="Profile & Referral" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsMenuOpen(false); }} />
+                  {user?.role === 'admin' && (
+                    <MenuLink icon={Shield} label="Admin Dashboard" active={false} onClick={() => { setIsAdminDashboardOpen(true); setIsMenuOpen(false); }} />
+                  )}
+                  {(user?.subscriptionStatus === 'trial' || user?.subscriptionStatus === 'guest') && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setShowSubscriptionModal(true);
+                      }}
+                      className="w-full mt-2 flex items-center justify-between p-3.5 bg-gradient-to-r from-app-primary/10 to-app-accent/10 border border-app-primary/30 rounded-2xl text-app-primary font-bold text-xs uppercase tracking-wider hover:bg-app-primary/20 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Zap size={16} className="fill-current text-app-accent" />
+                        <span>Upgrade to Pro</span>
+                      </div>
+                      <span className="text-[10px] bg-app-accent text-app-bg px-2 py-0.5 rounded-full font-black">
+                        PRO
+                      </span>
+                    </button>
+                  )}
+                  {user && (
+                    <button
+                      onClick={async () => {
+                        setIsMenuOpen(false);
+                        await logout();
+                      }}
+                      className="w-full flex items-center gap-3 p-3.5 rounded-2xl text-xs uppercase tracking-wider font-black text-red-400 hover:bg-red-500/10 transition-colors mt-1"
+                    >
+                      <LogOut size={16} />
+                      <span>Sign Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
         {activeMockTest && (
           <MockTestSession 
@@ -4029,12 +4076,19 @@ function MenuLink({ icon: Icon, label, active, onClick }: { icon: any, label: st
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-4 p-4 rounded-2xl transition-all",
-        active ? "bg-app-primary/10 text-app-primary" : "hover:bg-app-surface text-app-text-muted hover:text-app-text"
+        "w-full flex items-center justify-between p-3.5 rounded-2xl transition-all font-bold text-sm text-left group",
+        active 
+          ? "bg-app-primary/10 text-app-primary border border-app-primary/20 shadow-sm" 
+          : "hover:bg-app-surface text-app-text-muted hover:text-app-text border border-transparent"
       )}
     >
-      <Icon size={20} />
-      <span className="font-bold uppercase tracking-widest text-sm">{label}</span>
+      <div className="flex items-center gap-3.5">
+        <Icon size={18} className={active ? "text-app-primary" : "text-app-text-muted group-hover:text-app-primary transition-colors"} />
+        <span className="uppercase tracking-wider text-xs font-black">{label}</span>
+      </div>
+      {active && (
+        <span className="w-1.5 h-1.5 rounded-full bg-app-primary"></span>
+      )}
     </button>
   );
 }
