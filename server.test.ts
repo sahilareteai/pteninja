@@ -125,8 +125,20 @@ vi.mock("@google/genai", () => {
 });
 
 
+// ─── Razorpay Mocks ──────────────────────────────────────────────────────────
+const mockRazorpayOrdersCreate = vi.hoisted(() => vi.fn());
+vi.mock("razorpay", () => {
+  class MockRazorpay {
+    orders = {
+      create: mockRazorpayOrdersCreate,
+    };
+    constructor(public options: any) {}
+  }
+  return { default: MockRazorpay };
+});
+
 // Import app after mocks are set up
-const { app, serverGeminiKeys } = await import("./server.ts");
+const { app, serverGeminiKeys, parseServiceAccountJson } = await import("./server.ts");
 
 // ─── Global Firebase auth setup ───────────────────────────────────────────────
 // All tests run with a valid auth token. The Firestore user doc intentionally
@@ -856,4 +868,153 @@ describe("POST /api/send-welcome-email", () => {
     expect(mockSendMail).toHaveBeenCalled();
   });
 });
+
+// ─── parseServiceAccountJson utility ──────────────────────────────────────────
+describe("parseServiceAccountJson", () => {
+  it("parses valid JSON without quotes", () => {
+    const parsed = parseServiceAccountJson('{"project_id":"pteninja-prod"}');
+    expect(parsed).toEqual({ project_id: "pteninja-prod" });
+  });
+
+  it("strips outer single quotes correctly", () => {
+    const parsed = parseServiceAccountJson('\'{"project_id":"pteninja-prod"}\'');
+    expect(parsed).toEqual({ project_id: "pteninja-prod" });
+  });
+
+  it("strips outer double quotes correctly", () => {
+    const parsed = parseServiceAccountJson('"{\\"project_id\\":\\"pteninja-prod\\"}"');
+    expect(parsed).toEqual({ project_id: "pteninja-prod" });
+  });
+
+  it("returns null for empty or undefined input", () => {
+    expect(parseServiceAccountJson("")).toBeNull();
+    expect(parseServiceAccountJson(undefined)).toBeNull();
+  });
+});
+
+// ─── Razorpay Order Endpoint ──────────────────────────────────────────────────
+describe("POST /api/create-razorpay-order", () => {
+  beforeEach(() => {
+    mockRazorpayOrdersCreate.mockReset();
+    vi.stubEnv("RAZORPAY_KEY_ID", "rzp_test_mock_123");
+    vi.stubEnv("RAZORPAY_KEY_SECRET", "mock_secret_abc");
+  });
+
+  it("returns 400 for invalid or missing planId", async () => {
+    const res = await request(app)
+      .post("/api/create-razorpay-order")
+      .set("Authorization", AUTH_HEADER)
+      .send({ planId: "nonexistent_plan", amount: 10 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Unknown plan ID");
+  });
+
+  it("returns 400 for amount less than minimum (1 INR / 100 paise)", async () => {
+    const res = await request(app)
+      .post("/api/create-razorpay-order")
+      .set("Authorization", AUTH_HEADER)
+      .send({ planId: "monthly", amount: 0 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Minimum amount is 1 INR");
+  });
+
+  it("creates order and returns order details with dynamic razorpayKeyId", async () => {
+    mockRazorpayOrdersCreate.mockResolvedValue({
+      id: "order_mock_test_789",
+      amount: 139600,
+      currency: "INR",
+      status: "created",
+    });
+
+    const res = await request(app)
+      .post("/api/create-razorpay-order")
+      .set("Authorization", AUTH_HEADER)
+      .send({ planId: "monthly", amount: 1396, currency: "INR" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("order_mock_test_789");
+    expect(res.body.razorpayKeyId).toBe("rzp_test_mock_123");
+    expect(mockRazorpayOrdersCreate).toHaveBeenCalled();
+  });
+
+  it("handles Razorpay 401 authentication errors with clear message", async () => {
+    mockRazorpayOrdersCreate.mockRejectedValue({
+      statusCode: 401,
+      error: {
+        code: "BAD_REQUEST_ERROR",
+        description: "Authentication failed",
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/create-razorpay-order")
+      .set("Authorization", AUTH_HEADER)
+      .send({ planId: "monthly", amount: 1396, currency: "INR" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("Razorpay authentication failed");
+  });
+});
+
+// ─── Razorpay Verify Payment Endpoint ─────────────────────────────────────────
+describe("POST /api/verify-razorpay-payment", () => {
+  beforeEach(() => {
+    mockFirestoreDocSet.mockReset();
+    vi.stubEnv("RAZORPAY_KEY_SECRET", "mock_secret_xyz");
+  });
+
+  it("returns 400 for missing verification fields", async () => {
+    const res = await request(app)
+      .post("/api/verify-razorpay-payment")
+      .set("Authorization", AUTH_HEADER)
+      .send({ planId: "monthly" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Missing verification data");
+  });
+
+  it("returns 400 for invalid signature", async () => {
+    const res = await request(app)
+      .post("/api/verify-razorpay-payment")
+      .set("Authorization", AUTH_HEADER)
+      .send({
+        razorpay_order_id: "order_123",
+        razorpay_payment_id: "pay_123",
+        razorpay_signature: "invalid_sig_hex_1234567890abcdef",
+        planId: "monthly",
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid signature");
+  });
+
+  it("verifies valid signature and activates user subscription in Firestore", async () => {
+    const crypto = await import("node:crypto");
+    const orderId = "order_abc_123";
+    const paymentId = "pay_xyz_456";
+    const secret = "mock_secret_xyz";
+    const validSignature = crypto.createHmac("sha256", secret)
+      .update(`${orderId}|${paymentId}`)
+      .digest("hex");
+
+    mockFirestoreDocSet.mockResolvedValue({});
+
+    const res = await request(app)
+      .post("/api/verify-razorpay-payment")
+      .set("Authorization", AUTH_HEADER)
+      .send({
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: validSignature,
+        planId: "monthly",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockFirestoreDocSet).toHaveBeenCalled();
+  });
+});
+
 

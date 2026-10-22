@@ -103,13 +103,22 @@ interface ServerKeyState {
   nonQuotaErrorCount: number; // non-quota failures (auth errors, model-not-found, etc.)
 }
 
-function parseServiceAccountJson(raw?: string): any {
+export function parseServiceAccountJson(raw?: string): any {
   if (!raw) return null;
   let trimmed = raw.trim();
   if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
     trimmed = trimmed.slice(1, -1).trim();
   }
-  return JSON.parse(trimmed);
+  try {
+    return JSON.parse(trimmed);
+  } catch (err) {
+    if (trimmed.includes('\\"')) {
+      try {
+        return JSON.parse(trimmed.replace(/\\"/g, '"'));
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 function buildServerKeyStates(): ServerKeyState[] {
