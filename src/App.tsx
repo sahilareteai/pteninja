@@ -2259,6 +2259,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const { formatPrice, currency } = useSubscription();
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [razorpayKeyId, setRazorpayKeyId] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
@@ -2352,6 +2353,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       const data = await response.json();
       if (data.id) {
         setClientSecret(data.id);
+        if (data.razorpayKeyId) setRazorpayKeyId(data.razorpayKeyId);
       } else if (data.immediatelyActive) {
         setPendingSubscriptionId(data.subscriptionId ?? null);
         setPendingCustomerId(data.customerId ?? null);
@@ -2717,10 +2719,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                   amount={appliedPromo ? PromoService.calculateDiscount(selectedPlan.price, appliedPromo.discountPercent) : selectedPlan.price} 
                   clientSecret={clientSecret}
                   selectedPlanId={selectedPlan.id}
+                  keyId={razorpayKeyId}
                   isSubscription={true}
                   onCancel={() => {
                     setSelectedPlan(null);
                     setClientSecret(null);
+                    setRazorpayKeyId('');
                   }}
                   onSuccess={async () => {
                     try {

@@ -3167,7 +3167,10 @@ app.post("/api/create-razorpay-order", subscriptionLimiter, async (req, res) => 
     };
     
     const order = await rzp.orders.create(options);
-    res.json(order);
+    res.json({
+      ...order,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || "",
+    });
   } catch (error: any) {
     console.error("Razorpay Order Error:", JSON.stringify(error, null, 2));
     const rzpDesc = error?.error?.description || error?.description || error?.message;

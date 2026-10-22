@@ -9,7 +9,7 @@ declare global {
   }
 }
 
-export function CheckoutForm({ amount, clientSecret: orderId, selectedPlanId, onCancel, onSuccess, isSubscription = true }: { amount: number, clientSecret: string, selectedPlanId: string, onCancel: () => void, onSuccess: () => void, isSubscription?: boolean }) {
+export function CheckoutForm({ amount, clientSecret: orderId, selectedPlanId, keyId, onCancel, onSuccess, isSubscription = true }: { amount: number, clientSecret: string, selectedPlanId: string, keyId?: string, onCancel: () => void, onSuccess: () => void, isSubscription?: boolean }) {
   const { formatPrice, currency } = useSubscription();
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +43,7 @@ export function CheckoutForm({ amount, clientSecret: orderId, selectedPlanId, on
     const _subToken = await auth.currentUser?.getIdToken().catch(() => null);
 
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID || "",
+      key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || "",
       amount: Math.round(amount * 100),
       currency: currency.code,
       name: "PTE Ninja",
