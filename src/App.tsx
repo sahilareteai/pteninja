@@ -745,164 +745,164 @@ function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermissi
           const firstTask = allTasks.length > 0 ? allTasks[0] : null;
 
           return (
-            <>
+            <motion.div
+              key="belt-modal-wrapper"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden"
+            >
               {/* Backdrop */}
-              <motion.div
-                key="backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+              <div
                 onClick={() => setSelectedMilestoneId(null)}
-                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
               />
 
               {/* Modal Panel */}
               <motion.div
                 key="modal"
-                initial={{ opacity: 0, y: 60, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 40, scale: 0.95 }}
+                initial={{ opacity: 0, scale: 0.95, y: 25 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                className="fixed inset-x-0 bottom-0 md:bottom-auto md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:w-[680px] md:max-w-[95vw] h-[90vh] md:h-auto md:max-h-[90vh] flex flex-col"
+                className="relative z-10 w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] bg-app-bg rounded-2xl sm:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col"
               >
-                <div className="bg-app-bg rounded-t-3xl md:rounded-3xl border border-app-border shadow-2xl overflow-hidden flex flex-col flex-1 min-h-0">
-
-                  {/* Header gradient banner */}
-                  <div className={cn("relative p-6 md:p-8 bg-gradient-to-br", details.gradient, "shrink-0")}>
-                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_white_0%,_transparent_60%)]" />
-                    <div className="flex items-start justify-between relative z-10">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-3xl">{details.emoji}</span>
-                          <div>
-                            <h2 className="text-2xl font-black text-white tracking-tight">{milestone.title}</h2>
-                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest">Score Target: {details.scoreRange}</p>
-                          </div>
+                {/* Header gradient banner */}
+                <div className={cn("relative p-5 sm:p-7 bg-gradient-to-br", details.gradient, "shrink-0")}>
+                  <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_white_0%,_transparent_60%)]" />
+                  <div className="flex items-start justify-between relative z-10">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-3xl">{details.emoji}</span>
+                        <div>
+                          <h2 className="text-2xl font-black text-white tracking-tight">{milestone.title}</h2>
+                          <p className="text-white/70 text-xs font-bold uppercase tracking-widest">Score Target: {details.scoreRange}</p>
                         </div>
-                        <p className="text-white/80 text-sm leading-relaxed max-w-sm">{milestone.description}</p>
                       </div>
-                      <button
-                        onClick={() => setSelectedMilestoneId(null)}
-                        className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white shrink-0 ml-4"
-                      >
-                        <X size={18} />
-                      </button>
+                      <p className="text-white/80 text-sm leading-relaxed max-w-sm">{milestone.description}</p>
                     </div>
-
-                    {/* Progress bar */}
-                    <div className="mt-5 relative z-10">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-white/70 text-[11px] font-bold uppercase tracking-widest">Your Progress</span>
-                        <span className="text-white text-[11px] font-black">{currentScore} / {milestone.targetScore}</span>
-                      </div>
-                      <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, (currentScore / milestone.targetScore) * 100)}%` }}
-                          transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
-                          className="h-full bg-white rounded-full"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Scrollable body */}
-                  <div className="overflow-y-auto flex-1 min-h-0 p-5 md:p-7 space-y-6">
-
-                    {/* Key Skills */}
-                    <div>
-                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Star size={12} /> Key Skills to Develop
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {details.keySkills.map((skill, i) => (
-                          <div key={i} className="flex items-start gap-2 bg-app-surface rounded-xl p-3 border border-app-border">
-                            <CheckCircle size={14} className="text-app-primary shrink-0 mt-0.5" />
-                            <span className="text-sm text-app-text leading-snug">{skill}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Tasks by section */}
-                    <div>
-                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Target size={12} /> Tasks to Complete ({totalSectionTasks} total)
-                      </h3>
-                      <div className="space-y-3">
-                        {details.sections.map((sec, si) => (
-                          <div key={si} className="bg-app-surface rounded-2xl border border-app-border overflow-hidden">
-                            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-app-border bg-app-bg/50">
-                              <span className="text-base">{sec.icon}</span>
-                              <span className="font-bold text-sm text-app-text">{sec.name}</span>
-                            </div>
-                            <div className="p-4 space-y-2">
-                              {sec.tasks.map((task, ti) => {
-                                const isDone = completedCategories.has(task.category);
-                                return (
-                                  <div key={ti} className={cn(
-                                    "flex items-start gap-2.5 rounded-xl p-2.5 transition-colors",
-                                    isDone ? "bg-app-primary/10" : "bg-transparent"
-                                  )}>
-                                    <div className={cn(
-                                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
-                                      isDone ? "bg-app-primary border-app-primary" : "border-app-border"
-                                    )}>
-                                      {isDone && <Check size={10} className="text-app-bg" />}
-                                    </div>
-                                    <span className={cn(
-                                      "text-sm leading-snug",
-                                      isDone ? "text-app-text line-through opacity-60" : "text-app-text"
-                                    )}>{task.label}</span>
-                                  </div>
-                                );
-                              })}
-                              <div className="mt-3 pt-3 border-t border-app-border flex items-start gap-2">
-                                <Info size={13} className="text-app-primary shrink-0 mt-0.5" />
-                                <p className="text-xs text-app-text-muted italic leading-relaxed">{sec.tip}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Pro tips */}
-                    <div>
-                      <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Zap size={12} /> Pro Tips
-                      </h3>
-                      <div className="space-y-2">
-                        {details.tips.map((tip, i) => (
-                          <div key={i} className="flex items-start gap-3 p-3 bg-app-primary/5 border border-app-primary/20 rounded-xl">
-                            <span className="text-app-primary font-black text-sm shrink-0">{i + 1}.</span>
-                            <p className="text-sm text-app-text leading-relaxed">{tip}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer CTA */}
-                  <div className="shrink-0 p-4 md:p-5 border-t border-app-border bg-app-bg/80 backdrop-blur-sm flex gap-3">
-                    {firstTask && (
-                      <button
-                        onClick={() => { setSelectedMilestoneId(null); onStartTask(firstTask); }}
-                        className="flex-1 py-3 bg-app-primary text-app-bg rounded-xl text-xs font-black uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg"
-                      >
-                        Practice Now
-                      </button>
-                    )}
                     <button
                       onClick={() => setSelectedMilestoneId(null)}
-                      className="px-5 py-3 border border-app-border text-app-text-muted rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-app-surface transition-all"
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white shrink-0 ml-4"
+                      aria-label="Close modal"
                     >
-                      Close
+                      <X size={18} />
                     </button>
                   </div>
+
+                  {/* Progress bar */}
+                  <div className="mt-5 relative z-10">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-white/70 text-[11px] font-bold uppercase tracking-widest">Your Progress</span>
+                      <span className="text-white text-[11px] font-black">{currentScore} / {milestone.targetScore}</span>
+                    </div>
+                    <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, (currentScore / milestone.targetScore) * 100)}%` }}
+                        transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+                        className="h-full bg-white rounded-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scrollable body */}
+                <div className="overflow-y-auto flex-1 min-h-0 p-5 sm:p-7 space-y-6 overscroll-contain">
+                  {/* Key Skills */}
+                  <div>
+                    <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Star size={12} /> Key Skills to Develop
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {details.keySkills.map((skill, i) => (
+                        <div key={i} className="flex items-start gap-2 bg-app-surface rounded-xl p-3 border border-app-border">
+                          <CheckCircle size={14} className="text-app-primary shrink-0 mt-0.5" />
+                          <span className="text-sm text-app-text leading-snug">{skill}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tasks by section */}
+                  <div>
+                    <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Target size={12} /> Tasks to Complete ({totalSectionTasks} total)
+                    </h3>
+                    <div className="space-y-3">
+                      {details.sections.map((sec, si) => (
+                        <div key={si} className="bg-app-surface rounded-2xl border border-app-border overflow-hidden">
+                          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-app-border bg-app-bg/50">
+                            <span className="text-base">{sec.icon}</span>
+                            <span className="font-bold text-sm text-app-text">{sec.name}</span>
+                          </div>
+                          <div className="p-4 space-y-2">
+                            {sec.tasks.map((task, ti) => {
+                              const isDone = completedCategories.has(task.category);
+                              return (
+                                <div key={ti} className={cn(
+                                  "flex items-start gap-2.5 rounded-xl p-2.5 transition-colors",
+                                  isDone ? "bg-app-primary/10" : "bg-transparent"
+                                )}>
+                                  <div className={cn(
+                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
+                                    isDone ? "bg-app-primary border-app-primary" : "border-app-border"
+                                  )}>
+                                    {isDone && <Check size={10} className="text-app-bg" />}
+                                  </div>
+                                  <span className={cn(
+                                    "text-sm leading-snug",
+                                    isDone ? "text-app-text line-through opacity-60" : "text-app-text"
+                                  )}>{task.label}</span>
+                                </div>
+                              );
+                            })}
+                            <div className="mt-3 pt-3 border-t border-app-border flex items-start gap-2">
+                              <Info size={13} className="text-app-primary shrink-0 mt-0.5" />
+                              <p className="text-xs text-app-text-muted italic leading-relaxed">{sec.tip}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pro tips */}
+                  <div>
+                    <h3 className="text-[11px] font-black text-app-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Zap size={12} /> Pro Tips
+                    </h3>
+                    <div className="space-y-2">
+                      {details.tips.map((tip, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 bg-app-primary/5 border border-app-primary/20 rounded-xl">
+                          <span className="text-app-primary font-black text-sm shrink-0">{i + 1}.</span>
+                          <p className="text-sm text-app-text leading-relaxed">{tip}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer CTA */}
+                <div className="shrink-0 p-4 sm:p-5 border-t border-app-border bg-app-surface/95 backdrop-blur-md flex items-center gap-3 z-10 shadow-lg">
+                  {firstTask && (
+                    <button
+                      onClick={() => { setSelectedMilestoneId(null); onStartTask(firstTask); }}
+                      className="flex-1 py-3.5 bg-app-primary text-white rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider hover:bg-app-accent hover:text-slate-900 transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2"
+                    >
+                      <Zap size={15} className="fill-current" />
+                      Practice Now
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedMilestoneId(null)}
+                    className="px-6 py-3.5 border border-app-border bg-app-bg text-app-text font-bold rounded-xl text-xs sm:text-sm uppercase tracking-wider hover:bg-app-surface transition-all active:scale-[0.99]"
+                  >
+                    Close
+                  </button>
                 </div>
               </motion.div>
-            </>
+            </motion.div>
           );
         })()}
       </AnimatePresence>
