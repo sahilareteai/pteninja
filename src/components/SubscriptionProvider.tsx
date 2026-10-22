@@ -32,7 +32,7 @@ import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { generateUserReferralCode } from '../services/promoService';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
-import { getLocalDateStr } from '../lib/utils';
+import { getLocalDateStr, formatAuthError } from '../lib/utils';
 import { Logo } from './Logo';
 
 interface SubscriptionContextType {
@@ -405,59 +405,6 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [otpCode, setOtpCode] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-
-const formatAuthError = (error: any): string => {
-  if (!error) return "An unexpected error occurred. Please try again.";
-  
-  const code = typeof error === 'object' && error.code ? error.code : '';
-  const rawMessage = typeof error === 'string' ? error : error.message || String(error);
-
-  switch (code) {
-    case 'auth/email-already-in-use':
-      return "An account with this email address already exists. Please sign in instead.";
-    case 'auth/invalid-email':
-      return "Please enter a valid email address.";
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-    case 'auth/user-not-found':
-      return "Incorrect email or password. Please check your details and try again.";
-    case 'auth/weak-password':
-      return "Password is too weak. Please use at least 6 characters with letters and numbers.";
-    case 'auth/user-disabled':
-      return "This account has been disabled. Please contact support.";
-    case 'auth/too-many-requests':
-      return "Too many failed sign-in attempts. Please wait a few minutes or reset your password.";
-    case 'auth/network-request-failed':
-      return "Network error. Please check your internet connection and try again.";
-    case 'auth/invalid-phone-number':
-      return "Please enter a valid mobile number with country code (e.g. +1 234 567 8900).";
-    case 'auth/invalid-verification-code':
-      return "The verification code is incorrect. Please check the 6-digit SMS code and try again.";
-    case 'auth/code-expired':
-      return "The SMS verification code has expired. Please request a new code.";
-    case 'auth/quota-exceeded':
-      return "SMS limit reached. Please try again later or sign in with Email or Google.";
-    case 'auth/popup-closed-by-user':
-      return "Sign-in window was closed before completing authentication.";
-    case 'auth/popup-blocked':
-    case 'auth/cancelled-popup-request':
-      return "Sign-in popup was blocked by your browser. Please allow popups to continue.";
-    case 'auth/operation-not-allowed':
-      return "SMS verification is currently unavailable for this region. You can continue creating your account with Email or Google (phone verification is not required).";
-    case 'auth/admin-restricted-operation':
-      return "This operation is temporarily restricted. Please sign in or register with Email or Google.";
-    default:
-      const cleanMessage = rawMessage
-        .replace(/^Firebase:\s*/i, '')
-        .replace(/Error\s*\(auth\/[^)]+\):?\s*/i, '')
-        .replace(/\(auth\/[^)]+\)/g, '')
-        .replace(/Firebase Console/gi, 'system settings')
-        .replace(/Firebase/gi, 'system')
-        .replace(/Firestore/gi, 'database')
-        .trim();
-      return cleanMessage || "Authentication failed. Please check your details and try again.";
-  }
-};
 
   const login = async (initialMode: 'signin' | 'register' = 'signin') => {
     setAuthError(null);

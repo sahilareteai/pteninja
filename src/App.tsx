@@ -57,7 +57,7 @@ import {
   Copy,
   Sparkles
 } from 'lucide-react';
-import { cn, getLocalDateStr } from './lib/utils';
+import { cn, getLocalDateStr, formatAuthError } from './lib/utils';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { DatePicker } from './components/DatePicker';
@@ -3145,7 +3145,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       toast.success("Profile updated successfully!");
     } catch (err: any) {
       console.error("Failed to update profile:", err);
-      toast.error(err.message || "Failed to update profile.");
+      toast.error(formatAuthError(err));
     } finally {
       setIsSavingProfile(false);
     }
@@ -3181,11 +3181,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       toast.success("Verification code sent to your phone!");
     } catch (err: any) {
       console.error("Send phone OTP failed:", err);
-      if (err.code === 'auth/operation-not-allowed') {
-        toast.error("SMS verification is currently unavailable for this region. You can still save your phone number.");
-      } else {
-        toast.error(err.message || "Failed to send SMS verification code.");
-      }
+      toast.error(formatAuthError(err));
     } finally {
       setIsSendingPhoneOtp(false);
     }
@@ -3210,13 +3206,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
       toast.success("Phone number verified successfully!");
     } catch (err: any) {
       console.error("Verify phone OTP failed:", err);
-      if (err.code === 'auth/invalid-verification-code') {
-        toast.error("Incorrect verification code. Please check the SMS and try again.");
-      } else if (err.code === 'auth/code-expired') {
-        toast.error("Verification code expired. Please request a new code.");
-      } else {
-        toast.error(err.message || "Failed to verify phone number.");
-      }
+      toast.error(formatAuthError(err));
     } finally {
       setIsVerifyingPhoneOtp(false);
     }
