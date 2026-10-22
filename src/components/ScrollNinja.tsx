@@ -52,24 +52,14 @@ export function ScrollNinja({ onClaim }: { onClaim?: () => void }) {
         <motion.div 
           style={{ y: yPos }}
           className="relative w-32 h-32 transform-gpu pointer-events-auto cursor-pointer group select-none"
-          whileHover={{ scale: 1.15 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.12 }}
+          whileTap={{ scale: 0.92 }}
           onClick={() => setShowPromoModal(true)}
           role="button"
           tabIndex={0}
-          title="Click the Ninja for a secret discount!"
-          aria-label="Click the Ninja for a secret discount"
+          title="PTE Ninja"
+          aria-label="PTE Ninja"
         >
-          {/* Floating hint badge */}
-          <motion.div
-            animate={{ y: [0, -5, 0], scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-[10px] uppercase tracking-wider rounded-full shadow-lg shadow-orange-500/30 flex items-center gap-1 border border-amber-300 pointer-events-none group-hover:scale-110 transition-transform"
-          >
-            <Sparkles size={11} className="fill-current text-slate-950" />
-            <span>10% OFF</span>
-          </motion.div>
-
           <div className="absolute inset-0 bg-app-primary/20 blur-xl rounded-full group-hover:bg-amber-500/30 transition-colors" />
           
           <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible drop-shadow-[0_0_15px_rgba(69,162,158,0.5)] group-hover:drop-shadow-[0_0_20px_rgba(245,158,11,0.7)] transition-all">
