@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
+process.env.NODE_ENV = "test";
 process.env.GEMINI_API_KEY = "test_gemini_key";
+delete process.env.GROQ_API_KEY;
 
 // ─── Firebase Admin mocks ────────────────────────────────────────────────────
 const mockVerifyIdToken    = vi.hoisted(() => vi.fn());
