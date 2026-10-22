@@ -84,6 +84,13 @@ describe('PromoService', () => {
       expect(res.promo?.discountPercent).toBe(20);
     });
 
+    it('validates secret ninja code NINJA10 giving 10% discount', async () => {
+      const res = await PromoService.validateDetailed('NINJA10');
+      expect(res.promo).not.toBeNull();
+      expect(res.promo?.discountPercent).toBe(10);
+      expect(res.promo?.code).toBe('NINJA10');
+    });
+
     it('validates a valid friend referral code with 10% discount', async () => {
       // Mock Firestore query returning a referrer user doc
       mockGetDocs.mockResolvedValueOnce({

@@ -98,7 +98,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text-muted font-sans selection:bg-app-primary/30 overflow-x-hidden transition-colors duration-300">
-      <ScrollNinja />
+      <ScrollNinja onClaim={() => onLogin('register')} />
       <AnimatePresence>
         {activePolicy === 'privacy' ? (
           <div className="fixed inset-0 z-[150] bg-app-bg overflow-y-auto">
