@@ -2639,8 +2639,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> AI Scoring</li>
                       <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Detailed Feedback</li>
                     </ul>
-                    <button className={`w-full py-2 ${plan.isSpecial ? 'bg-app-accent' : 'bg-app-primary'} text-app-bg font-bold rounded-xl group-hover:bg-white transition-all`}>
-                      Select
+                    <button className={`w-full py-2.5 font-bold rounded-xl transition-all shadow-sm ${
+                      plan.isSpecial
+                        ? 'bg-app-accent text-slate-900 group-hover:brightness-110 group-hover:shadow-md'
+                        : 'bg-app-primary text-white group-hover:bg-app-accent group-hover:text-slate-900 group-hover:shadow-md'
+                    }`}>
+                      Select Plan
                     </button>
                   </div>
                 ))}

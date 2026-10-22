@@ -103,6 +103,15 @@ interface ServerKeyState {
   nonQuotaErrorCount: number; // non-quota failures (auth errors, model-not-found, etc.)
 }
 
+function parseServiceAccountJson(raw?: string): any {
+  if (!raw) return null;
+  let trimmed = raw.trim();
+  if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return JSON.parse(trimmed);
+}
+
 function buildServerKeyStates(): ServerKeyState[] {
   const vertexStates: ServerKeyState[] = [];
   const geminiStates: ServerKeyState[] = [];
@@ -112,8 +121,8 @@ function buildServerKeyStates(): ServerKeyState[] {
   const saJsonRaw = process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (saJsonRaw) {
     try {
-      const saJson = JSON.parse(saJsonRaw) as JWTInput & { project_id?: string };
-      const project = saJson.project_id;
+      const saJson = parseServiceAccountJson(saJsonRaw) as JWTInput & { project_id?: string };
+      const project = saJson?.project_id;
       const location = process.env.VERTEX_AI_LOCATION?.trim() || "global";
       if (!project) throw new Error("project_id missing from service account JSON");
       vertexStates.push({
@@ -930,10 +939,18 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
 const getAdminApp = () => {
   if (getApps().length > 0) return getApps()[0];
   const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!serviceAccount) return null;
+  if (!serviceAccount?.trim()) {
+    console.error("[FirebaseAdmin] FIREBASE_SERVICE_ACCOUNT is missing or empty in environment variables.");
+    return null;
+  }
   try {
-    return initAdminApp({ credential: cert(JSON.parse(serviceAccount)) });
-  } catch {
+    const creds = parseServiceAccountJson(serviceAccount);
+    if (!creds || typeof creds !== "object") {
+      throw new Error("Parsed credentials is not a valid JSON object");
+    }
+    return initAdminApp({ credential: cert(creds) });
+  } catch (err: any) {
+    console.error("[FirebaseAdmin] Failed to initialize Firebase Admin:", err?.message || err);
     return null;
   }
 };
