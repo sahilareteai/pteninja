@@ -2984,19 +2984,13 @@ function HelpView({ onBack, onNavigate, onOpenSupportChat }: { onBack: () => voi
 
       <div className="bg-app-primary/5 p-8 rounded-[2.5rem] border border-app-primary/10 text-center space-y-4">
         <h3 className="text-xl font-bold text-app-text">Still have questions?</h3>
-        <p className="text-app-text-muted max-w-md mx-auto">Check out our comprehensive FAQ or join our community of PTE Ninjas.</p>
+        <p className="text-app-text-muted max-w-md mx-auto">Check out our comprehensive FAQ for detailed answers about the PTE Academic exam.</p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
           <button 
             onClick={() => onNavigate('faq')}
             className="px-8 py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all"
           >
             View FAQ
-          </button>
-          <button 
-            onClick={() => window.open('https://discord.gg/pteninja', '_blank', 'noopener,noreferrer')}
-            className="px-8 py-3 bg-transparent border border-app-primary/30 text-app-primary font-bold rounded-xl hover:bg-app-primary/10 transition-all"
-          >
-            Join Discord
           </button>
         </div>
       </div>
