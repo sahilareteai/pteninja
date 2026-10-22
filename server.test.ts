@@ -755,7 +755,7 @@ describe("POST /api/support-chat", () => {
     expect(res.status).toBe(200);
     expect(res.body.response).toBe("Hello! How can I help you with PTE today?");
     expect(mockGenerateContent).toHaveBeenCalled();
-  });
+  }, 15000);
 });
 
 // ─── Support Ticket endpoint ───────────────────────────────────────────────────

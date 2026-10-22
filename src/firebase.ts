@@ -15,6 +15,10 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult,
+  linkWithCredential,
+  linkWithPhoneNumber,
+  unlink,
+  EmailAuthProvider,
   User as FirebaseUser 
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc, deleteField } from 'firebase/firestore';
@@ -102,6 +106,10 @@ export {
   updateProfile,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  linkWithCredential,
+  linkWithPhoneNumber,
+  unlink,
+  EmailAuthProvider,
   doc, 
   getDoc, 
   updateDoc, 

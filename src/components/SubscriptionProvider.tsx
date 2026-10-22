@@ -15,6 +15,9 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult,
+  linkWithCredential,
+  EmailAuthProvider,
+  FirebaseUser,
   googleProvider, 
   handleFirestoreError, 
   OperationType, 
@@ -27,7 +30,7 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, Zap, Check, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
 import { getLocalDateStr } from '../lib/utils';
 import { Logo } from './Logo';
 
@@ -40,6 +43,8 @@ interface SubscriptionContextType {
   isAccessRestricted: boolean;
   showSubscriptionModal: boolean;
   setShowSubscriptionModal: (show: boolean) => void;
+  showAuthModal: boolean;
+  setShowAuthModal: (show: boolean) => void;
   authError: string | null;
   setAuthError: (error: string | null) => void;
   currency: CurrencyInfo;
@@ -498,8 +503,26 @@ const formatAuthError = (error: any): string => {
       }
       setIsAuthenticating(true);
       try {
-        const cred = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
-        const firebaseUser = cred.user;
+        let firebaseUser: FirebaseUser;
+
+        // If phone was already verified via SMS OTP in this session, link email/pass to that user
+        if (auth.currentUser && isPhoneVerified) {
+          try {
+            const emailCred = EmailAuthProvider.credential(authEmail.trim(), authPassword);
+            const linkResult = await linkWithCredential(auth.currentUser, emailCred);
+            firebaseUser = linkResult.user;
+          } catch (linkErr: any) {
+            if (linkErr.code === 'auth/credential-already-in-use' || linkErr.code === 'auth/email-already-in-use') {
+              setIsAuthenticating(false);
+              return setAuthError("An account with this email address already exists. Please sign in instead.");
+            }
+            const cred = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+            firebaseUser = cred.user;
+          }
+        } else {
+          const cred = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+          firebaseUser = cred.user;
+        }
         
         await updateProfile(firebaseUser, { displayName: authName.trim() });
 
@@ -519,6 +542,7 @@ const formatAuthError = (error: any): string => {
           uid: firebaseUser.uid,
           email: authEmail.trim().toLowerCase(),
           phoneNumber: authPhone.trim() || null,
+          phoneVerified: isPhoneVerified,
           displayName: authName.trim(),
           createdAt: now.toISOString(),
           accessType: 'user',
@@ -533,7 +557,7 @@ const formatAuthError = (error: any): string => {
           goals: []
         };
 
-        await setDoc(userRef, newUser);
+        await setDoc(userRef, newUser, { merge: true });
 
         firebaseUser.getIdToken().then(idToken => {
           fetch('/api/send-welcome-email', {
@@ -570,7 +594,20 @@ const formatAuthError = (error: any): string => {
   const handleSendPhoneOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    if (!authPhone.trim()) return setAuthError("Please enter a valid phone number with country code (e.g. +1 234 567 8900).");
+    if (!authPhone.trim()) return setAuthError("Please enter a valid phone number with country code (e.g. +91 92890 63827).");
+
+    // Require Name, Email, and Password before starting phone verification in registration
+    if (emailMode === 'register') {
+      if (!authName.trim()) {
+        return setAuthError("Please enter your Name before verifying your phone number.");
+      }
+      if (!authEmail.trim()) {
+        return setAuthError("Please enter your Email address before verifying your phone number.");
+      }
+      if (authPassword.length < 6) {
+        return setAuthError("Please enter your Password (min 6 characters) before verifying your phone number.");
+      }
+    }
 
     setIsAuthenticating(true);
     try {
@@ -601,7 +638,8 @@ const formatAuthError = (error: any): string => {
       setIsPhoneVerified(true);
       setPhoneStep('number');
       setIsAuthenticating(false);
-      setInfoMessage("Phone number verified successfully! Please complete your account details below.");
+      setShowAuthModal(true); // Keep registration modal active
+      setInfoMessage("Phone number verified! Now click 'Create Account' below to complete your registration.");
     } catch (err: any) {
       setIsAuthenticating(false);
       setAuthError(formatAuthError(err));
@@ -811,6 +849,8 @@ const formatAuthError = (error: any): string => {
       isAccessRestricted,
       showSubscriptionModal,
       setShowSubscriptionModal,
+      showAuthModal,
+      setShowAuthModal,
       authError,
       setAuthError,
       currency,
@@ -826,7 +866,7 @@ const formatAuthError = (error: any): string => {
 
       {/* Email Verification Required Overlay */}
       <AnimatePresence>
-        {user && !isEmailVerified && user.accessType !== 'guest' && (
+        {user && !isEmailVerified && user.accessType !== 'guest' && !!(user.email || auth.currentUser?.email) && !showAuthModal && (
           <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -1080,24 +1120,53 @@ const formatAuthError = (error: any): string => {
                       <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 ml-1">
                         Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
                       </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="tel"
-                          value={authPhone}
-                          onChange={(e) => setAuthPhone(e.target.value)}
-                          placeholder="+61 470 260 503"
-                          className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
-                        />
-                        {authPhone.trim().length > 6 && phoneStep === 'number' && (
+                      {isPhoneVerified ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="tel"
+                            value={authPhone}
+                            readOnly
+                            className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800/80 border border-green-500/30 rounded-xl text-gray-900 dark:text-white text-sm"
+                          />
+                          <div className="px-3 py-2.5 bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap">
+                            <CheckCircle size={14} className="text-green-500" />
+                            <span>Verified</span>
+                          </div>
                           <button
                             type="button"
-                            onClick={handleSendPhoneOTP}
-                            className="px-3 py-2 bg-app-primary/10 text-app-primary hover:bg-app-primary hover:text-white text-xs font-bold rounded-xl transition-all whitespace-nowrap border border-app-primary/20"
+                            onClick={() => {
+                              setIsPhoneVerified(false);
+                              setPhoneStep('number');
+                            }}
+                            className="text-xs text-app-primary hover:underline px-2 py-1 font-semibold"
                           >
-                            Verify SMS
+                            Change
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="tel"
+                            value={authPhone}
+                            onChange={(e) => {
+                              setAuthPhone(e.target.value);
+                              if (isPhoneVerified) setIsPhoneVerified(false);
+                              if (phoneStep === 'otp') setPhoneStep('number');
+                            }}
+                            placeholder="+91 92890 63827"
+                            className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
+                          />
+                          {authPhone.trim().length > 6 && phoneStep === 'number' && (
+                            <button
+                              type="button"
+                              onClick={handleSendPhoneOTP}
+                              className="px-3 py-2 bg-app-primary/10 text-app-primary hover:bg-app-primary hover:text-white text-xs font-bold rounded-xl transition-all whitespace-nowrap border border-app-primary/20"
+                            >
+                              Verify SMS
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 ml-1">
                         Optional. SMS verification is not required to create your account.
                       </p>

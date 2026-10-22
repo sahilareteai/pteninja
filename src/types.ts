@@ -98,6 +98,7 @@ export interface UserData {
   uid: string;
   email?: string | null;
   phoneNumber?: string | null;
+  phoneVerified?: boolean;
   emailVerified?: boolean;
   displayName?: string | null;
   createdAt: string;

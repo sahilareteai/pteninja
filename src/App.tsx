@@ -50,7 +50,8 @@ import {
   Menu,
   MessageCircle,
   Save,
-  RotateCcw
+  RotateCcw,
+  Phone
 } from 'lucide-react';
 import { cn, getLocalDateStr } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -69,7 +70,22 @@ import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { SupportBot } from './components/SupportBot';
-import { auth, db, doc, updateDoc, handleFirestoreError, OperationType, addDoc, collection, deleteField } from './firebase';
+import { 
+  auth, 
+  db, 
+  doc, 
+  updateDoc, 
+  handleFirestoreError, 
+  OperationType, 
+  addDoc, 
+  collection, 
+  deleteField,
+  updateProfile,
+  RecaptchaVerifier,
+  linkWithPhoneNumber,
+  unlink,
+  ConfirmationResult
+} from './firebase';
 import { deleteUser } from 'firebase/auth';
 import { seedTasksToFirestore } from './services/taskService';
 
@@ -1248,7 +1264,7 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification } = useSubscription();
 
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
@@ -1750,7 +1766,7 @@ function AppContent() {
     );
   }
 
-  if (user && user.accessType !== 'guest' && (!user.email || !isEmailVerified)) {
+  if (user && user.accessType !== 'guest' && !!user.email && !isEmailVerified && !showAuthModal) {
     return (
       <div className="min-h-screen bg-app-bg text-app-text font-sans flex items-center justify-center p-6">
         <div className="bg-app-surface border border-app-primary/20 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">
@@ -2996,6 +3012,135 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const [changePlanTarget, setChangePlanTarget] = useState<typeof SUBSCRIPTION_PLANS[number] | null>(null);
   const [showChangePlanConfirm, setShowChangePlanConfirm] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+
+  // Personal Info Form State
+  const [profileName, setProfileName] = useState(user?.displayName || '');
+  const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
+  const [isPhoneVerified, setIsPhoneVerified] = useState(Boolean(user?.phoneVerified));
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [phoneOtpStep, setPhoneOtpStep] = useState<'idle' | 'otp'>('idle');
+  const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [phoneConfirmation, setPhoneConfirmation] = useState<ConfirmationResult | null>(null);
+  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.displayName || '');
+      setProfilePhone(user.phoneNumber || '');
+      setIsPhoneVerified(Boolean(user.phoneVerified));
+    }
+  }, [user?.displayName, user?.phoneNumber, user?.phoneVerified]);
+
+  const handleSaveProfile = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user?.uid) return;
+    if (!profileName.trim()) {
+      toast.error("Name cannot be empty.");
+      return;
+    }
+    setIsSavingProfile(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const isNewPhone = profilePhone.trim() !== (user.phoneNumber || '').trim();
+      const updatedVerified = isNewPhone ? false : isPhoneVerified;
+
+      await updateDoc(userRef, {
+        displayName: profileName.trim(),
+        phoneNumber: profilePhone.trim() || null,
+        phoneVerified: updatedVerified,
+      });
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: profileName.trim()
+        });
+      }
+
+      if (isNewPhone) {
+        setIsPhoneVerified(false);
+        setPhoneOtpStep('idle');
+      }
+
+      toast.success("Profile updated successfully!");
+    } catch (err: any) {
+      console.error("Failed to update profile:", err);
+      toast.error(err.message || "Failed to update profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSendProfilePhoneOTP = async () => {
+    if (!profilePhone.trim()) {
+      toast.error("Please enter a valid phone number with country code (e.g. +91 92890 63827).");
+      return;
+    }
+    if (!auth.currentUser) {
+      toast.error("You must be signed in to verify your phone number.");
+      return;
+    }
+    setIsSendingPhoneOtp(true);
+    try {
+      const verifier = new RecaptchaVerifier(auth, 'profile-recaptcha-container', {
+        size: 'invisible'
+      });
+      let result: ConfirmationResult;
+      try {
+        result = await linkWithPhoneNumber(auth.currentUser, profilePhone.trim(), verifier);
+      } catch (err: any) {
+        if (err.code === 'auth/provider-already-linked') {
+          await unlink(auth.currentUser, 'phone').catch(() => {});
+          result = await linkWithPhoneNumber(auth.currentUser, profilePhone.trim(), verifier);
+        } else {
+          throw err;
+        }
+      }
+      setPhoneConfirmation(result);
+      setPhoneOtpStep('otp');
+      toast.success("Verification code sent to your phone!");
+    } catch (err: any) {
+      console.error("Send phone OTP failed:", err);
+      if (err.code === 'auth/operation-not-allowed') {
+        toast.error("SMS verification is currently unavailable for this region. You can still save your phone number.");
+      } else {
+        toast.error(err.message || "Failed to send SMS verification code.");
+      }
+    } finally {
+      setIsSendingPhoneOtp(false);
+    }
+  };
+
+  const handleVerifyProfilePhoneOTP = async () => {
+    if (!phoneOtpCode.trim() || !phoneConfirmation || !user?.uid) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsVerifyingPhoneOtp(true);
+    try {
+      await phoneConfirmation.confirm(phoneOtpCode.trim());
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        phoneNumber: profilePhone.trim(),
+        phoneVerified: true,
+      });
+      setIsPhoneVerified(true);
+      setPhoneOtpStep('idle');
+      setPhoneOtpCode('');
+      toast.success("Phone number verified successfully!");
+    } catch (err: any) {
+      console.error("Verify phone OTP failed:", err);
+      if (err.code === 'auth/invalid-verification-code') {
+        toast.error("Incorrect verification code. Please check the SMS and try again.");
+      } else if (err.code === 'auth/code-expired') {
+        toast.error("Verification code expired. Please request a new code.");
+      } else {
+        toast.error(err.message || "Failed to verify phone number.");
+      }
+    } finally {
+      setIsVerifyingPhoneOtp(false);
+    }
+  };
   
   const getStatusColor = () => {
     if (isActive && user?.cancelAtPeriodEnd) return 'text-orange-400 bg-orange-400/10 border-orange-400/20';
@@ -3525,20 +3670,137 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
           )}
         </div>
 
-        <div className="bg-app-surface p-8 rounded-3xl border border-app-primary/20 space-y-6">
-          <h3 className="text-xl font-bold text-app-text flex items-center gap-2">
-            <ShieldCheck className="text-app-primary" /> Account Security
-          </h3>
-          <div className="space-y-4">
-            <div className="p-4 bg-app-bg rounded-2xl border border-app-primary/10 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] md:text-xs text-app-text-muted/50 uppercase tracking-widest font-bold">Email Verified</p>
-                <p className="text-base md:text-lg font-bold text-green-500 mt-1 flex items-center gap-1.5">
-                  <CheckCircle size={18} /> Yes (Verified)
-                </p>
+        <div className="bg-app-surface p-6 md:p-8 rounded-3xl border border-app-primary/20 space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg md:text-xl font-bold text-app-text flex items-center gap-2">
+              <User className="text-app-primary" size={20} /> Personal Information
+            </h3>
+            {user?.phoneVerified && (
+              <span className="px-2.5 py-1 bg-green-500/10 text-green-500 border border-green-500/20 text-xs font-bold rounded-lg flex items-center gap-1">
+                <CheckCircle size={13} /> Verified Member
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-app-text-muted uppercase tracking-wider mb-1.5">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Your Full Name"
+                className="w-full px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:border-app-primary outline-none text-app-text text-sm transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-app-text-muted uppercase tracking-wider mb-1.5">
+                Email Address
+              </label>
+              <div className="flex items-center justify-between px-4 py-3 bg-app-bg/50 border border-app-primary/10 rounded-xl text-sm">
+                <span className="text-app-text truncate">{user?.email || 'Guest User'}</span>
+                <span className="flex items-center gap-1 text-xs font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-md border border-green-500/20 shrink-0">
+                  <CheckCircle size={12} /> Verified
+                </span>
               </div>
             </div>
-          </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-app-text-muted uppercase tracking-wider">
+                  Contact Number
+                </label>
+                {isPhoneVerified && profilePhone.trim() === (user?.phoneNumber || '').trim() ? (
+                  <span className="text-xs font-bold text-green-500 flex items-center gap-1">
+                    <CheckCircle size={12} /> Verified
+                  </span>
+                ) : profilePhone.trim().length > 0 ? (
+                  <span className="text-xs font-semibold text-amber-500">
+                    Unverified
+                  </span>
+                ) : null}
+              </div>
+              
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={profilePhone}
+                  onChange={(e) => {
+                    setProfilePhone(e.target.value);
+                    if (isPhoneVerified) setIsPhoneVerified(false);
+                    if (phoneOtpStep === 'otp') setPhoneOtpStep('idle');
+                  }}
+                  placeholder="+91 92890 63827"
+                  className="flex-1 px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:border-app-primary outline-none text-app-text text-sm transition-all"
+                />
+                {profilePhone.trim().length > 6 && (!isPhoneVerified || profilePhone.trim() !== (user?.phoneNumber || '').trim()) && phoneOtpStep === 'idle' && (
+                  <button
+                    type="button"
+                    onClick={handleSendProfilePhoneOTP}
+                    disabled={isSendingPhoneOtp}
+                    className="px-3.5 py-2.5 bg-app-primary/10 text-app-primary hover:bg-app-primary hover:text-app-bg text-xs font-bold rounded-xl transition-all border border-app-primary/20 whitespace-nowrap flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isSendingPhoneOtp ? <Loader2 size={14} className="animate-spin" /> : <Phone size={14} />}
+                    <span>Verify SMS</span>
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-app-text-muted/60 mt-1">
+                Enter your mobile number with country code. If updated, click Verify SMS to confirm.
+              </p>
+
+              {/* OTP Confirmation Step */}
+              {phoneOtpStep === 'otp' && (
+                <div className="mt-3 p-4 bg-app-primary/5 rounded-2xl border border-app-primary/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-app-primary">
+                      Enter 6-Digit SMS Verification Code
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setPhoneOtpStep('idle')}
+                      className="text-xs text-app-text-muted hover:text-app-text"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={phoneOtpCode}
+                      onChange={(e) => setPhoneOtpCode(e.target.value)}
+                      placeholder="123456"
+                      className="flex-1 px-3 py-2 bg-app-bg border border-app-primary/30 rounded-xl text-center tracking-widest font-mono text-sm font-bold text-app-text outline-none focus:border-app-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyProfilePhoneOTP}
+                      disabled={phoneOtpCode.length < 6 || isVerifyingPhoneOtp}
+                      className="px-4 py-2 bg-app-primary text-app-bg font-bold text-xs rounded-xl disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isVerifyingPhoneOtp ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                      <span>Confirm</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div id="profile-recaptcha-container"></div>
+
+            <button
+              type="submit"
+              disabled={isSavingProfile}
+              className="w-full py-3 bg-app-primary text-app-bg font-bold rounded-xl hover:bg-app-accent transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-app-primary/10"
+            >
+              {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              <span>Save Profile Changes</span>
+            </button>
+          </form>
           
           {/* Admin Section */}
           {user?.role === 'admin' && (
