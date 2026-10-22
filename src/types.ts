@@ -125,6 +125,9 @@ export interface UserData {
   savedMockSessions?: Record<string, MockTestSavedSession> | null;
   currentSessionId?: string;
   role?: 'admin' | 'user';
+  referralCode?: string;
+  referredBy?: string | null;
+  referralCount?: number;
 }
 
 export const SUBSCRIPTION_PLANS = [

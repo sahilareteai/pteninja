@@ -29,6 +29,7 @@ import {
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
+import { generateUserReferralCode } from '../services/promoService';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
 import { getLocalDateStr } from '../lib/utils';
@@ -101,8 +102,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const hasEnsuredAdminRoleRef = useRef(false);
 
   useEffect(() => {
-    // Check if returning from Stripe checkout
+    // Check if returning from Stripe checkout or has referral query param
     const params = new URLSearchParams(window.location.search);
+    const refParam = params.get('ref') || params.get('referral');
+    if (refParam && refParam.trim()) {
+      try {
+        localStorage.setItem('pte_pending_referral', refParam.trim().toUpperCase());
+      } catch (e) {}
+    }
+
     if (params.has('payment_intent') || params.has('setup_intent')) {
       setIsSyncingSubscription(true);
 
@@ -210,6 +218,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               setIsSyncingSubscription(false);
             }
 
+            // Auto-assign referral code for existing registered users if missing
+            if (!userData.referralCode && !firebaseUser.isAnonymous) {
+              const assignedCode = generateUserReferralCode(
+                userData.displayName || firebaseUser.displayName,
+                firebaseUser.uid
+              );
+              updateDoc(userRef, {
+                referralCode: assignedCode,
+                referralCount: userData.referralCount || 0
+              }).catch(() => {});
+              userData.referralCode = assignedCode;
+            }
+
             setUser(userData);
 
             // Ensure admin role for protected accounts (once per auth session)
@@ -230,6 +251,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const isGuest = firebaseUser.isAnonymous;
             const now = new Date();
             const createdAt = now.toISOString();
+            const pendingRef = !isGuest ? localStorage.getItem('pte_pending_referral') : null;
+            const assignedRefCode = !isGuest ? generateUserReferralCode(firebaseUser.displayName, firebaseUser.uid) : undefined;
             
             const newUser: UserData = {
               uid: firebaseUser.uid,
@@ -240,6 +263,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               accessType: isGuest ? 'guest' : 'user',
               subscriptionStatus: isGuest ? 'guest' : 'trial',
               trialEndsAt: isGuest ? undefined : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+              referralCode: assignedRefCode,
+              referredBy: pendingRef || null,
+              referralCount: 0,
               activityLog: [getLocalDateStr(now)],
               completedTasks: [],
               completedTasksDetailed: [],
@@ -537,6 +563,8 @@ const formatAuthError = (error: any): string => {
         const now = new Date();
         const trialEnds = new Date();
         trialEnds.setDate(trialEnds.getDate() + 7);
+        const pendingRef = localStorage.getItem('pte_pending_referral');
+        const assignedRefCode = generateUserReferralCode(authName.trim(), firebaseUser.uid);
 
         const newUser: UserData = {
           uid: firebaseUser.uid,
@@ -548,6 +576,9 @@ const formatAuthError = (error: any): string => {
           accessType: 'user',
           subscriptionStatus: 'trial',
           trialEndsAt: trialEnds.toISOString(),
+          referralCode: assignedRefCode,
+          referredBy: pendingRef || null,
+          referralCount: 0,
           activityLog: [getLocalDateStr(now)],
           completedTasks: [],
           completedTasksDetailed: [],

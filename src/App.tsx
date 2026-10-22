@@ -51,7 +51,11 @@ import {
   MessageCircle,
   Save,
   RotateCcw,
-  Phone
+  Phone,
+  Gift,
+  Share2,
+  Copy,
+  Sparkles
 } from 'lucide-react';
 import { cn, getLocalDateStr } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -63,7 +67,7 @@ import { MOCK_TESTS } from './data/mockTests';
 import { PTE_VOCABULARY, VocabularyWord } from './data/vocabulary';
 import { analyzeSpeaking, analyzeWriting, generateTTS, WritingAnalysisResult } from './services/geminiService';
 import { SubscriptionProvider, useSubscription } from './components/SubscriptionProvider';
-import { PromoService, PromoCode } from './services/promoService';
+import { PromoService, PromoCode, generateUserReferralCode } from './services/promoService';
 import { AdminDashboard } from './components/AdminDashboard';
 import { CookieBanner } from './components/CookieBanner';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
@@ -2287,13 +2291,39 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
+  // Auto-apply pending referral code if available and none currently applied
+  useEffect(() => {
+    const applyPendingReferral = async () => {
+      try {
+        const pendingRef = localStorage.getItem('pte_pending_referral');
+        if (pendingRef && !appliedPromo) {
+          const res = await PromoService.validateDetailed(pendingRef, user?.uid);
+          if (res.promo) {
+            setAppliedPromo(res.promo);
+            setPromoInput(res.promo.code);
+            toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`);
+          }
+        }
+      } catch (e) {}
+    };
+    applyPendingReferral();
+  }, [user?.uid]);
+
   const handleApplyPromo = async () => {
-    const promo = await PromoService.validate(promoInput);
-    if (promo) {
-      setAppliedPromo(promo);
-      toast.success(`Promo code ${promo.code} applied! ${promo.discountPercent}% off.`);
+    if (!promoInput.trim()) {
+      toast.error('Please enter a referral or promo code.');
+      return;
+    }
+    const res = await PromoService.validateDetailed(promoInput, user?.uid);
+    if (res.promo) {
+      setAppliedPromo(res.promo);
+      if (res.promo.isReferral) {
+        toast.success(`Referral code applied! 10% discount from ${res.promo.referrerName || 'your friend'}.`);
+      } else {
+        toast.success(`Promo code ${res.promo.code} applied! ${res.promo.discountPercent}% off.`);
+      }
     } else {
-      toast.error('Invalid promo code');
+      toast.error(res.error || 'Invalid referral or promo code');
       setAppliedPromo(null);
     }
   };
@@ -2418,6 +2448,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       if (emailInput && !user.email) updateData.email = emailInput.trim();
 
       await updateDoc(userRef, updateData);
+
+      if (appliedPromo?.isReferral && appliedPromo.referrerUid) {
+        PromoService.recordReferralUse(
+          appliedPromo.referrerUid,
+          user.uid,
+          selectedPlan.id,
+          appliedPromo.code
+        ).catch(() => {});
+        try { localStorage.removeItem('pte_pending_referral'); } catch (e) {}
+      }
       
       setShowSuccess(true);
       toast.success(`Successfully subscribed to ${selectedPlan.name}!`);
@@ -2672,16 +2712,18 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 {appliedPromo && (
                   <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      <svg className="shrink-0 text-app-accent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <Sparkles className="shrink-0 text-app-accent" size={14} />
                       <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate" title={appliedPromo.code}>{appliedPromo.code}</span>
-                      <span className="text-app-accent/70 text-xs font-medium shrink-0">— {appliedPromo.discountPercent}% off</span>
+                      <span className="text-app-accent/80 text-xs font-medium shrink-0">
+                        — {appliedPromo.discountPercent}% off {appliedPromo.isReferral ? `(Referral: ${appliedPromo.referrerName || 'Friend'})` : ''}
+                      </span>
                     </div>
                     <button
                       onClick={() => { setAppliedPromo(null); setPromoInput(''); }}
                       className="shrink-0 ml-3 text-app-text-muted/40 hover:text-app-text-muted transition-colors"
                       aria-label="Remove promo code"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      <X size={14} />
                     </button>
                   </div>
                 )}
@@ -2693,7 +2735,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       onChange={(e) => setPromoInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
                       placeholder="Referral or Gift Code"
-                      className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/30 text-sm font-medium outline-none"
+                      className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/40 text-sm font-medium outline-none"
                     />
                   </div>
                   <button 
@@ -2703,6 +2745,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     Apply
                   </button>
                 </div>
+                <p className="text-[11px] text-app-text-muted/60 text-center">
+                  Only one referral or promo code can be applied at a time.
+                </p>
               </div>
             </>
           ) : (
@@ -3023,6 +3068,41 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   const [phoneConfirmation, setPhoneConfirmation] = useState<ConfirmationResult | null>(null);
   const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
   const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
+
+  // Referral states
+  const userReferralCode = user?.referralCode || (user?.uid ? generateUserReferralCode(user?.displayName, user?.uid) : '');
+  const referralLink = typeof window !== 'undefined' ? `${window.location.origin}?ref=${userReferralCode}` : '';
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyCode = async () => {
+    if (!userReferralCode) return;
+    try {
+      await navigator.clipboard.writeText(userReferralCode);
+      setCopiedCode(true);
+      toast.success("Referral code copied to clipboard!");
+      setTimeout(() => setCopiedCode(false), 2500);
+    } catch (e) {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedLink(true);
+      toast.success("Referral link copied to clipboard!");
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch (e) {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = `Hey! I'm practicing for my PTE exam on PTE Ninja. Use my referral code ${userReferralCode} (or sign up using my link: ${referralLink}) to get an extra 10% off any plan! 🎯🥋`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
 
   useEffect(() => {
     if (user) {
@@ -3801,6 +3881,75 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
               <span>Save Profile Changes</span>
             </button>
           </form>
+
+          {/* Referral & Invite Section */}
+          <div className="pt-6 border-t border-app-primary/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500/20 to-orange-500/20 flex items-center justify-center border border-amber-500/30">
+                  <Gift className="text-amber-400" size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-app-text">Invite Friends & Earn</h3>
+                  <p className="text-xs text-app-text-muted">Give friends an extra 10% off when they upgrade</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-bold text-amber-500">
+                <Sparkles size={12} />
+                <span>10% OFF</span>
+              </div>
+            </div>
+
+            <div className="bg-app-bg/60 border border-app-primary/10 rounded-2xl p-4 space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-app-text-muted uppercase tracking-wider mb-1.5">
+                  Your Unique Referral Code
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-4 py-3 bg-app-surface border border-app-primary/20 rounded-xl font-mono text-base font-extrabold text-app-primary tracking-wider select-all">
+                    {userReferralCode || 'Generating...'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    disabled={!userReferralCode}
+                    className="px-4 py-3 bg-app-primary text-app-bg font-bold text-xs rounded-xl hover:bg-app-accent transition-all flex items-center gap-1.5 shrink-0 shadow-md shadow-app-primary/10 disabled:opacity-50"
+                  >
+                    {copiedCode ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  disabled={!userReferralCode}
+                  className="w-full py-2.5 px-3 bg-app-surface border border-app-primary/20 text-app-text font-bold text-xs rounded-xl hover:border-app-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {copiedLink ? <Check size={14} className="text-green-500" /> : <Share2 size={14} className="text-app-primary" />}
+                  <span>{copiedLink ? 'Link Copied!' : 'Copy Invite Link'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleWhatsAppShare}
+                  disabled={!userReferralCode}
+                  className="w-full py-2.5 px-3 bg-[#25D366]/10 border border-[#25D366]/30 text-[#25D366] font-bold text-xs rounded-xl hover:bg-[#25D366]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <MessageCircle size={14} />
+                  <span>Share on WhatsApp</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-app-primary/10 text-xs">
+                <span className="text-app-text-muted">Friends Successfully Joined & Upgraded</span>
+                <span className="font-bold text-app-text bg-app-surface px-2.5 py-1 rounded-lg border border-app-primary/10">
+                  {user?.referralCount || 0}
+                </span>
+              </div>
+            </div>
+          </div>
           
           {/* Admin Section */}
           {user?.role === 'admin' && (
