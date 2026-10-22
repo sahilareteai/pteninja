@@ -412,12 +412,17 @@ const formatAuthError = (error: any): string => {
     case 'auth/cancelled-popup-request':
       return "Sign-in popup was blocked by your browser. Please allow popups to continue.";
     case 'auth/operation-not-allowed':
-      return "SMS sign-in is not enabled for this country code in Firebase. Please enable the region in Firebase Console or sign in with Email / Google.";
+      return "SMS verification is currently unavailable for this region. You can continue creating your account with Email or Google (phone verification is not required).";
+    case 'auth/admin-restricted-operation':
+      return "This operation is temporarily restricted. Please sign in or register with Email or Google.";
     default:
       const cleanMessage = rawMessage
         .replace(/^Firebase:\s*/i, '')
         .replace(/Error\s*\(auth\/[^)]+\):?\s*/i, '')
         .replace(/\(auth\/[^)]+\)/g, '')
+        .replace(/Firebase Console/gi, 'system settings')
+        .replace(/Firebase/gi, 'system')
+        .replace(/Firestore/gi, 'database')
         .trim();
       return cleanMessage || "Authentication failed. Please check your details and try again.";
   }
@@ -727,7 +732,7 @@ const formatAuthError = (error: any): string => {
                                (error.message && error.message.toLowerCase().includes('insufficient permissions'));
 
       if (error.code === 'auth/admin-restricted-operation') {
-        setAuthError("Guest access (Anonymous Authentication) is not enabled in the Firebase Console. Please enable it in Authentication > Sign-in method.");
+        setAuthError("Guest access is temporarily unavailable. Please sign in or register with Email or Google.");
       } else if (isPermissionError) {
         setAuthError("Permission denied. This email might be reserved or your session expired. Please try with Google login.");
       } else {
@@ -1093,6 +1098,9 @@ const formatAuthError = (error: any): string => {
                           </button>
                         )}
                       </div>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 ml-1">
+                        Optional. SMS verification is not required to create your account.
+                      </p>
 
                       {phoneStep === 'otp' && (
                         <div className="mt-3 p-3 bg-app-primary/5 rounded-xl border border-app-primary/20 space-y-2">
