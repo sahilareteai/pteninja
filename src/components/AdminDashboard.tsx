@@ -49,6 +49,9 @@ import {
   GraduationCap,
   ChevronRight,
   Menu,
+  Sparkles,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { db, collection, getDocs, getDoc, doc, updateDoc, setDoc, OperationType, handleFirestoreError, auth } from '../firebase';
 import { UserData, SUBSCRIPTION_PLANS, PTE_TASKS } from '../types';
@@ -158,8 +161,12 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   });
   const hasFetchedReferrals = useRef(false);
 
-  // Email modal state
+  // Email modal & selection state
   const [selectedEmailUser, setSelectedEmailUser] = useState<AdminUser | null>(null);
+  const [emailTargetUsers, setEmailTargetUsers] = useState<AdminUser[]>([]);
+  const [selectedUserUids, setSelectedUserUids] = useState<Set<string>>(new Set());
+  const [selectedTemplate, setSelectedTemplate] = useState<'diwali' | 'payment' | 'maintenance' | null>('diwali');
+  const [emailPreviewMode, setEmailPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
@@ -758,6 +765,82 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const guestCount = users.filter(u => u.accessType === 'guest').length;
   const paidCount = users.filter(u => u.subscriptionStatus === 'active').length;
+
+  const selectableUsers = useMemo(() => filteredUsers.filter(u => !!u.email), [filteredUsers]);
+  const isAllSelected = selectableUsers.length > 0 && selectableUsers.every(u => selectedUserUids.has(u.uid));
+  const isSomeSelected = selectedUserUids.size > 0 && !isAllSelected;
+
+  const toggleSelectUser = (uid: string) => {
+    setSelectedUserUids(prev => {
+      const next = new Set(prev);
+      if (next.has(uid)) {
+        next.delete(uid);
+      } else {
+        next.add(uid);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedUserUids(new Set());
+    } else {
+      setSelectedUserUids(new Set(selectableUsers.map(u => u.uid)));
+    }
+  };
+
+  const applyDiwaliTemplate = (targets: AdminUser[] = emailTargetUsers) => {
+    setSelectedTemplate('diwali');
+    setEmailSubject('🪔 Happy Diwali from PTE Ninja! Celebrate with an Additional 20% OFF ✨');
+    setEmailBody(
+      `Wishing you and your loved ones a joyous, luminous, and prosperous Diwali!\n\n` +
+      `May this sacred festival of lights illuminate your path toward your highest ambitions, career milestones, and PTE Academic success.\n\n` +
+      `As part of our Diwali celebrations, we are delighted to offer an exclusive festive gift:\n\n` +
+      `🎁 Get an Additional 20% OFF on all PTE Ninja plans!\n` +
+      `Voucher Code: DIWALI20\n\n` +
+      `Whether you are beginning your preparation or targeting a 79+ score for your migration or study goals, PTE Ninja equips you with:\n` +
+      `• 🎙️ Pearson-calibrated AI scoring for Speaking, Writing, Reading & Listening\n` +
+      `• 📚 5,000+ latest real exam-predicted questions and full mock tests\n` +
+      `• ⚡ Instant phoneme-level pronunciation breakdown and score-boosting tips\n\n` +
+      `How to claim your festive discount:\n` +
+      `1. Visit https://pteninja.com\n` +
+      `2. Sign in to your account and open Plans & Pricing\n` +
+      `3. Enter voucher code DIWALI20 at checkout to unlock your additional 20% off!\n\n` +
+      `This special festive offer is valid for a limited time during Diwali week.\n\n` +
+      `May your learning journey shine brighter than ever this festive season!\n\n` +
+      `Warm festive regards,\nThe PTE Ninja Team\nhttps://pteninja.com`
+    );
+  };
+
+  const applyPaymentTemplate = (targets: AdminUser[] = emailTargetUsers) => {
+    setSelectedTemplate('payment');
+    setEmailSubject('Payment Gateway Updated to Razorpay');
+    const nameStr = targets.length === 1 ? (targets[0].displayName || 'there') : 'there';
+    setEmailBody(
+      `Hi ${nameStr},\n\nWe have updated our payment gateway from Stripe to Razorpay to provide a smoother checkout experience. As part of this transition, your existing subscription will continue until its expiry date.\n\nThank you for learning with PTENinja!`
+    );
+  };
+
+  const applyMaintenanceTemplate = (targets: AdminUser[] = emailTargetUsers) => {
+    setSelectedTemplate('maintenance');
+    setEmailSubject('Sorry for the inconvenience caused');
+    const nameStr = targets.length === 1 ? (targets[0].displayName || 'there') : 'there';
+    setEmailBody(
+      `Hi ${nameStr},\n\nWe recently experienced some maintenance issues on our platform. We sincerely apologize for any inconvenience this may have caused you.\n\nEverything is fully operational now, and you should be able to browse smoothly.\n\nHappy Learning!`
+    );
+  };
+
+  const openEmailModalForUsers = (targets: AdminUser[]) => {
+    if (targets.length === 0) {
+      toast.error("No valid users selected with email addresses.");
+      return;
+    }
+    setEmailTargetUsers(targets);
+    setSelectedEmailUser(targets[0]);
+    setEmailPreviewMode('edit');
+    applyDiwaliTemplate(targets);
+  };
 
   // ─── Analytics helpers ──────────────────────────────────────────────────────
 
@@ -1376,7 +1459,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         className="w-full bg-app-bg border border-app-primary/10 rounded-xl pl-10 pr-4 py-2 text-sm focus:border-app-primary transition-all"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-2 bg-app-bg p-1 rounded-xl border border-app-primary/10">
                         <button 
                           onClick={() => setUserFilter('all')}
@@ -1397,9 +1480,46 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                           Guests ({guestCount})
                         </button>
                       </div>
+
+                      {/* Select All Toggle Button */}
+                      <button
+                        onClick={handleSelectAll}
+                        disabled={selectableUsers.length === 0}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer disabled:opacity-50",
+                          isAllSelected
+                            ? "bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400 font-extrabold"
+                            : "bg-app-bg border-app-primary/10 text-app-text-muted hover:text-app-text hover:border-app-primary/30"
+                        )}
+                        title={isAllSelected ? "Deselect all visible users" : `Select all ${selectableUsers.length} visible users`}
+                      >
+                        <CheckSquare size={14} />
+                        {isAllSelected ? 'Deselect All' : `Select All (${selectableUsers.length})`}
+                      </button>
+
+                      {/* Email All / Email Selected Action Button */}
+                      <button
+                        onClick={() => {
+                          if (selectedUserUids.size > 0) {
+                            openEmailModalForUsers(users.filter(u => selectedUserUids.has(u.uid) && !!u.email));
+                          } else {
+                            openEmailModalForUsers(selectableUsers);
+                          }
+                        }}
+                        disabled={selectableUsers.length === 0}
+                        className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-black bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 rounded-xl hover:brightness-110 shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        title={selectedUserUids.size > 0 ? `Send email to ${selectedUserUids.size} selected users` : `Send email to all ${selectableUsers.length} users with emails`}
+                      >
+                        <Mail size={14} className="stroke-[2.5]" />
+                        {selectedUserUids.size > 0 
+                          ? `Email Selected (${selectedUserUids.size})` 
+                          : `Email All Users (${selectableUsers.length})`
+                        }
+                      </button>
+
                       <button
                         onClick={() => fetchData(true)}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-app-bg border border-app-primary/10 rounded-xl text-app-text-muted hover:text-app-primary hover:border-app-primary/30 transition-all cursor-pointer"
                         title="Refresh user list"
                       >
                         <RefreshCw size={14} />
@@ -1449,10 +1569,56 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
 
+                  {/* Floating / Sticky Selected Users Action Bar */}
+                  {selectedUserUids.size > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2.5 mb-4 text-xs font-semibold text-app-text shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-black text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
+                          <CheckSquare size={16} />
+                          {selectedUserUids.size} of {selectableUsers.length} users selected
+                        </span>
+                        <span className="text-app-text-muted">|</span>
+                        <button
+                          onClick={handleSelectAll}
+                          className="text-app-primary hover:underline font-bold cursor-pointer"
+                        >
+                          {isAllSelected ? 'Deselect all' : `Select all (${selectableUsers.length})`}
+                        </button>
+                        <button
+                          onClick={() => setSelectedUserUids(new Set())}
+                          className="text-red-400 hover:underline cursor-pointer"
+                        >
+                          Clear selection
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => openEmailModalForUsers(users.filter(u => selectedUserUids.has(u.uid) && !!u.email))}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 rounded-xl text-xs font-black hover:brightness-110 shadow-sm transition-all cursor-pointer active:scale-95"
+                      >
+                        <Mail size={13} className="stroke-[2.5]" />
+                        Send Email to {selectedUserUids.size} User{selectedUserUids.size > 1 ? 's' : ''}
+                      </button>
+                    </motion.div>
+                  )}
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="text-app-text-muted text-xs uppercase tracking-wider border-b border-app-primary/10">
+                          <th className="px-3 py-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isAllSelected}
+                              ref={el => { if (el) el.indeterminate = isSomeSelected; }}
+                              onChange={handleSelectAll}
+                              className="w-4 h-4 rounded text-amber-500 border-app-primary/30 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                              title={isAllSelected ? "Deselect all" : `Select all ${selectableUsers.length} users with emails`}
+                            />
+                          </th>
                           <th className="px-4 py-3 font-bold">User</th>
                           <th className="px-4 py-3 font-bold">Status</th>
                           <th className="px-4 py-3 font-bold">Plan</th>
@@ -1462,97 +1628,119 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-app-primary/5">
-                        {filteredUsers.map((user) => (
-                          <tr key={user.uid} className="hover:bg-app-primary/5 transition-colors">
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-app-primary/10 rounded-full flex items-center justify-center text-app-primary">
-                                  <UserIcon size={16} />
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-sm font-bold text-app-text">{user.displayName || 'Anonymous'}</div>
-                                    {user.accessType === 'guest' && (
-                                      <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-black uppercase tracking-tighter border border-gray-200 dark:border-gray-700">Guest</span>
-                                    )}
+                        {filteredUsers.map((user) => {
+                          const isSelected = selectedUserUids.has(user.uid);
+                          return (
+                            <tr 
+                              key={user.uid} 
+                              className={cn(
+                                "transition-colors",
+                                isSelected ? "bg-amber-500/10 dark:bg-amber-950/25" : "hover:bg-app-primary/5"
+                              )}
+                            >
+                              <td className="px-3 py-4 w-10 text-center">
+                                {user.email ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelectUser(user.uid)}
+                                    className="w-4 h-4 rounded text-amber-500 border-app-primary/30 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                                    title={`Select ${user.displayName || user.email}`}
+                                  />
+                                ) : (
+                                  <span className="text-app-text-muted/40 text-xs font-mono">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-app-primary/10 rounded-full flex items-center justify-center text-app-primary">
+                                    <UserIcon size={16} />
                                   </div>
-                                  <div className="text-xs text-app-text-muted">
-                                    {user.email || 'No email provided'}
-                                    {user.phoneNumber ? ` • 📞 ${user.phoneNumber}` : ''}
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm font-bold text-app-text">{user.displayName || 'Anonymous'}</div>
+                                      {user.accessType === 'guest' && (
+                                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-black uppercase tracking-tighter border border-gray-200 dark:border-gray-700">Guest</span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-app-text-muted">
+                                      {user.email || 'No email provided'}
+                                      {user.phoneNumber ? ` • 📞 ${user.phoneNumber}` : ''}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                user.subscriptionStatus === 'active' ? "bg-green-500/10 text-green-500" : 
-                                user.subscriptionStatus === 'expired' ? "bg-red-500/10 text-red-500" : "bg-app-primary/10 text-app-primary"
-                              )}>
-                                {user.subscriptionStatus}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2 text-xs text-app-text capitalize">
-                                <CreditCard size={14} className="text-app-text-muted" />
-                                {user.planId ? (SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name || user.planId) : 'No Plan'}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2 text-xs text-app-text-muted">
-                                <Clock size={14} />
-                                {new Date(user.createdAt).toLocaleDateString()}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2">
+                              </td>
+                              <td className="px-4 py-4">
                                 <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                  user.role === 'admin' ? "bg-purple-500/10 text-purple-500" : "bg-app-text-muted/10 text-app-text-muted"
+                                  user.subscriptionStatus === 'active' ? "bg-green-500/10 text-green-500" : 
+                                  user.subscriptionStatus === 'expired' ? "bg-red-500/10 text-red-500" : "bg-app-primary/10 text-app-primary"
                                 )}>
-                                  {user.role || 'user'}
+                                  {user.subscriptionStatus}
                                 </span>
-                                <button
-                                  onClick={() => handleRoleChange(user, user.role === 'admin' ? 'user' : 'admin')}
-                                  disabled={roleChangingUid === user.uid}
-                                  className={cn("p-1 rounded-lg transition-all text-[10px]",
-                                    user.role === 'admin'
-                                      ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20"
-                                      : "bg-app-text-muted/10 text-app-text-muted hover:bg-purple-500/10 hover:text-purple-500"
-                                  )}
-                                  title={user.role === 'admin' ? 'Remove admin role' : 'Make admin'}
-                                >
-                                  {roleChangingUid === user.uid
-                                    ? <Loader2 size={12} className="animate-spin" />
-                                    : <ShieldCheck size={12} />}
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => setSelectedEmailUser(user)}
-                                  className="p-2 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"
-                                  title="Send Email"
-                                >
-                                  <Mail size={16} />
-                                </button>
-                                <button
-                                  onClick={() => setSelectedUser(user)}
-                                  className="p-2 rounded-xl bg-app-primary/10 text-app-primary hover:bg-app-primary/20 transition-all"
-                                  title="View user details"
-                                >
-                                  <Eye size={16} />
-                                </button>
-                                <button
-                                  onClick={() => setUserToDelete(user)}
-                                  className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
-                                  title="Delete user"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2 text-xs text-app-text capitalize">
+                                  <CreditCard size={14} className="text-app-text-muted" />
+                                  {user.planId ? (SUBSCRIPTION_PLANS.find(p => p.id === user.planId)?.name || user.planId) : 'No Plan'}
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2 text-xs text-app-text-muted">
+                                  <Clock size={14} />
+                                  {new Date(user.createdAt).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2">
+                                  <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                    user.role === 'admin' ? "bg-purple-500/10 text-purple-500" : "bg-app-text-muted/10 text-app-text-muted"
+                                  )}>
+                                    {user.role || 'user'}
+                                  </span>
+                                  <button
+                                    onClick={() => handleRoleChange(user, user.role === 'admin' ? 'user' : 'admin')}
+                                    disabled={roleChangingUid === user.uid}
+                                    className={cn("p-1 rounded-lg transition-all text-[10px]",
+                                      user.role === 'admin'
+                                        ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20"
+                                        : "bg-app-text-muted/10 text-app-text-muted hover:bg-purple-500/10 hover:text-purple-500"
+                                    )}
+                                    title={user.role === 'admin' ? 'Remove admin role' : 'Make admin'}
+                                  >
+                                    {roleChangingUid === user.uid
+                                      ? <Loader2 size={12} className="animate-spin" />
+                                      : <ShieldCheck size={12} />}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => openEmailModalForUsers([user])}
+                                    className="p-2 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all cursor-pointer"
+                                    title="Send Email"
+                                  >
+                                    <Mail size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => setSelectedUser(user)}
+                                    className="p-2 rounded-xl bg-app-primary/10 text-app-primary hover:bg-app-primary/20 transition-all"
+                                    title="View user details"
+                                  >
+                                    <Eye size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => setUserToDelete(user)}
+                                    className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                    title="Delete user"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2737,127 +2925,305 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
         </div>
       )}
       {/* Send Email Modal */}
-      {selectedEmailUser && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-app-surface border border-app-primary/20 rounded-2xl p-6 w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]"
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500">
-                <Mail size={20} />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-app-text">Send Email</h3>
-                <p className="text-xs text-app-text-muted">To: {selectedEmailUser.email}</p>
-              </div>
-            </div>
+      {(selectedEmailUser || emailTargetUsers.length > 0) && (() => {
+        const activeTargets = emailTargetUsers.length > 0 ? emailTargetUsers : (selectedEmailUser ? [selectedEmailUser] : []);
+        const isBulk = activeTargets.length > 1;
 
-            <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Templates</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setEmailSubject('Payment Gateway Updated to Razorpay');
-                      setEmailBody(`Hi ${selectedEmailUser.displayName || 'there'},\n\nWe have updated our payment gateway from Stripe to Razorpay to provide a smoother checkout experience. As part of this transition, your existing subscription will continue until its expiry date.\n\nThank you for learning with PTENinja!`);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-app-bg border border-app-primary/20 rounded-lg hover:border-app-primary/50 transition-colors text-app-text"
-                  >
-                    Payment Update
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEmailSubject('Sorry for the inconvenience caused');
-                      setEmailBody(`Hi ${selectedEmailUser.displayName || 'there'},\n\nWe recently experienced some maintenance issues on our platform. We sincerely apologize for any inconvenience this may have caused you.\n\nEverything is fully operational now, and you should be able to browse smoothly.\n\nHappy Learning!`);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-app-bg border border-app-primary/20 rounded-lg hover:border-app-primary/50 transition-colors text-app-text"
-                  >
-                    Maintenance Issue
-                  </button>
+        return (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-app-surface border border-app-primary/20 rounded-3xl p-6 w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh]"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between gap-3 mb-5 pb-4 border-b border-app-primary/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-gradient-to-br from-amber-400/20 to-orange-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-500 shadow-sm">
+                    <Mail size={22} className="stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-extrabold text-app-text">
+                        {isBulk ? `Send Bulk Email (${activeTargets.length} Recipients)` : 'Send Email'}
+                      </h3>
+                      {selectedTemplate === 'diwali' && (
+                        <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                          Diwali Edition
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-app-text-muted line-clamp-1 mt-0.5">
+                      {isBulk 
+                        ? `To: ${activeTargets.length} users (${activeTargets.slice(0, 3).map(u => u.email).join(', ')}${activeTargets.length > 3 ? ` + ${activeTargets.length - 3} more` : ''})`
+                        : `To: ${activeTargets[0]?.email} ${activeTargets[0]?.displayName ? `(${activeTargets[0]?.displayName})` : ''}`
+                      }
+                    </p>
+                  </div>
                 </div>
+                {isBulk && (
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[11px] font-bold rounded-xl">
+                    <ShieldCheck size={14} />
+                    <span>Private Individual Delivery</span>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Subject</label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="Email subject..."
-                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors"
-                />
+              <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                {/* Templates Selector */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-app-text-muted uppercase tracking-wider">
+                      Select Email Template
+                    </label>
+                    <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1">
+                      <Sparkles size={11} />
+                      World-class festive design
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyDiwaliTemplate(activeTargets)}
+                      className={cn(
+                        "px-3.5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shadow-sm cursor-pointer",
+                        selectedTemplate === 'diwali'
+                          ? "bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 ring-2 ring-amber-400/50 shadow-amber-500/20"
+                          : "bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 hover:border-amber-500/60"
+                      )}
+                    >
+                      <Sparkles size={14} className="fill-current" />
+                      <span>🪔 Diwali Wishes & Additional 20% Voucher (DIWALI20)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPaymentTemplate(activeTargets)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors cursor-pointer",
+                        selectedTemplate === 'payment'
+                          ? "bg-app-primary text-app-bg border-app-primary"
+                          : "bg-app-bg border-app-primary/20 hover:border-app-primary/50 text-app-text"
+                      )}
+                    >
+                      Payment Update
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyMaintenanceTemplate(activeTargets)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors cursor-pointer",
+                        selectedTemplate === 'maintenance'
+                          ? "bg-app-primary text-app-bg border-app-primary"
+                          : "bg-app-bg border-app-primary/20 hover:border-app-primary/50 text-app-text"
+                      )}
+                    >
+                      Maintenance Issue
+                    </button>
+                  </div>
+                </div>
+
+                {/* View Mode Toggle (Edit vs Preview) */}
+                <div className="flex items-center justify-between border-b border-app-primary/10 pb-2 pt-1">
+                  <div className="flex items-center gap-1 bg-app-bg p-1 rounded-xl border border-app-primary/10">
+                    <button
+                      type="button"
+                      onClick={() => setEmailPreviewMode('edit')}
+                      className={cn(
+                        "px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                        emailPreviewMode === 'edit'
+                          ? "bg-app-primary text-app-bg"
+                          : "text-app-text-muted hover:text-app-text"
+                      )}
+                    >
+                      Edit Content
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEmailPreviewMode('preview')}
+                      className={cn(
+                        "px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                        emailPreviewMode === 'preview'
+                          ? "bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-black shadow-sm"
+                          : "text-app-text-muted hover:text-app-text"
+                      )}
+                    >
+                      <Eye size={12} />
+                      Preview Festive Email Design 🪔
+                    </button>
+                  </div>
+                  {selectedTemplate === 'diwali' && (
+                    <span className="text-[11px] font-bold text-amber-500 hidden sm:flex items-center gap-1">
+                      <Sparkles size={12} />
+                      Includes Golden DIWALI20 Voucher Card
+                    </span>
+                  )}
+                </div>
+
+                {emailPreviewMode === 'preview' ? (
+                  /* World-Class Live Visual Email Preview */
+                  <div className="bg-[#0f172a] border border-amber-500/30 rounded-2xl p-5 overflow-y-auto max-h-[360px] space-y-4 shadow-inner text-white custom-scrollbar">
+                    {/* Header Banner */}
+                    <div className="text-center pb-4 border-b border-white/10 bg-gradient-to-b from-[#1e1b4b] to-transparent p-4 rounded-xl">
+                      <div className="text-2xl mb-1 tracking-widest">🪔 ✨ 🎆 ✨ 🪔</div>
+                      <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
+                        Festival of Lights Special
+                      </span>
+                      <h2 className="text-xl font-black text-white mt-2">Happy Diwali!</h2>
+                      <p className="text-xs text-amber-200/80 font-medium">May your learning journey shine brighter than ever</p>
+                    </div>
+
+                    {/* Greeting & Custom Message */}
+                    <div className="text-xs text-slate-300 space-y-3 leading-relaxed px-2">
+                      <p className="font-bold text-white text-sm">
+                        Hi {activeTargets.length === 1 ? (activeTargets[0].displayName || 'Student') : 'PTE Aspirant'},
+                      </p>
+                      {emailBody.split('\n\n').map((para, idx) => (
+                        <p key={idx} className="whitespace-pre-line text-slate-300 leading-relaxed">{para}</p>
+                      ))}
+                    </div>
+
+                    {/* Golden Voucher Box */}
+                    <div className="bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-amber-600/20 border-2 border-dashed border-amber-400 rounded-2xl p-4 text-center my-3 shadow-lg">
+                      <span className="text-[10px] font-black tracking-widest text-amber-300 uppercase">
+                        ✨ Exclusive Festive Gift ✨
+                      </span>
+                      <div className="text-2xl font-black text-amber-300 mt-1">Get Additional 20% OFF</div>
+                      <div className="text-xs font-bold text-amber-200/80">On All Plans (Weekly, Monthly & Annual)</div>
+                      
+                      <div className="inline-block bg-[#0f172a] border-2 border-amber-400 rounded-xl px-7 py-2.5 my-3 shadow-md">
+                        <span className="font-mono text-2xl font-black tracking-widest text-amber-400">DIWALI20</span>
+                      </div>
+                      <div className="text-[11px] text-amber-200/70 font-semibold">Use code at checkout • Limited time Diwali offer</div>
+                    </div>
+
+                    {/* Highlights Box */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300 space-y-1.5">
+                      <div className="font-black text-amber-400 text-[10px] uppercase tracking-wider mb-1">Why Top Scorers Choose PTE Ninja:</div>
+                      <div>🎯 <strong>Pearson-Calibrated AI Scoring:</strong> Real-time phoneme-level feedback</div>
+                      <div>📚 <strong>5,000+ Real Exam Questions:</strong> High-frequency prediction bank</div>
+                      <div>⚡ <strong>Full Mock Tests & Analytics:</strong> Instant scorecards with 79+ target tracker</div>
+                    </div>
+
+                    {/* Glowing CTA Button */}
+                    <div className="text-center pt-2">
+                      <div className="inline-block bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 font-black text-xs px-7 py-3 rounded-full shadow-lg">
+                        Claim Additional 20% OFF Now →
+                      </div>
+                    </div>
+
+                    {/* Signoff */}
+                    <div className="text-[11px] text-slate-400 pt-3 border-t border-white/10 text-center">
+                      Wishing you a sparkling Diwali and boundless success,<br/>
+                      <strong className="text-white">The PTE Ninja Team</strong> • <span className="text-amber-400">pteninja.com</span>
+                    </div>
+                  </div>
+                ) : (
+                  /* Edit Content Inputs */
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Subject Line</label>
+                      <input
+                        type="text"
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        placeholder="Email subject..."
+                        className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-2.5 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors font-medium"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 flex-1 flex flex-col">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Message Content</label>
+                        <span className="text-[10px] text-app-text-muted">Supports line breaks</span>
+                      </div>
+                      <textarea
+                        value={emailBody}
+                        onChange={(e) => setEmailBody(e.target.value)}
+                        placeholder="Type your message here..."
+                        className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-3 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors resize-none h-44 leading-relaxed font-sans"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
-              <div className="space-y-1.5 flex-1 flex flex-col">
-                <label className="text-xs font-bold text-app-text-muted uppercase tracking-wider">Message</label>
-                <textarea
-                  value={emailBody}
-                  onChange={(e) => setEmailBody(e.target.value)}
-                  placeholder="Type your message here..."
-                  className="w-full bg-app-bg border border-app-primary/10 rounded-xl px-4 py-3 text-sm text-app-text focus:outline-none focus:border-app-primary/50 transition-colors resize-none h-40"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-6 mt-auto border-t border-app-primary/10">
-              <button
-                onClick={() => setSelectedEmailUser(null)}
-                disabled={isSendingEmail}
-                className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (!emailSubject || !emailBody) {
-                    toast.error("Please enter a subject and a message.");
-                    return;
-                  }
-                  setIsSendingEmail(true);
-                  try {
-                    const token = await auth.currentUser?.getIdToken();
-                    const res = await fetch('/api/admin/send-email', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`
-                      },
-                      body: JSON.stringify({
-                        to: selectedEmailUser.email,
-                        subject: emailSubject,
-                        body: emailBody,
-                        html: emailBody.replace(/\n/g, '<br/>')
-                      })
-                    });
-                    
-                    if (res.ok) {
-                      toast.success("Email sent successfully!");
-                      setSelectedEmailUser(null);
-                      setEmailSubject('');
-                      setEmailBody('');
-                    } else {
-                      const errData = await res.json();
-                      toast.error(errData.error || "Failed to send email");
+              {/* Modal Footer Actions */}
+              <div className="flex items-center justify-between pt-5 mt-auto border-t border-app-primary/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEmailUser(null);
+                    setEmailTargetUsers([]);
+                  }}
+                  disabled={isSendingEmail}
+                  className="px-4 py-2 text-sm font-bold text-app-text-muted hover:text-app-text disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!emailSubject || !emailBody) {
+                      toast.error("Please enter a subject and a message.");
+                      return;
                     }
-                  } catch (err) {
-                    console.error("Error sending email:", err);
-                    toast.error("Failed to send email");
-                  } finally {
-                    setIsSendingEmail(false);
+                    setIsSendingEmail(true);
+                    try {
+                      const token = await auth.currentUser?.getIdToken();
+                      const res = await fetch('/api/admin/send-email', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                          recipients: activeTargets.map(u => ({ email: u.email, name: u.displayName })),
+                          subject: emailSubject,
+                          body: emailBody,
+                          templateType: selectedTemplate || (emailSubject.toLowerCase().includes('diwali') ? 'diwali' : undefined),
+                          promoCode: 'DIWALI20',
+                          discountText: 'Additional 20% OFF'
+                        })
+                      });
+                      
+                      const data = await res.json();
+                      if (res.ok) {
+                        toast.success(
+                          isBulk
+                            ? `Successfully sent email to ${data.sentCount || activeTargets.length} users!`
+                            : `Email sent successfully to ${activeTargets[0]?.email}!`
+                        );
+                        setSelectedEmailUser(null);
+                        setEmailTargetUsers([]);
+                        setEmailSubject('');
+                        setEmailBody('');
+                        setSelectedUserUids(new Set());
+                      } else {
+                        toast.error(data.error || "Failed to send email");
+                      }
+                    } catch (err) {
+                      console.error("Error sending email:", err);
+                      toast.error("Failed to send email");
+                    } finally {
+                      setIsSendingEmail(false);
+                    }
+                  }}
+                  disabled={isSendingEmail || !emailSubject || !emailBody}
+                  className="flex items-center gap-2 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 px-6 py-2.5 rounded-xl text-sm font-black hover:brightness-110 shadow-lg transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+                >
+                  {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} className="stroke-[2.5]" />}
+                  {isSendingEmail 
+                    ? `Sending to ${activeTargets.length} recipient${activeTargets.length > 1 ? 's' : ''}...`
+                    : isBulk 
+                      ? `Send Email to All ${activeTargets.length} Users` 
+                      : 'Send Email'
                   }
-                }}
-                disabled={isSendingEmail || !emailSubject || !emailBody}
-                className="flex items-center gap-2 bg-blue-500 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-blue-600 transition-all disabled:opacity-50"
-              >
-                {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-                Send Email
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -3057,41 +3057,266 @@ function buildBrandedPteNinjaEmailHtml(options: {
 </html>`;
 }
 
+// ─── World-Class Diwali Festive Email Template ───────────────────────────────
+function buildDiwaliFestiveEmailHtml(options: {
+  recipientName?: string;
+  recipientEmail?: string;
+  customMessage?: string;
+  promoCode?: string;
+  discountText?: string;
+  ctaUrl?: string;
+}) {
+  const {
+    recipientName,
+    recipientEmail,
+    customMessage,
+    promoCode = "DIWALI20",
+    discountText = "Additional 20% OFF",
+    ctaUrl = "https://pteninja.com"
+  } = options;
+
+  const appUrl = process.env.APP_URL ?? "https://pteninja.com";
+  const effectiveUnsubscribeUrl = recipientEmail ? generateUnsubscribeUrl(recipientEmail, appUrl) : `${appUrl}/api/unsubscribe`;
+  const nameGreeting = recipientName ? `Hi <strong>${recipientName}</strong>,` : `Hi <strong>there</strong>,`;
+
+  const formattedContent = customMessage
+    ? customMessage.split("\n\n").map((p: string) => `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">${p.replace(/\n/g, "<br/>")}</p>`).join("")
+    : `
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">Wishing you and your loved ones a joyous, blessed, and prosperous Diwali! As we celebrate the triumph of light, wisdom, and perseverance, may this festival of lights illuminate your path to PTE success.</p>
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">To celebrate this festive season with you, we are delighted to share an exclusive festive gift:</p>
+    `;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Happy Diwali from PTE Ninja!</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0f172a;font-family:'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">
+    Happy Diwali! Celebrate with an Additional 20% OFF on all PTE Ninja plans with code ${promoCode} 🪔✨
+  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:36px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.4);border:1px solid rgba(245,158,11,0.25);">
+
+          <!-- Festive Header Banner -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#1e1b4b 0%,#0f172a 50%,#311042 100%);padding:44px 40px 36px;text-align:center;position:relative;">
+              <div style="font-size:32px;letter-spacing:8px;margin-bottom:12px;">🪔 ✨ 🎆 ✨ 🪔</div>
+              <div style="display:inline-block;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:20px;padding:6px 20px;margin-bottom:16px;">
+                <span style="font-size:11px;font-weight:900;color:#fbbf24;letter-spacing:2.5px;text-transform:uppercase;">Festival of Lights Special</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:32px;font-weight:900;line-height:1.2;letter-spacing:-0.5px;">Happy Diwali!</h1>
+              <p style="margin:12px 0 0;color:#fef3c7;font-size:16px;line-height:1.5;font-weight:500;">
+                May your learning journey shine brighter than ever
+              </p>
+            </td>
+          </tr>
+
+          <!-- Main Email Body -->
+          <tr>
+            <td style="padding:36px 40px 24px;background:#ffffff;">
+              <p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#111827;line-height:1.6;">
+                ${nameGreeting}
+              </p>
+
+              <div style="font-size:15px;color:#374151;line-height:1.7;margin-bottom:28px;">
+                ${formattedContent}
+              </div>
+
+              <!-- World-Class Golden Voucher Card -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 45%,#fde68a 100%);border:2px dashed #f59e0b;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(245,158,11,0.2);">
+                <tr>
+                  <td style="padding:28px 24px;text-align:center;">
+                    <div style="font-size:12px;font-weight:900;letter-spacing:2px;color:#b45309;text-transform:uppercase;">
+                      ✨ EXCLUSIVE FESTIVE GIFT ✨
+                    </div>
+                    <div style="margin:8px 0 4px;font-size:30px;font-weight:900;color:#92400e;letter-spacing:-0.5px;">
+                      ${discountText}
+                    </div>
+                    <div style="font-size:13px;font-weight:700;color:#78350f;letter-spacing:0.5px;">
+                      On All Plans (Weekly, Monthly & Annual)
+                    </div>
+
+                    <!-- Voucher Code Display Box -->
+                    <table align="center" cellpadding="0" cellspacing="0" style="margin:20px auto 14px;">
+                      <tr>
+                        <td style="background:#ffffff;border:2px solid #f59e0b;border-radius:12px;padding:12px 32px;box-shadow:0 4px 16px rgba(245,158,11,0.25);">
+                          <span style="font-family:'Courier New',Courier,monospace;font-size:26px;font-weight:900;letter-spacing:5px;color:#b45309;display:block;">
+                            ${promoCode}
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <div style="font-size:12px;color:#92400e;font-weight:600;">
+                      Use code at checkout • Limited time Diwali offer
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Why PTE Ninja Feature Highlights -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 20px;background:#f8fafc;border-radius:14px;padding:20px;border:1px solid #e2e8f0;">
+                <tr>
+                  <td>
+                    <div style="font-size:12px;font-weight:800;letter-spacing:1px;color:#64748b;text-transform:uppercase;margin-bottom:12px;">
+                      Everything you need to score 79+ in PTE Academic:
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">
+                          🎯 <strong>Pearson-Calibrated AI Scoring:</strong> Real-time phoneme-level pronunciation & fluency feedback.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">
+                          📚 <strong>5,000+ Real Exam Questions:</strong> High-frequency prediction bank updated weekly.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">
+                          ⚡ <strong>Full Mock Tests & Analytics:</strong> Realistic test environment with instant diagnostic scorecards.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Festive CTA Button -->
+              <div style="text-align:center;margin:32px 0 24px;">
+                <a href="${ctaUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#f59e0b 0%,#ea580c 100%);color:#ffffff;font-size:16px;font-weight:800;text-decoration:none;padding:16px 42px;border-radius:50px;box-shadow:0 6px 22px rgba(234,88,12,0.4);letter-spacing:0.3px;">
+                  Claim Additional 20% OFF Now &rarr;
+                </a>
+              </div>
+
+              <!-- Warm Wishes Signoff -->
+              <div style="margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9;font-size:14px;color:#475569;line-height:1.6;">
+                Wishing you a sparkling Diwali and boundless success,<br/>
+                <strong style="color:#0f172a;font-size:15px;">The PTE Ninja Team</strong><br/>
+                <a href="https://pteninja.com" style="color:#ea580c;text-decoration:none;font-weight:600;">pteninja.com</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Compliance / Unsubscribe Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:22px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+              <p style="margin:0 0 6px;font-size:12px;color:#64748b;line-height:1.5;">
+                PTE Ninja — AI-Powered PTE Preparation Platform<br/>
+                © ${new Date().getFullYear()} AI Geek Advisor Pvt. Ltd. All rights reserved.
+              </p>
+              <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;">
+                You received this email because you registered on PTE Ninja. <a href="${effectiveUnsubscribeUrl}" style="color:#ea580c;text-decoration:underline;">Unsubscribe</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ─── Admin Emails ─────────────────────────────────────────────────────────────
 app.post("/api/admin/send-email", async (req, res) => {
   const authResult = await requireAuth(req, res, { requireAdmin: true });
   if (!authResult) return;
 
-  const { to, subject, body, html } = req.body;
+  const { to, recipients, subject, body, html, templateType, promoCode, discountText } = req.body;
   const content = html || body;
-  if (!to || !subject || !content) return res.status(400).json({ error: "Missing email details" });
+  if ((!to && (!Array.isArray(recipients) || recipients.length === 0)) || !subject || !content) {
+    return res.status(400).json({ error: "Missing email details (recipient, subject, or message body required)." });
+  }
 
   const transporter = createMailTransport();
   if (!transporter) return res.status(500).json({ error: "SMTP/Gmail not configured in environment variables (SMTP_HOST or GMAIL_USER missing)." });
 
-  const isFullHtml = content.trim().toLowerCase().startsWith("<!doctype html>") || content.trim().toLowerCase().startsWith("<html");
+  // Standardize target recipients into array of { email, name }
+  const targetRecipients: Array<{ email: string; name?: string }> = Array.isArray(recipients) && recipients.length > 0
+    ? recipients.filter(r => r && r.email)
+    : Array.isArray(to)
+      ? to.map(email => ({ email, name: '' }))
+      : typeof to === 'string' && to.includes(',')
+        ? to.split(',').map(e => e.trim()).filter(Boolean).map(email => ({ email, name: '' }))
+        : to ? [{ email: to, name: req.body.recipientName || '' }] : [];
 
-  const formattedHtml = isFullHtml
-    ? content
-    : buildBrandedPteNinjaEmailHtml({
-        title: subject,
-        contentHtml: content.split("\n\n").map((p: string) => `<p style="margin:0 0 16px;">${p.replace(/\n/g, "<br/>")}</p>`).join(""),
-        ctaText: "Open PTE Ninja",
-        ctaUrl: "https://pteninja.com"
-      });
+  if (targetRecipients.length === 0) {
+    return res.status(400).json({ error: "No valid recipient email address provided." });
+  }
+
+  const isFullHtml = content.trim().toLowerCase().startsWith("<!doctype html>") || content.trim().toLowerCase().startsWith("<html");
+  const isDiwali = templateType === 'diwali' || subject.toLowerCase().includes('diwali') || (promoCode === 'DIWALI20' && !isFullHtml);
 
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
-      to,
-      subject,
-      html: formattedHtml,
-      text: body || content.replace(/<[^>]+>/g, ""),
+    let sentCount = 0;
+    let failedCount = 0;
+    const chunkSize = 5;
+
+    for (let i = 0; i < targetRecipients.length; i += chunkSize) {
+      const chunk = targetRecipients.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (r) => {
+          try {
+            const formattedHtml = isDiwali
+              ? buildDiwaliFestiveEmailHtml({
+                  recipientName: r.name,
+                  recipientEmail: r.email,
+                  customMessage: body,
+                  promoCode: promoCode || "DIWALI20",
+                  discountText: discountText || "Additional 20% OFF",
+                  ctaUrl: "https://pteninja.com"
+                })
+              : isFullHtml
+                ? content
+                : buildBrandedPteNinjaEmailHtml({
+                    title: subject,
+                    recipientName: r.name,
+                    recipientEmail: r.email,
+                    contentHtml: content.split("\n\n").map((p: string) => `<p style="margin:0 0 16px;">${p.replace(/\n/g, "<br/>")}</p>`).join(""),
+                    ctaText: "Open PTE Ninja",
+                    ctaUrl: "https://pteninja.com"
+                  });
+
+            await transporter.sendMail({
+              from: process.env.SMTP_FROM || process.env.GMAIL_USER || '"PTE Ninja" <noreply@pteninja.com>',
+              to: r.email,
+              subject,
+              html: formattedHtml,
+              text: body || content.replace(/<[^>]+>/g, ""),
+            });
+            sentCount++;
+          } catch (err) {
+            console.error(`Failed to send email to ${r.email}:`, err);
+            failedCount++;
+          }
+        })
+      );
+      if (i + chunkSize < targetRecipients.length) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    }
+
+    if (sentCount === 0 && failedCount > 0) {
+      return res.status(500).json({ error: `Failed to deliver email to ${failedCount} recipient(s).` });
+    }
+
+    return res.json({
+      success: true,
+      sentCount,
+      failedCount,
+      total: targetRecipients.length,
+      message: targetRecipients.length > 1 ? `Successfully sent to ${sentCount} recipient(s)` : undefined
     });
-    res.json({ success: true });
   } catch (error: any) {
-    console.error("Failed to send email:", error);
-    res.status(500).json({ error: error.message || "Failed to send email" });
+    console.error("Failed to process email dispatch:", error);
+    return res.status(500).json({ error: error.message || "Failed to send email" });
   }
 });
 
