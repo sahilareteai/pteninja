@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "352036646207",
+    "project_id": "pteninja-prod",
+    "storage_bucket": "pteninja-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:352036646207:android:dbaa2d8aaacc4d6d90778a",
+        "android_client_info": {
+          "package_name": "com.pteninja.android"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "352036646207-3iqql3kcotcfc38p1u7d4p8uivaq3f9i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTsqasd_Vq4DWrYqyFR6s-pALrl9MPTV0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "352036646207-3iqql3kcotcfc38p1u7d4p8uivaq3f9i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
