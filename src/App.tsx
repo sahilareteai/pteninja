@@ -1829,8 +1829,10 @@ function AppContent() {
 
       <CookieBanner />
       <div className="relative z-10 flex flex-col h-dvh">
-        {/* Diwali Festive Announcement Banner */}
-        <DiwaliBanner onClaim={() => setShowSubscriptionModal(true)} />
+        {/* Diwali Festive Announcement Banner - hidden for annual users, visible for trial, guest, expired, and weekly/monthly/quarterly users */}
+        {!(user?.subscriptionStatus === 'active' && ((user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim() === 'annual')) && (
+          <DiwaliBanner onClaim={() => setShowSubscriptionModal(true)} />
+        )}
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
           <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
@@ -2327,6 +2329,13 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode, upgradeReason }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean, upgradeReason: 'expired' | 'limit' | null }) {
   const { formatPrice, currency } = useSubscription();
+  const isPremiumUser = user?.subscriptionStatus === 'active';
+  const rawPlanId = (user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim();
+  const currentPlanIndex = isPremiumUser && rawPlanId
+    ? SUBSCRIPTION_PLANS.findIndex(p => p.id.toLowerCase() === rawPlanId)
+    : -1;
+  const isAnnualUser = isPremiumUser && (rawPlanId === 'annual' || currentPlanIndex === 3);
+
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [razorpayKeyId, setRazorpayKeyId] = useState<string>('');
@@ -2341,8 +2350,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
-  // Auto-apply pending referral code if available and none currently applied
+  // Auto-apply pending referral code if available and none currently applied (skip if already annual)
   useEffect(() => {
+    if (isAnnualUser) return;
     const applyPendingReferral = async () => {
       try {
         const pendingRef = localStorage.getItem('pte_pending_referral');
@@ -2692,20 +2702,22 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           ) : !selectedPlan ? (
             <>
-              {/* Diwali Festive 20% Voucher Card */}
-              <DiwaliBanner
-                variant="card"
-                className="w-full mb-3"
-                isApplied={appliedPromo?.code === 'DIWALI20'}
-                onApply={async () => {
-                  setPromoInput('DIWALI20');
-                  const res = await PromoService.validateDetailed('DIWALI20', user?.uid);
-                  if (res.promo) {
-                    setAppliedPromo(res.promo);
-                    toast.success('🪔 Diwali 20% discount voucher applied!');
-                  }
-                }}
-              />
+              {/* Diwali Festive 20% Voucher Card - only shown if user does not already have an active Annual plan */}
+              {!isAnnualUser && (
+                <DiwaliBanner
+                  variant="card"
+                  className="w-full mb-3"
+                  isApplied={appliedPromo?.code === 'DIWALI20'}
+                  onApply={async () => {
+                    setPromoInput('DIWALI20');
+                    const res = await PromoService.validateDetailed('DIWALI20', user?.uid);
+                    if (res.promo) {
+                      setAppliedPromo(res.promo);
+                      toast.success('🪔 Diwali 20% discount voucher applied!');
+                    }
+                  }}
+                />
+              )}
 
               <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
                 <ShieldCheck className="text-white" size={32} />
@@ -2713,106 +2725,168 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               
               <div className="space-y-2">
                 <h2 className="text-3xl font-bold text-app-text tracking-tight">
-                  {user?.subscriptionStatus === 'expired' ? 'Subscription Expired' : 'Upgrade to Pro'}
+                  {user?.subscriptionStatus === 'expired' 
+                    ? 'Subscription Expired' 
+                    : isAnnualUser 
+                      ? 'Your Pro Subscription' 
+                      : isPremiumUser 
+                        ? 'Upgrade or Change Plan' 
+                        : 'Upgrade to Pro'}
                 </h2>
-                <p className="text-app-text-muted text-lg">Master the PTE with our premium AI-powered practice platform</p>
+                <p className="text-app-text-muted text-lg">
+                  {isAnnualUser 
+                    ? 'You have unlimited access on our top-tier Annual Plan'
+                    : isPremiumUser 
+                      ? `You are currently on the ${SUBSCRIPTION_PLANS.find(p => p.id.toLowerCase() === rawPlanId)?.name || 'Pro'} plan`
+                      : 'Master the PTE with our premium AI-powered practice platform'}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-4">
-                {SUBSCRIPTION_PLANS.map((plan) => (
-                  <div 
-                    key={plan.id}
-                    onClick={async () => {
-                      try {
-                        await handleSelectPlan(plan);
-                      } catch (e) {
-                        console.error("Failed to select plan:", e);
-                      }
-                    }}
-                    className={`relative bg-app-bg border ${plan.isSpecial ? 'border-app-accent shadow-[0_0_20px_rgba(102,252,241,0.1)]' : 'border-app-primary/20'} rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-app-primary transition-all group cursor-pointer overflow-hidden`}
-                  >
-                    {plan.badge && (
-                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl ${plan.isSpecial ? 'bg-app-accent text-app-bg' : 'bg-app-primary text-app-bg'}`}>
-                        {plan.badge}
-                      </div>
-                    )}
-                    
-                    <h3 className="text-lg font-bold text-app-text">{plan.name}</h3>
-                    
-                    <div className="flex flex-col items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-app-text-muted/40 line-through font-medium">{formatPrice(plan.originalPrice)}</span>
-                        <div className="flex flex-col items-center">
-                          {appliedPromo ? (
-                            <>
-                              <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>
-                              <span className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(plan.price, appliedPromo.discountPercent))}</span>
-                            </>
-                          ) : (
-                            <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
-                    </div>
+                {SUBSCRIPTION_PLANS.map((plan, planIdx) => {
+                  const isCurrentPlan = isPremiumUser && (
+                    rawPlanId === plan.id.toLowerCase() || 
+                    (currentPlanIndex !== -1 && planIdx === currentPlanIndex)
+                  );
+                  const isUpgrade = isPremiumUser && !isCurrentPlan && currentPlanIndex !== -1 && planIdx > currentPlanIndex;
+                  const isChangePlan = isPremiumUser && !isCurrentPlan && !isUpgrade;
 
-                    <ul className="text-xs text-app-text-muted space-y-2 text-left w-full">
-                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Full Question Bank</li>
-                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> AI Scoring</li>
-                      <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Detailed Feedback</li>
-                    </ul>
-                    <button className={`w-full py-2.5 font-bold rounded-xl transition-all shadow-sm ${
-                      plan.isSpecial
-                        ? 'bg-app-accent text-slate-900 group-hover:brightness-110 group-hover:shadow-md'
-                        : 'bg-app-primary text-white group-hover:bg-app-accent group-hover:text-slate-900 group-hover:shadow-md'
-                    }`}>
-                      Select Plan
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="w-full max-w-md mx-auto space-y-2">
-                {appliedPromo && (
-                  <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Sparkles className="shrink-0 text-app-accent" size={14} />
-                      <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate" title={appliedPromo.code}>{appliedPromo.code}</span>
-                      <span className="text-app-accent/80 text-xs font-medium shrink-0">
-                        — {appliedPromo.discountPercent}% off {appliedPromo.isReferral ? `(Referral: ${appliedPromo.referrerName || 'Friend'})` : ''}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => { setAppliedPromo(null); setPromoInput(''); }}
-                      className="shrink-0 ml-3 text-app-text-muted/40 hover:text-app-text-muted transition-colors"
-                      aria-label="Remove promo code"
+                  return (
+                    <div 
+                      key={plan.id}
+                      onClick={async () => {
+                        if (isCurrentPlan) {
+                          toast.info(`You are currently subscribed to the ${plan.name} plan.`);
+                          return;
+                        }
+                        try {
+                          await handleSelectPlan(plan);
+                        } catch (e) {
+                          console.error("Failed to select plan:", e);
+                        }
+                      }}
+                      className={`relative bg-app-bg border ${
+                        isCurrentPlan 
+                          ? 'border-green-500 ring-2 ring-green-500/20 shadow-[0_0_25px_rgba(34,197,94,0.15)]' 
+                          : isUpgrade
+                            ? 'border-app-accent shadow-[0_0_20px_rgba(102,252,241,0.15)] hover:border-app-accent'
+                            : plan.isSpecial 
+                              ? 'border-app-accent/60 shadow-[0_0_20px_rgba(102,252,241,0.08)]' 
+                              : 'border-app-primary/20'
+                      } rounded-2xl p-6 flex flex-col items-center space-y-4 hover:border-app-primary transition-all group ${
+                        isCurrentPlan ? 'cursor-default' : 'cursor-pointer'
+                      } overflow-hidden`}
                     >
-                      <X size={14} />
+                      {isCurrentPlan ? (
+                        <div className="absolute top-0 right-0 px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-bl-xl bg-green-500 text-white flex items-center gap-1 shadow-sm">
+                          <Check size={11} className="stroke-[3]" /> Current Plan
+                        </div>
+                      ) : isUpgrade ? (
+                        <div className="absolute top-0 right-0 px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-bl-xl bg-app-accent text-slate-950 flex items-center gap-1 shadow-sm">
+                          <Zap size={10} className="fill-current text-slate-950" /> Upgrade
+                        </div>
+                      ) : plan.badge ? (
+                        <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-bl-xl ${plan.isSpecial ? 'bg-app-accent text-app-bg' : 'bg-app-primary text-app-bg'}`}>
+                          {plan.badge}
+                        </div>
+                      ) : null}
+                      
+                      <h3 className="text-lg font-bold text-app-text">{plan.name}</h3>
+                      
+                      <div className="flex flex-col items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-app-text-muted/40 line-through font-medium">{formatPrice(plan.originalPrice)}</span>
+                          <div className="flex flex-col items-center">
+                            {appliedPromo ? (
+                              <>
+                                <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>
+                                <span className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(plan.price, appliedPromo.discountPercent))}</span>
+                              </>
+                            ) : (
+                              <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
+                      </div>
+
+                      <ul className="text-xs text-app-text-muted space-y-2 text-left w-full">
+                        <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Full Question Bank</li>
+                        <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> AI Scoring</li>
+                        <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Detailed Feedback</li>
+                      </ul>
+
+                      {isCurrentPlan ? (
+                        <div className="w-full py-2.5 font-bold rounded-xl text-center bg-green-500/15 border border-green-500/30 text-green-500 dark:text-green-400 flex items-center justify-center gap-1.5 text-xs uppercase tracking-wider select-none">
+                          <Check size={14} className="stroke-[3]" />
+                          <span>Current Plan</span>
+                        </div>
+                      ) : isUpgrade ? (
+                        <button className="w-full py-2.5 font-extrabold rounded-xl transition-all shadow-md bg-gradient-to-r from-app-primary to-app-accent text-slate-950 hover:brightness-110 active:scale-95 flex items-center justify-center gap-1.5 text-sm">
+                          <span>Upgrade to this</span>
+                          <ArrowRight size={14} />
+                        </button>
+                      ) : isChangePlan ? (
+                        <button className="w-full py-2.5 font-bold rounded-xl transition-all border border-app-primary/30 text-app-text hover:bg-app-primary/10 hover:border-app-primary active:scale-95 text-sm">
+                          Change Plan
+                        </button>
+                      ) : (
+                        <button className={`w-full py-2.5 font-bold rounded-xl transition-all shadow-sm ${
+                          plan.isSpecial
+                            ? 'bg-app-accent text-slate-900 group-hover:brightness-110 group-hover:shadow-md'
+                            : 'bg-app-primary text-white group-hover:bg-app-accent group-hover:text-slate-900 group-hover:shadow-md'
+                        }`}>
+                          Select Plan
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!isAnnualUser && (
+                <div className="w-full max-w-md mx-auto space-y-2">
+                  {appliedPromo && (
+                    <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Sparkles className="shrink-0 text-app-accent" size={14} />
+                        <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate" title={appliedPromo.code}>{appliedPromo.code}</span>
+                        <span className="text-app-accent/80 text-xs font-medium shrink-0">
+                          — {appliedPromo.discountPercent}% off {appliedPromo.isReferral ? `(Referral: ${appliedPromo.referrerName || 'Friend'})` : ''}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => { setAppliedPromo(null); setPromoInput(''); }}
+                        className="shrink-0 ml-3 text-app-text-muted/40 hover:text-app-text-muted transition-colors"
+                        aria-label="Remove promo code"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="bg-app-bg border border-app-primary/10 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <input 
+                        type="text" 
+                        value={promoInput}
+                        onChange={(e) => setPromoInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
+                        placeholder="Referral or Gift Code"
+                        className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/40 text-sm font-medium outline-none"
+                      />
+                    </div>
+                    <button 
+                      onClick={handleApplyPromo}
+                      className="shrink-0 bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Apply
                     </button>
                   </div>
-                )}
-                <div className="bg-app-bg border border-app-primary/10 rounded-2xl px-4 py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <input 
-                      type="text" 
-                      value={promoInput}
-                      onChange={(e) => setPromoInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-                      placeholder="Referral or Gift Code"
-                      className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/40 text-sm font-medium outline-none"
-                    />
-                  </div>
-                  <button 
-                    onClick={handleApplyPromo}
-                    className="shrink-0 bg-app-primary/10 hover:bg-app-primary/20 text-app-primary px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
-                  >
-                    Apply
-                  </button>
+                  <p className="text-[11px] text-app-text-muted/60 text-center">
+                    Only one referral or promo code can be applied at a time.
+                  </p>
                 </div>
-                <p className="text-[11px] text-app-text-muted/60 text-center">
-                  Only one referral or promo code can be applied at a time.
-                </p>
-              </div>
+              )}
             </>
           ) : (
             <div className="w-full space-y-8">
