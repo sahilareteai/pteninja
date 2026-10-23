@@ -19,7 +19,8 @@ import {
   linkWithPhoneNumber,
   unlink,
   EmailAuthProvider,
-  User as FirebaseUser 
+  User as FirebaseUser,
+  signInWithCredential
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc, deleteField } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -106,6 +107,8 @@ export {
   updateProfile,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  signInWithCredential,
+  GoogleAuthProvider,
   linkWithCredential,
   linkWithPhoneNumber,
   unlink,
