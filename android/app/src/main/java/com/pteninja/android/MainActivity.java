@@ -1,4 +1,4 @@
-package com.pteninja.app;
+package com.pteninja.android;
 
 import android.Manifest;
 import android.content.pm.PackageManager;

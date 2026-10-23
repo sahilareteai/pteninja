@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.pteninja.app',
+  appId: 'com.pteninja.android',
   appName: 'PTE Ninja',
   webDir: 'dist',
   server: {
