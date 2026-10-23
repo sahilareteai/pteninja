@@ -2342,7 +2342,7 @@ const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode, upgradeReason }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean, upgradeReason: 'expired' | 'limit' | null }) {
-  const { formatPrice, currency } = useSubscription();
+  const { formatPrice, currency, logout } = useSubscription();
   const isPremiumUser = user?.subscriptionStatus === 'active';
   const rawPlanId = (user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim();
   const currentPlanIndex = isPremiumUser && rawPlanId
@@ -2986,14 +2986,52 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           )}
 
-          {!isAccessRestricted && (
-            <button 
-              onClick={onClose}
-              className="text-app-text-muted/50 hover:text-app-text transition-colors"
-            >
-              Maybe later
-            </button>
-          )}
+          <div className="w-full pt-4 mt-6 border-t border-app-primary/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            {/* Account Info and Sign Out / Switch Account */}
+            {user ? (
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-app-text-muted">
+                <span className="text-app-text-muted/70">
+                  Signed in as <strong className="text-app-text font-semibold">{user.email || user.displayName || 'Guest'}</strong>
+                </span>
+                <span className="text-app-border hidden sm:inline">•</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await logout();
+                      onClose();
+                      toast.success("Signed out successfully. You can now log into another account.");
+                    } catch (e) {
+                      console.error("Sign out error", e);
+                      toast.error("Failed to sign out. Please try again.");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 text-red-500 hover:text-red-600 font-bold hover:underline transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-red-500/10 active:scale-95"
+                >
+                  <LogOut size={13} />
+                  <span>Sign Out / Switch Account</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onLogin}
+                className="inline-flex items-center gap-1.5 text-app-primary hover:underline font-bold py-1 px-2"
+              >
+                <span>Have an account with active access? Sign In</span>
+              </button>
+            )}
+
+            {/* Maybe later (only visible if free access is not restricted) */}
+            {!isAccessRestricted && (
+              <button 
+                onClick={onClose}
+                className="text-app-text-muted/60 hover:text-app-text transition-colors py-1.5 px-3 rounded-lg hover:bg-app-surface text-xs cursor-pointer"
+              >
+                Maybe later
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>
