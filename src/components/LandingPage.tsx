@@ -6,6 +6,7 @@ import { PrivacyPolicy } from './PrivacyPolicy';
 import { TermsOfService } from './TermsOfService';
 import { POLICIES } from '../data/policies';
 import { ScrollNinja } from './ScrollNinja';
+import { DiwaliBanner } from './DiwaliBanner';
 
 export function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
   const policy = POLICIES[type];
@@ -98,6 +99,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text-muted font-sans selection:bg-app-primary/30 overflow-x-hidden transition-colors duration-300">
+      <DiwaliBanner onClaim={() => onLogin('register')} />
       <ScrollNinja onClaim={() => onLogin('register')} />
       <AnimatePresence>
         {activePolicy === 'privacy' ? (
