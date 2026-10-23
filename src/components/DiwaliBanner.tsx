@@ -42,13 +42,13 @@ export function DiwaliBanner({
       try {
         localStorage.setItem('pte_pending_referral', 'DIWALI20');
       } catch (err) {}
-      toast.success('🪔 Code DIWALI20 copied! 20% Diwali discount pre-applied.', { id: 'diwali-promo-toast' });
+      toast.success('🪔 Code DIWALI20 copied! Additional 20% Diwali discount pre-applied.', { id: 'diwali-promo-toast' });
       setTimeout(() => setCopied(false), 2500);
     } catch (err) {
       try {
         localStorage.setItem('pte_pending_referral', 'DIWALI20');
       } catch (e) {}
-      toast.success('🪔 Code DIWALI20 activated for 20% off!', { id: 'diwali-promo-toast' });
+      toast.success('🪔 Code DIWALI20 activated for additional 20% off!', { id: 'diwali-promo-toast' });
     }
   };
 
@@ -59,7 +59,7 @@ export function DiwaliBanner({
     if (onApply) {
       onApply();
     } else {
-      toast.success('🪔 20% OFF Diwali voucher activated!', { id: 'diwali-promo-toast' });
+      toast.success('🪔 Additional 20% OFF Diwali voucher activated!', { id: 'diwali-promo-toast' });
       if (onClaim) {
         onClaim();
       }
@@ -102,10 +102,10 @@ export function DiwaliBanner({
                   <Sparkles size={11} className="text-amber-300" />
                   Diwali Festive Special
                 </span>
-                <span className="text-xs font-black text-amber-400">20% OFF</span>
+                <span className="text-xs font-black text-amber-400">Additional 20% OFF</span>
               </div>
               <h4 className="text-sm sm:text-base font-extrabold text-white mt-1">
-                Celebrate Diwali with 20% Discount
+                Celebrate Diwali with Additional 20% Discount
               </h4>
               <p className="text-xs text-amber-200/80">
                 Use voucher <span className="font-mono font-bold text-amber-300 bg-amber-900/60 px-1.5 py-0.5 rounded border border-amber-500/30">DIWALI20</span> on all plans
@@ -127,7 +127,7 @@ export function DiwaliBanner({
             {isApplied ? (
               <div className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black rounded-xl flex items-center gap-1.5 shadow-sm">
                 <Check size={14} className="text-emerald-400 stroke-[3]" />
-                <span>20% OFF Applied</span>
+                <span>Additional 20% OFF Applied</span>
               </div>
             ) : (
               <button
@@ -136,7 +136,7 @@ export function DiwaliBanner({
                 className="px-4 py-2 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 text-xs font-black rounded-xl hover:brightness-110 shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 <Zap size={13} className="fill-current text-slate-950" />
-                <span>Apply 20% OFF</span>
+                <span>Apply Additional 20% OFF</span>
               </button>
             )}
           </div>
@@ -172,7 +172,7 @@ export function DiwaliBanner({
                   Diwali Special
                 </span>
                 <span className="font-extrabold text-amber-100 truncate">
-                  Happy Diwali! Get <span className="text-yellow-300 font-black underline decoration-yellow-400 underline-offset-2">20% OFF</span> all plans with code
+                  Happy Diwali! Get <span className="text-yellow-300 font-black underline decoration-yellow-400 underline-offset-2">Additional 20% OFF</span> all plans with code
                 </span>
                 <button
                   type="button"
