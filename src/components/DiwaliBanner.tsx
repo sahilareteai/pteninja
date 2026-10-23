@@ -42,13 +42,13 @@ export function DiwaliBanner({
       try {
         localStorage.setItem('pte_pending_referral', 'DIWALI20');
       } catch (err) {}
-      toast.success('🪔 Code DIWALI20 copied! 20% Diwali discount pre-applied.');
+      toast.success('🪔 Code DIWALI20 copied! 20% Diwali discount pre-applied.', { id: 'diwali-promo-toast' });
       setTimeout(() => setCopied(false), 2500);
     } catch (err) {
       try {
         localStorage.setItem('pte_pending_referral', 'DIWALI20');
       } catch (e) {}
-      toast.success('🪔 Code DIWALI20 activated for 20% off!');
+      toast.success('🪔 Code DIWALI20 activated for 20% off!', { id: 'diwali-promo-toast' });
     }
   };
 
@@ -56,11 +56,13 @@ export function DiwaliBanner({
     try {
       localStorage.setItem('pte_pending_referral', 'DIWALI20');
     } catch (e) {}
-    toast.success('🪔 20% OFF Diwali voucher activated!');
     if (onApply) {
       onApply();
-    } else if (onClaim) {
-      onClaim();
+    } else {
+      toast.success('🪔 20% OFF Diwali voucher activated!', { id: 'diwali-promo-toast' });
+      if (onClaim) {
+        onClaim();
+      }
     }
   };
 

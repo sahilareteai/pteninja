@@ -2362,9 +2362,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             setAppliedPromo(res.promo);
             setPromoInput(res.promo.code);
             if (res.promo.isReferral) {
-              toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`);
+              toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`, { id: 'diwali-promo-toast' });
             } else {
-              toast.info(`Voucher code ${res.promo.code} applied! ${res.promo.discountPercent}% discount included.`);
+              toast.info(`Voucher code ${res.promo.code} applied! ${res.promo.discountPercent}% discount included.`, { id: 'diwali-promo-toast' });
             }
           }
         }
@@ -2713,7 +2713,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     const res = await PromoService.validateDetailed('DIWALI20', user?.uid);
                     if (res.promo) {
                       setAppliedPromo(res.promo);
-                      toast.success('🪔 Diwali 20% discount voucher applied!');
+                      toast.success('🪔 Diwali 20% discount voucher applied!', { id: 'diwali-promo-toast' });
                     }
                   }}
                 />
