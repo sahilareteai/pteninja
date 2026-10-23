@@ -47,11 +47,15 @@ export class PromoService {
       if (!this.promoCodes['NINJA10']) {
         this.promoCodes['NINJA10'] = { code: 'NINJA10', discountPercent: 10, description: 'Secret Ninja 10% Discount', isActive: true };
       }
+      if (!this.promoCodes['DIWALI20']) {
+        this.promoCodes['DIWALI20'] = { code: 'DIWALI20', discountPercent: 20, description: 'Diwali Festive 20% Discount', isActive: true };
+      }
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize promo codes from Firestore:', error);
       // Fallback to hardcoded codes if Firestore fails
       this.promoCodes = {
+        'DIWALI20': { code: 'DIWALI20', discountPercent: 20, description: 'Diwali Festive 20% Discount', isActive: true },
         'NINJA10': { code: 'NINJA10', discountPercent: 10, description: 'Secret Ninja 10% Discount', isActive: true },
         'NINJA-PTE-SPECIAL-10': { code: 'NINJA-PTE-SPECIAL-10', discountPercent: 10, description: 'Additional 10% off special discount', isActive: true },
         'NINJA-PTE-SPECIAL-25': { code: 'NINJA-PTE-SPECIAL-25', discountPercent: 25, description: 'Additional 25% off special discount', isActive: true },

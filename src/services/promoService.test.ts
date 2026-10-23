@@ -91,6 +91,20 @@ describe('PromoService', () => {
       expect(res.promo?.code).toBe('NINJA10');
     });
 
+    it('validates Diwali festive voucher DIWALI20 giving 20% discount', async () => {
+      const res = await PromoService.validateDetailed('DIWALI20');
+      expect(res.promo).not.toBeNull();
+      expect(res.promo?.discountPercent).toBe(20);
+      expect(res.promo?.code).toBe('DIWALI20');
+    });
+
+    it('validates DIWALI20 case-insensitively (diwali20)', async () => {
+      const res = await PromoService.validateDetailed('diwali20');
+      expect(res.promo).not.toBeNull();
+      expect(res.promo?.discountPercent).toBe(20);
+      expect(res.promo?.code).toBe('DIWALI20');
+    });
+
     it('validates a valid friend referral code with 10% discount', async () => {
       // Mock Firestore query returning a referrer user doc
       mockGetDocs.mockResolvedValueOnce({

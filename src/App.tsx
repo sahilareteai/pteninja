@@ -74,6 +74,7 @@ import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { SupportBot } from './components/SupportBot';
+import { DiwaliBanner } from './components/DiwaliBanner';
 import { 
   auth, 
   db, 
@@ -1828,6 +1829,8 @@ function AppContent() {
 
       <CookieBanner />
       <div className="relative z-10 flex flex-col h-dvh">
+        {/* Diwali Festive Announcement Banner */}
+        <DiwaliBanner onClaim={() => setShowSubscriptionModal(true)} />
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
           <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
@@ -2348,7 +2351,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           if (res.promo) {
             setAppliedPromo(res.promo);
             setPromoInput(res.promo.code);
-            toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`);
+            if (res.promo.isReferral) {
+              toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`);
+            } else {
+              toast.info(`Voucher code ${res.promo.code} applied! ${res.promo.discountPercent}% discount included.`);
+            }
           }
         }
       } catch (e) {}
@@ -2685,10 +2692,20 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           ) : !selectedPlan ? (
             <>
-              <div className="w-full bg-gradient-to-r from-orange-500/20 via-red-500/20 to-orange-500/20 border border-orange-500/30 rounded-2xl p-4 mb-2 flex items-center justify-center gap-3 animate-pulse">
-                <div className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">Limited Time</div>
-                <p className="text-orange-400 font-bold text-sm tracking-wide">SPECIAL OFFER: SAVE UP TO 50%!</p>
-              </div>
+              {/* Diwali Festive 20% Voucher Card */}
+              <DiwaliBanner
+                variant="card"
+                className="w-full mb-3"
+                isApplied={appliedPromo?.code === 'DIWALI20'}
+                onApply={async () => {
+                  setPromoInput('DIWALI20');
+                  const res = await PromoService.validateDetailed('DIWALI20', user?.uid);
+                  if (res.promo) {
+                    setAppliedPromo(res.promo);
+                    toast.success('🪔 Diwali 20% discount voucher applied!');
+                  }
+                }}
+              />
 
               <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
                 <ShieldCheck className="text-white" size={32} />
