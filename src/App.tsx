@@ -5880,14 +5880,47 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     return 0;
   });
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const playPronunciation = (word: string) => {
-    try {
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis failed:", e);
+    if (!word || !word.trim()) return;
+    const cleanWord = word.trim().toLowerCase();
+
+    // Stop any previously playing pronunciation
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch (e) {}
+    }
+
+    // High quality standard American English dictionary pronunciation MP3
+    const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanWord)}&type=2`;
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("Dictionary audio failed, trying Google TTS:", err);
+        const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(cleanWord)}`;
+        const fallbackAudio = new Audio(fallbackUrl);
+        audioRef.current = fallbackAudio;
+        fallbackAudio.play().catch((fbErr) => {
+          console.warn("Audio fallback failed, trying SpeechSynthesis:", fbErr);
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(cleanWord);
+              utterance.lang = 'en-US';
+              utterance.rate = 0.85;
+              window.speechSynthesis.speak(utterance);
+            } catch (synthErr) {
+              console.error("Speech synthesis failed:", synthErr);
+            }
+          }
+        });
+      });
     }
   };
 
