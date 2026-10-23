@@ -57,6 +57,8 @@ interface SubscriptionContextType {
   isEmailVerified: boolean;
   resendEmailVerification: () => Promise<void>;
   checkEmailVerification: () => Promise<boolean>;
+  googleLogin: () => Promise<void>;
+  quickGuestAccess: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -649,6 +651,47 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setShowGuestModal(true);
   };
 
+  const handleQuickGuestAccess = async () => {
+    if (isAuthenticating) return;
+    setIsAuthenticating(true);
+    setAuthError(null);
+    try {
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('pte_session_id', newSessionId);
+      pendingGuestWriteRef.current = true;
+      const cred = await signInAnonymously(auth);
+      const firebaseUser = cred.user;
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const now = new Date();
+      const newUser: UserData = {
+        uid: firebaseUser.uid,
+        email: null,
+        displayName: 'Guest Ninja',
+        createdAt: now.toISOString(),
+        accessType: 'guest',
+        subscriptionStatus: 'guest',
+        activityLog: [getLocalDateStr(now)],
+        completedTasks: [],
+        completedTasksDetailed: [],
+        taskScores: {},
+        favoriteWords: [],
+        schedule: [],
+        goals: [],
+        currentSessionId: newSessionId
+      };
+      await setDoc(userRef, newUser, { merge: true });
+      pendingGuestWriteRef.current = false;
+      setUser(newUser);
+      setShowAuthModal(false);
+      setIsAuthenticating(false);
+    } catch (err: any) {
+      pendingGuestWriteRef.current = false;
+      setIsAuthenticating(false);
+      console.warn("Quick guest login fallback:", err);
+      setShowGuestModal(true);
+    }
+  };
+
   const handleGuestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName.trim() || !guestEmail.trim()) {
@@ -848,7 +891,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setIsSyncingSubscription,
       isEmailVerified,
       resendEmailVerification,
-      checkEmailVerification
+      checkEmailVerification,
+      googleLogin: handleGoogleLogin,
+      quickGuestAccess: handleQuickGuestAccess
     }}>
       {children}
 

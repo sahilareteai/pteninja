@@ -73,6 +73,8 @@ import { CookieBanner } from './components/CookieBanner';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
+import { MobileOnboarding } from './components/MobileOnboarding';
+import { isNativeMobile } from './lib/mobile';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
 import { 
@@ -1269,7 +1271,7 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, quickGuestAccess } = useSubscription();
 
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
@@ -1759,6 +1761,18 @@ function AppContent() {
   }
 
   if (!user) {
+    if (isNativeMobile() || (typeof window !== 'undefined' && window.innerWidth < 768 && !window.location.search.includes('fullweb'))) {
+      return (
+        <MobileOnboarding 
+          onGoogleLogin={googleLogin}
+          onEmailLogin={(mode) => login(mode || 'register')}
+          onGuestAccess={quickGuestAccess}
+          authError={authError}
+          onClearError={() => setAuthError(null)}
+        />
+      );
+    }
+
     return (
       <LandingPage 
         onLogin={login} 
