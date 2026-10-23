@@ -4,4 +4,5 @@
     <string name="title_activity_main">PTE Ninja</string>
     <string name="package_name">com.pteninja.android</string>
     <string name="custom_url_scheme">com.pteninja.android</string>
+    <string name="default_web_client_id">352036646207-3iqql3kcotcfc38p1u7d4p8uivaq3f9i.apps.googleusercontent.com</string>
 </resources>

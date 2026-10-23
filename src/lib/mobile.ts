@@ -3,7 +3,7 @@ import { App as CapApp } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pteninja.com';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://www.pteninja.com';
 
 /**
  * Checks if the application is running inside a native mobile container (Android/iOS).
