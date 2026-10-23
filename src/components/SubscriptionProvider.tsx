@@ -16,6 +16,8 @@ import {
   signInWithPhoneNumber,
   ConfirmationResult,
   linkWithCredential,
+  signInWithCredential,
+  GoogleAuthProvider,
   EmailAuthProvider,
   FirebaseUser,
   googleProvider, 
@@ -433,10 +435,42 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     localStorage.setItem('pte_session_id', newSessionId);
 
     try {
+      if (isNativeMobile()) {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const res = await FirebaseAuthentication.signInWithGoogle();
+
+        let googleIdToken = res.credential?.idToken;
+        if (!googleIdToken) {
+          const idTokenRes = await FirebaseAuthentication.getIdToken();
+          googleIdToken = idTokenRes.token;
+        }
+
+        if (googleIdToken) {
+          const credential = GoogleAuthProvider.credential(googleIdToken, res.credential?.accessToken);
+          if (auth.currentUser && auth.currentUser.isAnonymous) {
+            try {
+              await linkWithCredential(auth.currentUser, credential);
+            } catch (linkErr: any) {
+              await signInWithCredential(auth, credential);
+            }
+          } else {
+            await signInWithCredential(auth, credential);
+          }
+        }
+        setShowAuthModal(false);
+        setIsAuthenticating(false);
+        return;
+      }
+
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
-      if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+      const errMsg = error?.message || '';
+      if (errMsg.toLowerCase().includes('cancel') || error?.code === '16' || error?.code === '12501') {
+        setIsAuthenticating(false);
+        return;
+      }
+      if (!isNativeMobile() && (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request')) {
         try {
           await signInWithRedirect(auth, googleProvider);
           return;
@@ -639,6 +673,14 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const logout = async () => {
     try {
       localStorage.removeItem('pte_session_id');
+      if (isNativeMobile()) {
+        try {
+          const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+          await FirebaseAuthentication.signOut();
+        } catch (e) {
+          console.warn('Native signOut warning:', e);
+        }
+      }
       await auth.signOut();
       setShowAuthModal(false);
     } catch (error) {

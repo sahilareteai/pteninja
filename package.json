@@ -16,6 +16,7 @@
     "migrate:auth": "node scripts/migrate-auth.mjs"
   },
   "dependencies": {
+    "@capacitor-firebase/authentication": "^8.5.2",
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.1",
