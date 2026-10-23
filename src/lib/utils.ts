@@ -75,7 +75,7 @@ export function formatAuthError(error: any): string {
   }
 
   if (code.includes('invalid-phone-number') || rawMessage.includes('invalid-phone-number')) {
-    return "Please enter a valid mobile number with country code (e.g. +91 92890 63827).";
+    return "Please enter a valid mobile number with country code.";
   }
 
   if (code.includes('invalid-verification-code') || rawMessage.includes('invalid-verification-code')) {

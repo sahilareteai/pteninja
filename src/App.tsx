@@ -3211,7 +3211,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
 
   const handleSendProfilePhoneOTP = async () => {
     if (!profilePhone.trim()) {
-      toast.error("Please enter a valid phone number with country code (e.g. +91 92890 63827).");
+      toast.error("Please enter a valid phone number with country code.");
       return;
     }
     if (!auth.currentUser) {
@@ -3861,7 +3861,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                     if (isPhoneVerified) setIsPhoneVerified(false);
                     if (phoneOtpStep === 'otp') setPhoneOtpStep('idle');
                   }}
-                  placeholder="+91 92890 63827"
+                  placeholder="Please add your phone number here"
                   className="flex-1 px-4 py-3 bg-app-bg border border-app-primary/20 rounded-xl focus:border-app-primary outline-none text-app-text text-sm transition-all"
                 />
                 {profilePhone.trim().length > 6 && (!isPhoneVerified || profilePhone.trim() !== (user?.phoneNumber || '').trim()) && phoneOtpStep === 'idle' && (

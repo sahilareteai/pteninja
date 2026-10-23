@@ -582,7 +582,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const handleSendPhoneOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    if (!authPhone.trim()) return setAuthError("Please enter a valid phone number with country code (e.g. +91 92890 63827).");
+    if (!authPhone.trim()) return setAuthError("Please enter a valid phone number with country code.");
 
     // Require Name, Email, and Password before starting phone verification in registration
     if (emailMode === 'register') {
@@ -1141,7 +1141,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                               if (isPhoneVerified) setIsPhoneVerified(false);
                               if (phoneStep === 'otp') setPhoneStep('number');
                             }}
-                            placeholder="+91 92890 63827"
+                            placeholder="Please add your phone number here"
                             className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none text-gray-900 dark:text-white text-sm"
                           />
                           {authPhone.trim().length > 6 && phoneStep === 'number' && (
@@ -1333,7 +1333,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     type="tel"
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
-                    placeholder="+1 234 567 8900"
+                    placeholder="Please add your phone number here"
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-app-primary outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                   />
                 </div>
