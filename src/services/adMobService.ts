@@ -10,11 +10,33 @@ import {
 } from '@capacitor-community/admob';
 import { isNativeMobile, isIOS } from '../lib/mobile';
 
-export const ADMOB_IDS = {
+export const ADMOB_IDS_ANDROID = {
   appId: 'ca-app-pub-9025413323620577~6223975956',
   banner: 'ca-app-pub-9025413323620577/3517921563',
   interstitial: 'ca-app-pub-9025413323620577/7321435201',
   rewarded: 'ca-app-pub-9025413323620577/3892618247',
+};
+
+export const ADMOB_IDS_IOS = {
+  appId: 'ca-app-pub-9025413323620577~7843646554',
+  banner: 'ca-app-pub-9025413323620577/7652074864',
+  interstitial: '',
+  rewarded: '',
+};
+
+export const ADMOB_IDS = {
+  get appId() {
+    return isIOS() ? ADMOB_IDS_IOS.appId : ADMOB_IDS_ANDROID.appId;
+  },
+  get banner() {
+    return isIOS() ? ADMOB_IDS_IOS.banner : ADMOB_IDS_ANDROID.banner;
+  },
+  get interstitial() {
+    return isIOS() ? (ADMOB_IDS_IOS.interstitial || ADMOB_TEST_IDS.interstitial) : ADMOB_IDS_ANDROID.interstitial;
+  },
+  get rewarded() {
+    return isIOS() ? (ADMOB_IDS_IOS.rewarded || ADMOB_TEST_IDS.rewarded) : ADMOB_IDS_ANDROID.rewarded;
+  },
 };
 
 // Google official sample/test IDs for instant display while live IDs activate (platform-aware)

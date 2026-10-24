@@ -37,7 +37,7 @@
 	<key>NSUserTrackingUsageDescription</key>
 	<string>This identifier helps provide personalized exam preparation content and relevant practice offers.</string>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-9025413323620577~7843646554</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
