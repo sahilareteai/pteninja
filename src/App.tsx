@@ -76,6 +76,7 @@ import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile } from './lib/mobile';
 import { purchasePlaySubscription } from './lib/playBilling';
+import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
 import { 
@@ -1339,6 +1340,30 @@ function AppContent() {
     }
   }, [user]);
 
+  const isProSubscriber = user?.subscriptionStatus === 'active';
+
+  // Initialize and manage Google AdMob lifecycle on native mobile
+  useEffect(() => {
+    if (isNativeMobile()) {
+      adMobService.initialize();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isNativeMobile()) {
+      if (isProSubscriber) {
+        adMobService.hideBanner();
+      } else {
+        // While user is in a full-screen practice session or mock test, hide bottom banner
+        if (activeMockTest || selectedTask) {
+          adMobService.hideBanner();
+        } else {
+          adMobService.showBanner(false);
+        }
+      }
+    }
+  }, [isProSubscriber, activeMockTest, selectedTask]);
+
   useEffect(() => {
     if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
       setUpgradeReason('expired');
@@ -1663,6 +1688,10 @@ function AppContent() {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
+
+    if (isNativeMobile() && !isProSubscriber) {
+      adMobService.showInterstitial(false);
+    }
   };
 
   const handleMockTestFinish = async (result: MockTestResult) => {
@@ -1687,6 +1716,10 @@ function AppContent() {
       toast.success(`Mock Test Completed! Overall Score: ${result.overallScore}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+
+    if (isNativeMobile() && !isProSubscriber) {
+      adMobService.showInterstitial(false);
     }
     // Do NOT close the session here. The scorecard inside MockTestSession is still
     // visible. The user will dismiss it via the "Back to Dojo" button, which calls
@@ -2407,6 +2440,36 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     }
   };
 
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
+
+  const handleWatchRewardedAd = async () => {
+    setIsWatchingAd(true);
+    try {
+      const shown = await adMobService.showRewarded(async () => {
+        toast.success("🎉 Reward unlocked! You received 1 Free AI Evaluation credit.");
+        if (user?.uid) {
+          try {
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              freeEvaluationsBonus: ((user as any)?.freeEvaluationsBonus || 0) + 1,
+            });
+          } catch (e) {
+            console.error("Failed to update bonus credit:", e);
+          }
+        }
+        onClose();
+      });
+      if (!shown) {
+        toast.info("Video ad is loading. Please try again in a few moments.");
+      }
+    } catch (err) {
+      console.error("Rewarded ad error:", err);
+      toast.error("Could not load video ad. Please try again.");
+    } finally {
+      setIsWatchingAd(false);
+    }
+  };
+
   const handleSelectPlan = async (plan: any) => {
     if (!user?.email && !emailInput) {
       setShowEmailPrompt(true);
@@ -2792,6 +2855,29 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       : 'Master the PTE with our premium AI-powered practice platform'}
                 </p>
               </div>
+
+              {/* Rewarded Video Ad Card for Mobile Users */}
+              {isNativeMobile() && !isPremiumUser && (
+                <div className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+                      <Sparkles size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-app-text">Need Quick Practice?</h4>
+                      <p className="text-xs text-app-text-muted">Watch a short video ad to unlock an instant AI Evaluation session.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleWatchRewardedAd}
+                    disabled={isWatchingAd}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+                  >
+                    {isWatchingAd ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
+                    {isWatchingAd ? 'Loading Ad...' : 'Watch Ad to Unlock'}
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-4">
                 {SUBSCRIPTION_PLANS.map((plan, planIdx) => {
