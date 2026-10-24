@@ -1225,7 +1225,74 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      const path = window.location.pathname.toLowerCase().replace(/^\//, '').trim();
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase().trim();
+
+      if (hash === 'privacy' || path === 'privacy' || tabParam === 'privacy') return 'privacy';
+      if (hash === 'terms' || path === 'terms' || tabParam === 'terms') return 'terms';
+      if (hash === 'faq' || path === 'faq' || tabParam === 'faq') return 'faq';
+      if (hash === 'help' || path === 'help' || tabParam === 'help') return 'help';
+      if (hash === 'mock-tests' || path === 'mock-tests' || tabParam === 'mock-tests') return 'mock-tests';
+    }
+    return 'dashboard';
+  });
+
+  // URL Hash & Deep-link listener for #privacy, /privacy, and #terms
+  useEffect(() => {
+    const handleUrlRoute = () => {
+      if (typeof window === 'undefined') return;
+      const hash = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      const path = window.location.pathname.toLowerCase().replace(/^\//, '').trim();
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase().trim();
+
+      if (hash === 'privacy' || path === 'privacy' || tabParam === 'privacy') {
+        setActiveTab('privacy');
+        setShowSubscriptionModal(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (hash === 'terms' || path === 'terms' || tabParam === 'terms') {
+        setActiveTab('terms');
+        setShowSubscriptionModal(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (hash === 'faq' || path === 'faq' || tabParam === 'faq') {
+        setActiveTab('faq');
+      } else if (hash === 'help' || path === 'help' || tabParam === 'help') {
+        setActiveTab('help');
+      }
+    };
+
+    window.addEventListener('hashchange', handleUrlRoute);
+    window.addEventListener('popstate', handleUrlRoute);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRoute);
+      window.removeEventListener('popstate', handleUrlRoute);
+    };
+  }, []);
+
+  // Sync document title and URL hash when activeTab changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeTab === 'privacy') {
+      document.title = 'Privacy Policy - PTE Ninja | AI Exam Prep';
+      setShowSubscriptionModal(false);
+      if (window.location.hash !== '#privacy') {
+        window.location.hash = 'privacy';
+      }
+    } else if (activeTab === 'terms') {
+      document.title = 'Terms of Service - PTE Ninja | AI Exam Prep';
+      setShowSubscriptionModal(false);
+      if (window.location.hash !== '#terms') {
+        window.location.hash = 'terms';
+      }
+    } else if (window.location.hash === '#privacy' || window.location.hash === '#terms') {
+      history.pushState('', document.title, window.location.pathname + window.location.search);
+    }
+  }, [activeTab]);
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [supportBotOpen, setSupportBotOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
@@ -1374,10 +1441,12 @@ function AppContent() {
 
   useEffect(() => {
     if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
-      setUpgradeReason('expired');
-      setShowSubscriptionModal(true);
+      if (activeTab !== 'privacy' && activeTab !== 'terms') {
+        setUpgradeReason('expired');
+        setShowSubscriptionModal(true);
+      }
     }
-  }, [isAccessRestricted, loading, setShowSubscriptionModal, pendingGuestWriteRef]);
+  }, [isAccessRestricted, loading, setShowSubscriptionModal, pendingGuestWriteRef, activeTab]);
 
   // Auto-sync subscription state when returning from the Stripe Customer Portal.
   // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
@@ -2096,12 +2165,22 @@ function AppContent() {
             ) : activeTab === 'privacy' ? (
               <PrivacyPolicy 
                 key="privacy"
-                onBack={() => setActiveTab('dashboard')}
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.location.hash) {
+                    history.pushState('', document.title, window.location.pathname + window.location.search);
+                  }
+                  setActiveTab('dashboard');
+                }}
               />
             ) : activeTab === 'terms' ? (
               <TermsOfService 
                 key="terms"
-                onBack={() => setActiveTab('dashboard')}
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.location.hash) {
+                    history.pushState('', document.title, window.location.pathname + window.location.search);
+                  }
+                  setActiveTab('dashboard');
+                }}
               />
             ) : (
               <SectionView 
