@@ -2659,13 +2659,44 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 pb-28 sm:pb-32 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
+        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-6 sm:p-8 shadow-2xl my-auto relative"
       >
+        {/* Top corner navigation for users who can dismiss (active trial, active subscriber, or in checkout) */}
+        {(!isAccessRestricted || selectedPlan) && (
+          <div className="flex items-center justify-between w-full mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedPlan) {
+                  setSelectedPlan(null);
+                  setShowEmailPrompt(false);
+                } else {
+                  onClose();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-bg hover:bg-app-surface text-app-text-muted hover:text-app-text border border-app-primary/15 transition-all text-xs font-semibold cursor-pointer active:scale-95 shadow-sm"
+              aria-label="Back"
+            >
+              <ChevronLeft size={16} />
+              <span>Back</span>
+            </button>
+            {!isAccessRestricted && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 rounded-full bg-app-bg hover:bg-app-surface text-app-text-muted hover:text-app-text border border-app-primary/15 transition-all cursor-pointer active:scale-95 shadow-sm"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        )}
         {(isAccessRestricted || upgradeReason === 'expired') && !selectedPlan && !showSuccess && (
           <div className="w-full text-left bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-6 rounded-r-md shadow-sm">
             <div className="flex">
@@ -3128,7 +3159,21 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           )}
 
-          <div className="w-full pt-4 mt-6 border-t border-app-primary/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          {/* Maybe later / Return to app (prominently lifted above bottom banner ad) */}
+          {!isAccessRestricted && (
+            <div className="w-full pt-3 flex items-center justify-center">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-app-bg hover:bg-app-surface border border-app-primary/20 text-app-text-muted hover:text-app-text text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                <ChevronLeft size={15} />
+                <span>Maybe Later (Back to Dojo)</span>
+              </button>
+            </div>
+          )}
+
+          <div className="w-full pt-4 mt-3 border-t border-app-primary/10 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-3 text-xs">
             {/* Account Info and Sign Out / Switch Account */}
             {user ? (
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-app-text-muted">
@@ -3161,16 +3206,6 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 className="inline-flex items-center gap-1.5 text-app-primary hover:underline font-bold py-1 px-2"
               >
                 <span>Have an account with active access? Sign In</span>
-              </button>
-            )}
-
-            {/* Maybe later (only visible if free access is not restricted) */}
-            {!isAccessRestricted && (
-              <button 
-                onClick={onClose}
-                className="text-app-text-muted/60 hover:text-app-text transition-colors py-1.5 px-3 rounded-lg hover:bg-app-surface text-xs cursor-pointer"
-              >
-                Maybe later
               </button>
             )}
           </div>
