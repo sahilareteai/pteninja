@@ -1707,6 +1707,81 @@ app.post("/api/delete-user", adminMutationLimiter, async (req, res) => {
   }
 });
 
+// ─── Bulk Delete Users ────────────────────────────────────────────────────────
+// Deletes multiple users' Firestore documents and Firebase Auth accounts in bulk.
+// Requires a valid Firebase ID token from an admin user.
+app.post("/api/admin/bulk-delete-users", adminMutationLimiter, async (req, res) => {
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(500).json({ error: "Firebase Admin is not configured on the server." });
+  }
+
+  const { uids } = req.body;
+  const authHeader = req.headers.authorization;
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!idToken) {
+    return res.status(401).json({ error: "Authorization token required" });
+  }
+  if (!Array.isArray(uids) || uids.length === 0) {
+    return res.status(400).json({ error: "uids array is required" });
+  }
+
+  try {
+    const decodedToken = await getAdminAuth(adminInstance).verifyIdToken(idToken);
+
+    let isAdmin = ADMIN_EMAILS.includes(decodedToken.email ?? "");
+    if (!isAdmin) {
+      try {
+        const callerDoc = await getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID)
+          .collection("users")
+          .doc(decodedToken.uid)
+          .get();
+        isAdmin = callerDoc.exists && callerDoc.data()?.role === "admin";
+      } catch (lookupErr) {
+        console.warn("Could not look up caller role, denying admin access:", lookupErr);
+      }
+    }
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    const db = getAdminFirestore(adminInstance, FIREBASE_DATABASE_ID);
+    const authAdmin = getAdminAuth(adminInstance);
+
+    // Filter valid non-empty string uids and cap at 500 per batch
+    const targetUids: string[] = uids.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 500);
+
+    if (targetUids.length === 0) {
+      return res.status(400).json({ error: "No valid uids provided" });
+    }
+
+    // Batched Firestore deletions
+    const batch = db.batch();
+    for (const uid of targetUids) {
+      batch.delete(db.collection("users").doc(uid));
+    }
+    await batch.commit();
+
+    // Firebase Auth deletion (best-effort)
+    try {
+      if (typeof (authAdmin as any).deleteUsers === "function") {
+        await (authAdmin as any).deleteUsers(targetUids);
+      } else {
+        await Promise.allSettled(targetUids.map(u => authAdmin.deleteUser(u)));
+      }
+    } catch (authErr) {
+      console.warn("Could not delete some Firebase Auth users in bulk:", authErr);
+    }
+
+    res.json({ success: true, count: targetUids.length });
+  } catch (error) {
+    console.error("Bulk delete users error:", error);
+    res.status(500).json({ error: "Failed to bulk delete users" });
+  }
+});
+
 // ─── Purge Stale Guest Sessions ───────────────────────────────────────────────
 // Deletes Firestore docs (and Firebase Auth accounts) for anonymous guest
 // sessions whose createdAt is older than the guest access window (3 days).

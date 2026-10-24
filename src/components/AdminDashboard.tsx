@@ -91,6 +91,12 @@ interface AdminUser extends UserData {
   uid: string;
 }
 
+export const getUserPlatform = (u: AdminUser | UserData): 'mobile' | 'web' => {
+  const p = (u.signupPlatform || (u as any).platform || '').toLowerCase();
+  if (p === 'mobile' || p === 'android' || p === 'ios') return 'mobile';
+  return 'web';
+};
+
 interface AnalyticsData {
   users: {
     totalUsers: number;
@@ -138,7 +144,7 @@ const TASK_CATEGORY_MAP = Object.fromEntries(PTE_TASKS.map(t => [t.id, t.categor
 export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'users' | 'referrals' | 'promoCodes' | 'apiKeys'>('analytics');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [userFilter, setUserFilter] = useState<'all' | 'paid' | 'guests'>('all');
+  const [userFilter, setUserFilter] = useState<'all' | 'paid' | 'guests' | 'mobile' | 'web'>('all');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -165,6 +171,8 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [selectedEmailUser, setSelectedEmailUser] = useState<AdminUser | null>(null);
   const [emailTargetUsers, setEmailTargetUsers] = useState<AdminUser[]>([]);
   const [selectedUserUids, setSelectedUserUids] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<'diwali' | 'payment' | 'maintenance' | null>('diwali');
   const [emailPreviewMode, setEmailPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [emailSubject, setEmailSubject] = useState('');
@@ -682,6 +690,75 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedUserUids.size === 0) return;
+    setIsBulkDeleting(true);
+    const targetUids = Array.from(selectedUserUids);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not authenticated');
+
+      let successCount = 0;
+      const response = await fetch('/api/admin/bulk-delete-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ uids: targetUids }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        successCount = data.count || targetUids.length;
+      } else {
+        // Fallback: delete individually via /api/delete-user
+        console.warn('Bulk delete endpoint failed, falling back to individual deletes');
+        const results = await Promise.allSettled(
+          targetUids.map(uid =>
+            fetch('/api/delete-user', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({ uid }),
+            })
+          )
+        );
+        successCount = results.filter(r => r.status === 'fulfilled' && (r.value as Response).ok).length;
+        if (successCount === 0) {
+          throw new Error('Failed to delete selected users');
+        }
+      }
+
+      const deletedSet = new Set(targetUids);
+      setUsers(prev => prev.filter(u => !deletedSet.has(u.uid)));
+      setSelectedUserUids(new Set());
+      setShowBulkDeleteModal(false);
+
+      setAnalytics(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            totalUsers: Math.max(0, prev.users.totalUsers - successCount),
+          },
+        };
+      });
+
+      hasFetchedAnalytics.current = false;
+      hasFetchedUsers.current = false;
+      toast.success(`Successfully deleted ${successCount} user${successCount !== 1 ? 's' : ''}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete selected users');
+      console.error('Bulk delete users error:', error);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const handlePurgeStaleGuests = async () => {
     setIsPurgingGuests(true);
     try {
@@ -754,19 +831,25 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         u.phoneNumber?.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = (u.email?.toLowerCase() || '').includes(q) || 
+                         (u.displayName?.toLowerCase() || '').includes(q) ||
+                         (u.phoneNumber?.toLowerCase() || '').includes(q) ||
+                         u.uid.toLowerCase().includes(q);
     if (!matchesSearch) return false;
     if (userFilter === 'paid') return u.subscriptionStatus === 'active';
     if (userFilter === 'guests') return u.accessType === 'guest';
+    if (userFilter === 'mobile') return getUserPlatform(u) === 'mobile';
+    if (userFilter === 'web') return getUserPlatform(u) === 'web';
     return true;
   });
 
   const guestCount = users.filter(u => u.accessType === 'guest').length;
   const paidCount = users.filter(u => u.subscriptionStatus === 'active').length;
+  const mobileCount = users.filter(u => getUserPlatform(u) === 'mobile').length;
+  const webCount = users.filter(u => getUserPlatform(u) === 'web').length;
 
-  const selectableUsers = useMemo(() => filteredUsers.filter(u => !!u.email), [filteredUsers]);
+  const selectableUsers = useMemo(() => filteredUsers, [filteredUsers]);
   const isAllSelected = selectableUsers.length > 0 && selectableUsers.every(u => selectedUserUids.has(u.uid));
   const isSomeSelected = selectedUserUids.size > 0 && !isAllSelected;
 
@@ -1460,24 +1543,38 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-app-bg p-1 rounded-xl border border-app-primary/10">
+                      <div className="flex items-center gap-1.5 bg-app-bg p-1 rounded-xl border border-app-primary/10 flex-wrap">
                         <button 
                           onClick={() => setUserFilter('all')}
-                          className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'all' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
                         >
                           All ({users.length})
                         </button>
                         <button 
                           onClick={() => setUserFilter('paid')}
-                          className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'paid' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'paid' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
                         >
                           Paid ({paidCount})
                         </button>
                         <button 
                           onClick={() => setUserFilter('guests')}
-                          className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'guests' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all", userFilter === 'guests' ? "bg-app-primary text-app-bg" : "text-app-text-muted hover:text-app-text")}
                         >
                           Guests ({guestCount})
+                        </button>
+                        <button 
+                          onClick={() => setUserFilter('mobile')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5", userFilter === 'mobile' ? "bg-sky-500 text-white" : "text-app-text-muted hover:text-sky-500")}
+                        >
+                          <Smartphone size={13} />
+                          Mobile ({mobileCount})
+                        </button>
+                        <button 
+                          onClick={() => setUserFilter('web')}
+                          className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5", userFilter === 'web' ? "bg-indigo-500 text-white" : "text-app-text-muted hover:text-indigo-400")}
+                        >
+                          <Globe size={13} />
+                          Web ({webCount})
                         </button>
                       </div>
 
@@ -1500,22 +1597,45 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                       {/* Email All / Email Selected Action Button */}
                       <button
                         onClick={() => {
+                          const targetsWithEmail = users.filter(u => selectedUserUids.has(u.uid) && !!u.email);
                           if (selectedUserUids.size > 0) {
-                            openEmailModalForUsers(users.filter(u => selectedUserUids.has(u.uid) && !!u.email));
+                            if (targetsWithEmail.length === 0) {
+                              toast.error("None of the selected users have an email address.");
+                              return;
+                            }
+                            openEmailModalForUsers(targetsWithEmail);
                           } else {
-                            openEmailModalForUsers(selectableUsers);
+                            const allWithEmail = selectableUsers.filter(u => !!u.email);
+                            if (allWithEmail.length === 0) {
+                              toast.error("No users with email addresses found in the current view.");
+                              return;
+                            }
+                            openEmailModalForUsers(allWithEmail);
                           }
                         }}
                         disabled={selectableUsers.length === 0}
                         className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-black bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 rounded-xl hover:brightness-110 shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                        title={selectedUserUids.size > 0 ? `Send email to ${selectedUserUids.size} selected users` : `Send email to all ${selectableUsers.length} users with emails`}
+                        title={selectedUserUids.size > 0 ? `Send email to selected users with emails` : `Send email to all users with emails`}
                       >
                         <Mail size={14} className="stroke-[2.5]" />
                         {selectedUserUids.size > 0 
-                          ? `Email Selected (${selectedUserUids.size})` 
-                          : `Email All Users (${selectableUsers.length})`
+                          ? `Email Selected (${users.filter(u => selectedUserUids.has(u.uid) && !!u.email).length})` 
+                          : `Email Users (${selectableUsers.filter(u => !!u.email).length})`
                         }
                       </button>
+
+                      {/* Delete Selected in Bulk Button */}
+                      {selectedUserUids.size > 0 && (
+                        <button
+                          onClick={() => setShowBulkDeleteModal(true)}
+                          disabled={isBulkDeleting}
+                          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-black bg-red-500 text-white rounded-xl hover:bg-red-600 shadow-md shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                          title={`Delete ${selectedUserUids.size} selected users`}
+                        >
+                          <Trash2 size={14} className="stroke-[2.5]" />
+                          Delete Selected ({selectedUserUids.size})
+                        </button>
+                      )}
 
                       <button
                         onClick={() => fetchData(true)}
@@ -1595,13 +1715,30 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                           Clear selection
                         </button>
                       </div>
-                      <button
-                        onClick={() => openEmailModalForUsers(users.filter(u => selectedUserUids.has(u.uid) && !!u.email))}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 rounded-xl text-xs font-black hover:brightness-110 shadow-sm transition-all cursor-pointer active:scale-95"
-                      >
-                        <Mail size={13} className="stroke-[2.5]" />
-                        Send Email to {selectedUserUids.size} User{selectedUserUids.size > 1 ? 's' : ''}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowBulkDeleteModal(true)}
+                          disabled={isBulkDeleting}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          <Trash2 size={13} className="stroke-[2.5]" />
+                          Delete ({selectedUserUids.size})
+                        </button>
+                        <button
+                          onClick={() => {
+                            const targetsWithEmail = users.filter(u => selectedUserUids.has(u.uid) && !!u.email);
+                            if (targetsWithEmail.length === 0) {
+                              toast.error("None of the selected users have an email address.");
+                              return;
+                            }
+                            openEmailModalForUsers(targetsWithEmail);
+                          }}
+                          className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 rounded-xl text-xs font-black hover:brightness-110 shadow-sm transition-all cursor-pointer active:scale-95"
+                        >
+                          <Mail size={13} className="stroke-[2.5]" />
+                          Send Email ({users.filter(u => selectedUserUids.has(u.uid) && !!u.email).length})
+                        </button>
+                      </div>
                     </motion.div>
                   )}
 
@@ -1616,10 +1753,11 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               ref={el => { if (el) el.indeterminate = isSomeSelected; }}
                               onChange={handleSelectAll}
                               className="w-4 h-4 rounded text-amber-500 border-app-primary/30 focus:ring-amber-500 cursor-pointer accent-amber-500"
-                              title={isAllSelected ? "Deselect all" : `Select all ${selectableUsers.length} users with emails`}
+                              title={isAllSelected ? "Deselect all" : `Select all ${selectableUsers.length} users`}
                             />
                           </th>
                           <th className="px-4 py-3 font-bold">User</th>
+                          <th className="px-4 py-3 font-bold">Platform</th>
                           <th className="px-4 py-3 font-bold">Status</th>
                           <th className="px-4 py-3 font-bold">Plan</th>
                           <th className="px-4 py-3 font-bold">Joined</th>
@@ -1639,17 +1777,13 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                               )}
                             >
                               <td className="px-3 py-4 w-10 text-center">
-                                {user.email ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleSelectUser(user.uid)}
-                                    className="w-4 h-4 rounded text-amber-500 border-app-primary/30 focus:ring-amber-500 cursor-pointer accent-amber-500"
-                                    title={`Select ${user.displayName || user.email}`}
-                                  />
-                                ) : (
-                                  <span className="text-app-text-muted/40 text-xs font-mono">-</span>
-                                )}
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectUser(user.uid)}
+                                  className="w-4 h-4 rounded text-amber-500 border-app-primary/30 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                                  title={`Select ${user.displayName || user.email || 'guest'}`}
+                                />
                               </td>
                               <td className="px-4 py-4">
                                 <div className="flex items-center gap-3">
@@ -1669,6 +1803,19 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                                     </div>
                                   </div>
                                 </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                {getUserPlatform(user) === 'mobile' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-sky-500/10 text-sky-500 dark:text-sky-400 border border-sky-500/20" title="Registered via Mobile App (Android/iOS)">
+                                    <Smartphone size={12} className="stroke-[2.5]" />
+                                    Mobile App
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border border-indigo-500/20" title="Registered via Web Browser">
+                                    <Globe size={12} className="stroke-[2.5]" />
+                                    Web
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-4">
                                 <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
@@ -2645,6 +2792,63 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
+      {/* Bulk Delete Users Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-app-surface border border-red-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 shrink-0">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-app-text">Delete Selected Users</h3>
+                <p className="text-xs text-app-text-muted">Permanent bulk deletion action</p>
+              </div>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs space-y-2">
+              <p className="font-bold text-red-500 dark:text-red-400 flex items-center gap-1.5">
+                <AlertTriangle size={15} />
+                You are about to delete {selectedUserUids.size} user account{selectedUserUids.size > 1 ? 's' : ''}.
+              </p>
+              <p className="text-app-text-muted leading-relaxed">
+                This will permanently delete the selected user profiles from Firestore and Firebase Authentication. This action cannot be reversed.
+              </p>
+              <div className="pt-1 flex flex-wrap gap-2 text-[11px] font-bold">
+                <span className="px-2 py-0.5 rounded-lg bg-app-bg text-app-text border border-app-primary/10">
+                  {users.filter(u => selectedUserUids.has(u.uid) && u.accessType === 'guest').length} Guest Accounts
+                </span>
+                <span className="px-2 py-0.5 rounded-lg bg-app-bg text-app-text border border-app-primary/10">
+                  {users.filter(u => selectedUserUids.has(u.uid) && u.accessType !== 'guest').length} Registered Accounts
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={isBulkDeleting}
+                className="px-4 py-2 text-xs font-bold text-app-text-muted hover:text-app-text disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="flex items-center gap-2 bg-red-500 text-white px-5 py-2.5 rounded-xl text-xs font-black hover:bg-red-600 transition-all disabled:opacity-50 shadow-md shadow-red-500/25 cursor-pointer active:scale-95"
+              >
+                {isBulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {isBulkDeleting ? 'Deleting...' : `Confirm Delete (${selectedUserUids.size})`}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* ── User Detail Modal ── */}
       {selectedUser && (() => {
         const stats = getUserEngagementStats(selectedUser);
@@ -2684,6 +2888,15 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                     {selectedUser.accessType === 'guest' && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-500/10 text-gray-400 uppercase">Guest</span>
                     )}
+                    {getUserPlatform(selectedUser) === 'mobile' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 uppercase flex items-center gap-1">
+                        <Smartphone size={10} /> Mobile App
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 uppercase flex items-center gap-1">
+                        <Globe size={10} /> Web
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-app-text-muted truncate">{selectedUser.email || 'No email'}</p>
                 </div>
@@ -2703,6 +2916,12 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                   {[
                     { icon: CreditCard, label: 'Plan', value: plan, color: 'text-app-primary' },
                     { icon: Activity, label: 'Status', value: selectedUser.subscriptionStatus, color: selectedUser.subscriptionStatus === 'active' ? 'text-green-400' : 'text-app-text-muted' },
+                    { 
+                      icon: getUserPlatform(selectedUser) === 'mobile' ? Smartphone : Globe, 
+                      label: 'Platform', 
+                      value: getUserPlatform(selectedUser) === 'mobile' ? 'Mobile App' : 'Web', 
+                      color: getUserPlatform(selectedUser) === 'mobile' ? 'text-sky-400' : 'text-indigo-400' 
+                    },
                     { icon: Calendar, label: 'Joined', value: new Date(selectedUser.createdAt).toLocaleDateString(), color: 'text-app-text-muted' },
                     { icon: Hash, label: 'UID', value: selectedUser.uid.slice(0, 8) + '…', color: 'text-app-text-muted' },
                     ...(selectedUser.targetScore ? [{ icon: Target, label: 'Target Score', value: String(selectedUser.targetScore), color: 'text-orange-400' }] : []),
