@@ -75,6 +75,8 @@ import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile } from './lib/mobile';
+import { purchasePlaySubscription } from './lib/playBilling';
+import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
 import { 
@@ -1223,7 +1225,74 @@ function GoalItem({ label, current, target }: { label: string, current: number, 
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>('dashboard');
+  const [activeTab, setActiveTab] = useState<PTESection | 'dashboard' | 'profile' | 'roadmap' | 'vocabulary' | 'shuriken' | 'help' | 'pattern' | 'mock-tests' | 'faq' | 'privacy' | 'terms'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      const path = window.location.pathname.toLowerCase().replace(/^\//, '').trim();
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase().trim();
+
+      if (hash === 'privacy' || path === 'privacy' || tabParam === 'privacy') return 'privacy';
+      if (hash === 'terms' || path === 'terms' || tabParam === 'terms') return 'terms';
+      if (hash === 'faq' || path === 'faq' || tabParam === 'faq') return 'faq';
+      if (hash === 'help' || path === 'help' || tabParam === 'help') return 'help';
+      if (hash === 'mock-tests' || path === 'mock-tests' || tabParam === 'mock-tests') return 'mock-tests';
+    }
+    return 'dashboard';
+  });
+
+  // URL Hash & Deep-link listener for #privacy, /privacy, and #terms
+  useEffect(() => {
+    const handleUrlRoute = () => {
+      if (typeof window === 'undefined') return;
+      const hash = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      const path = window.location.pathname.toLowerCase().replace(/^\//, '').trim();
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase().trim();
+
+      if (hash === 'privacy' || path === 'privacy' || tabParam === 'privacy') {
+        setActiveTab('privacy');
+        setShowSubscriptionModal(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (hash === 'terms' || path === 'terms' || tabParam === 'terms') {
+        setActiveTab('terms');
+        setShowSubscriptionModal(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (hash === 'faq' || path === 'faq' || tabParam === 'faq') {
+        setActiveTab('faq');
+      } else if (hash === 'help' || path === 'help' || tabParam === 'help') {
+        setActiveTab('help');
+      }
+    };
+
+    window.addEventListener('hashchange', handleUrlRoute);
+    window.addEventListener('popstate', handleUrlRoute);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRoute);
+      window.removeEventListener('popstate', handleUrlRoute);
+    };
+  }, []);
+
+  // Sync document title and URL hash when activeTab changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeTab === 'privacy') {
+      document.title = 'Privacy Policy - PTE Ninja | AI Exam Prep';
+      setShowSubscriptionModal(false);
+      if (window.location.hash !== '#privacy') {
+        window.location.hash = 'privacy';
+      }
+    } else if (activeTab === 'terms') {
+      document.title = 'Terms of Service - PTE Ninja | AI Exam Prep';
+      setShowSubscriptionModal(false);
+      if (window.location.hash !== '#terms') {
+        window.location.hash = 'terms';
+      }
+    } else if (window.location.hash === '#privacy' || window.location.hash === '#terms') {
+      history.pushState('', document.title, window.location.pathname + window.location.search);
+    }
+  }, [activeTab]);
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [supportBotOpen, setSupportBotOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
@@ -1338,12 +1407,46 @@ function AppContent() {
     }
   }, [user]);
 
+  const isProSubscriber = user?.subscriptionStatus === 'active';
+
+  // Initialize and manage Google AdMob lifecycle on native mobile
+  useEffect(() => {
+    if (isNativeMobile()) {
+      adMobService.initialize();
+    }
+  }, []);
+
+  const [adBannerHeight, setAdBannerHeight] = useState(0);
+
+  useEffect(() => {
+    return adMobService.onBannerHeightChange((h) => {
+      setAdBannerHeight(h);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isNativeMobile()) {
+      if (isProSubscriber) {
+        adMobService.hideBanner();
+      } else {
+        // While user is in a full-screen practice session or mock test, hide bottom banner
+        if (activeMockTest || selectedTask) {
+          adMobService.hideBanner();
+        } else {
+          adMobService.showBanner(false);
+        }
+      }
+    }
+  }, [isProSubscriber, activeMockTest, selectedTask]);
+
   useEffect(() => {
     if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
-      setUpgradeReason('expired');
-      setShowSubscriptionModal(true);
+      if (activeTab !== 'privacy' && activeTab !== 'terms') {
+        setUpgradeReason('expired');
+        setShowSubscriptionModal(true);
+      }
     }
-  }, [isAccessRestricted, loading, setShowSubscriptionModal, pendingGuestWriteRef]);
+  }, [isAccessRestricted, loading, setShowSubscriptionModal, pendingGuestWriteRef, activeTab]);
 
   // Auto-sync subscription state when returning from the Stripe Customer Portal.
   // handleManageBilling appends ?fromPortal=1 to the return URL so we can detect the return.
@@ -1662,6 +1765,10 @@ function AppContent() {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
+
+    if (isNativeMobile() && !isProSubscriber) {
+      adMobService.showInterstitial(false);
+    }
   };
 
   const handleMockTestFinish = async (result: MockTestResult) => {
@@ -1686,6 +1793,10 @@ function AppContent() {
       toast.success(`Mock Test Completed! Overall Score: ${result.overallScore}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+
+    if (isNativeMobile() && !isProSubscriber) {
+      adMobService.showInterstitial(false);
     }
     // Do NOT close the session here. The scorecard inside MockTestSession is still
     // visible. The user will dismiss it via the "Back to Dojo" button, which calls
@@ -2054,12 +2165,22 @@ function AppContent() {
             ) : activeTab === 'privacy' ? (
               <PrivacyPolicy 
                 key="privacy"
-                onBack={() => setActiveTab('dashboard')}
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.location.hash) {
+                    history.pushState('', document.title, window.location.pathname + window.location.search);
+                  }
+                  setActiveTab('dashboard');
+                }}
               />
             ) : activeTab === 'terms' ? (
               <TermsOfService 
                 key="terms"
-                onBack={() => setActiveTab('dashboard')}
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.location.hash) {
+                    history.pushState('', document.title, window.location.pathname + window.location.search);
+                  }
+                  setActiveTab('dashboard');
+                }}
               />
             ) : (
               <SectionView 
@@ -2077,8 +2198,11 @@ function AppContent() {
           </AnimatePresence>
         </main>
 
-        {/* Navigation Bar */}
-        <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/90 backdrop-blur-xl sticky bottom-0 z-50">
+        {/* Navigation Bar - elevated above AdMob banner ad when active */}
+        <nav 
+          className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/95 backdrop-blur-xl sticky z-50 transition-all"
+          style={{ bottom: `${adBannerHeight}px` }}
+        >
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
           <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
           <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
@@ -2089,6 +2213,9 @@ function AppContent() {
           <NavButton active={activeTab === 'listening'} onClick={() => setActiveTab('listening')} icon={Headphones} label="Listening" />
           <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" className="hidden md:flex" />
         </nav>
+        {adBannerHeight > 0 && (
+          <div style={{ height: `${adBannerHeight}px` }} className="w-full shrink-0 bg-transparent pointer-events-none" />
+        )}
       </div>
 
       {/* Modals */}
@@ -2342,7 +2469,7 @@ const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode, upgradeReason }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean, upgradeReason: 'expired' | 'limit' | null }) {
-  const { formatPrice, currency } = useSubscription();
+  const { formatPrice, currency, logout } = useSubscription();
   const isPremiumUser = user?.subscriptionStatus === 'active';
   const rawPlanId = (user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim();
   const currentPlanIndex = isPremiumUser && rawPlanId
@@ -2406,6 +2533,36 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     }
   };
 
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
+
+  const handleWatchRewardedAd = async () => {
+    setIsWatchingAd(true);
+    try {
+      const shown = await adMobService.showRewarded(async () => {
+        toast.success("🎉 Reward unlocked! You received 1 Free AI Evaluation credit.");
+        if (user?.uid) {
+          try {
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              freeEvaluationsBonus: ((user as any)?.freeEvaluationsBonus || 0) + 1,
+            });
+          } catch (e) {
+            console.error("Failed to update bonus credit:", e);
+          }
+        }
+        onClose();
+      });
+      if (!shown) {
+        toast.info("Video ad is loading. Please try again in a few moments.");
+      }
+    } catch (err) {
+      console.error("Rewarded ad error:", err);
+      toast.error("Could not load video ad. Please try again.");
+    } finally {
+      setIsWatchingAd(false);
+    }
+  };
+
   const handleSelectPlan = async (plan: any) => {
     if (!user?.email && !emailInput) {
       setShowEmailPrompt(true);
@@ -2417,7 +2574,42 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     setIsProcessing(true);
     
     try {
-      // If user is guest, we strongly recommend signing up first
+      // On native Android mobile app, trigger Google Play In-App Billing directly
+      if (isNativeMobile()) {
+        try {
+          const purchaseResult = await purchasePlaySubscription(plan.id);
+
+          if (purchaseResult.canceled) {
+            setIsProcessing(false);
+            return;
+          }
+
+          if (purchaseResult.success) {
+            const durationDays = plan.durationDays || 30;
+            const periodEnd = Math.floor((Date.now() + durationDays * 24 * 60 * 60 * 1000) / 1000);
+
+            setPendingSubscriptionId(purchaseResult.orderId || purchaseResult.purchaseToken || `gp_${plan.id}_${Date.now()}`);
+            setPendingPeriodEnd(periodEnd);
+
+            await handlePaymentSuccess({
+              subscriptionId: purchaseResult.orderId || purchaseResult.purchaseToken || `gp_${plan.id}_${Date.now()}`,
+              periodEnd: periodEnd,
+            });
+            return;
+          } else if (purchaseResult.pending) {
+            toast.info("Your subscription purchase is pending with Google Play. Access will activate once confirmed.", { duration: 6000 });
+            return;
+          }
+        } catch (playErr: any) {
+          console.error("Google Play purchase error:", playErr);
+          toast.error(playErr?.message || "Google Play purchase was not completed. Please try again.");
+        } finally {
+          setIsProcessing(false);
+        }
+        return;
+      }
+
+      // If user is guest on web, we strongly recommend signing up first
       if (user?.accessType === 'guest' && !user?.emailVerified) {
         toast.info("We recommend signing up with Google before upgrading to keep your progress safe across devices.", {
           duration: 5000,
@@ -2524,6 +2716,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
       if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
       if (emailInput && !user.email) updateData.email = emailInput.trim();
+      if (isNativeMobile()) updateData.platform = 'android_play_store';
 
       await updateDoc(userRef, updateData);
 
@@ -2545,13 +2738,44 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
+    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 pb-28 sm:pb-32 bg-app-bg/95 backdrop-blur-xl overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-8 shadow-2xl my-auto"
+        className="w-full max-w-4xl bg-app-surface border border-app-primary/20 rounded-3xl p-6 sm:p-8 shadow-2xl my-auto relative"
       >
+        {/* Top corner navigation for users who can dismiss (active trial, active subscriber, or in checkout) */}
+        {(!isAccessRestricted || selectedPlan) && (
+          <div className="flex items-center justify-between w-full mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedPlan) {
+                  setSelectedPlan(null);
+                  setShowEmailPrompt(false);
+                } else {
+                  onClose();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-bg hover:bg-app-surface text-app-text-muted hover:text-app-text border border-app-primary/15 transition-all text-xs font-semibold cursor-pointer active:scale-95 shadow-sm"
+              aria-label="Back"
+            >
+              <ChevronLeft size={16} />
+              <span>Back</span>
+            </button>
+            {!isAccessRestricted && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 rounded-full bg-app-bg hover:bg-app-surface text-app-text-muted hover:text-app-text border border-app-primary/15 transition-all cursor-pointer active:scale-95 shadow-sm"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        )}
         {(isAccessRestricted || upgradeReason === 'expired') && !selectedPlan && !showSuccess && (
           <div className="w-full text-left bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-6 rounded-r-md shadow-sm">
             <div className="flex">
@@ -2986,14 +3210,84 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           )}
 
-          {!isAccessRestricted && (
-            <button 
-              onClick={onClose}
-              className="text-app-text-muted/50 hover:text-app-text transition-colors"
-            >
-              Maybe later
-            </button>
+          {/* Mobile Free Reward Ad Banner - right above sign out */}
+          {isNativeMobile() && !isPremiumUser && (
+            <div className="w-full mt-4 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-left shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Gift size={20} />
+                </div>
+                <div>
+                  <p className="text-xs md:text-sm font-bold text-app-text">
+                    🎁 Free Practice Bonus: <span className="text-emerald-400">Watch Ad for 1 Free AI Evaluation</span>
+                  </p>
+                  <p className="text-[10px] md:text-xs text-app-text-muted">
+                    Earn an instant AI evaluation credit right now without subscribing.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleWatchRewardedAd}
+                disabled={isWatchingAd}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all shrink-0 disabled:opacity-50"
+              >
+                {isWatchingAd ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}
+                {isWatchingAd ? 'Loading Video Ad...' : 'Watch Rewarded Ad'}
+              </button>
+            </div>
           )}
+
+          {/* Maybe later / Return to app (prominently lifted above bottom banner ad) */}
+          {!isAccessRestricted && (
+            <div className="w-full pt-3 flex items-center justify-center">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-app-bg hover:bg-app-surface border border-app-primary/20 text-app-text-muted hover:text-app-text text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                <ChevronLeft size={15} />
+                <span>Maybe Later (Back to Dojo)</span>
+              </button>
+            </div>
+          )}
+
+          <div className="w-full pt-4 mt-3 border-t border-app-primary/10 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-3 text-xs">
+            {/* Account Info and Sign Out / Switch Account */}
+            {user ? (
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-app-text-muted">
+                <span className="text-app-text-muted/70">
+                  Signed in as <strong className="text-app-text font-semibold">{user.email || user.displayName || 'Guest'}</strong>
+                </span>
+                <span className="text-app-border hidden sm:inline">•</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await logout();
+                      onClose();
+                      toast.success("Signed out successfully. You can now log into another account.");
+                    } catch (e) {
+                      console.error("Sign out error", e);
+                      toast.error("Failed to sign out. Please try again.");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 text-red-500 hover:text-red-600 font-bold hover:underline transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-red-500/10 active:scale-95"
+                >
+                  <LogOut size={13} />
+                  <span>Sign Out / Switch Account</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onLogin}
+                className="inline-flex items-center gap-1.5 text-app-primary hover:underline font-bold py-1 px-2"
+              >
+                <span>Have an account with active access? Sign In</span>
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>
@@ -5842,14 +6136,47 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     return 0;
   });
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const playPronunciation = (word: string) => {
-    try {
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis failed:", e);
+    if (!word || !word.trim()) return;
+    const cleanWord = word.trim().toLowerCase();
+
+    // Stop any previously playing pronunciation
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch (e) {}
+    }
+
+    // High quality standard American English dictionary pronunciation MP3
+    const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanWord)}&type=2`;
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("Dictionary audio failed, trying Google TTS:", err);
+        const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(cleanWord)}`;
+        const fallbackAudio = new Audio(fallbackUrl);
+        audioRef.current = fallbackAudio;
+        fallbackAudio.play().catch((fbErr) => {
+          console.warn("Audio fallback failed, trying SpeechSynthesis:", fbErr);
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(cleanWord);
+              utterance.lang = 'en-US';
+              utterance.rate = 0.85;
+              window.speechSynthesis.speak(utterance);
+            } catch (synthErr) {
+              console.error("Speech synthesis failed:", synthErr);
+            }
+          }
+        });
+      });
     }
   };
 

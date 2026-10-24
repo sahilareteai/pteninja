@@ -118,7 +118,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             <Logo size={36} showText={false} />
             <div className="flex flex-col leading-none">
               <span className="text-sm font-black tracking-wider text-white uppercase">PTE NINJA</span>
-              <span className="text-[10px] font-bold text-[#66FCF1] tracking-widest uppercase">Mobile Dojo</span>
+              <span className="text-[10px] font-bold text-[#66FCF1] tracking-wider uppercase">AI-Powered Exam Prep</span>
             </div>
           </div>
 

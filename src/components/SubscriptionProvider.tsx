@@ -437,7 +437,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       if (isNativeMobile()) {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-        const res = await FirebaseAuthentication.signInWithGoogle();
+        let res;
+        try {
+          res = await FirebaseAuthentication.signInWithGoogle();
+        } catch (cmErr: any) {
+          console.warn('[GoogleAuth] CredentialManager attempt failed, trying GoogleSignIn fallback:', cmErr);
+          res = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+        }
 
         let googleIdToken = res.credential?.idToken;
         if (!googleIdToken) {
@@ -465,6 +471,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
     } catch (error: any) {
+      console.error('[GoogleAuth] Login failure:', error);
       const errMsg = error?.message || '';
       if (errMsg.toLowerCase().includes('cancel') || error?.code === '16' || error?.code === '12501') {
         setIsAuthenticating(false);
