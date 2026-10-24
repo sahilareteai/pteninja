@@ -20,7 +20,7 @@ export const ADMOB_IDS_ANDROID = {
 export const ADMOB_IDS_IOS = {
   appId: 'ca-app-pub-9025413323620577~7843646554',
   banner: 'ca-app-pub-9025413323620577/7652074864',
-  interstitial: '',
+  interstitial: 'ca-app-pub-9025413323620577/5025911529',
   rewarded: '',
 };
 
