@@ -8,7 +8,7 @@ import {
   AdMobRewardItem,
   AdMobBannerSize,
 } from '@capacitor-community/admob';
-import { isNativeMobile } from '../lib/mobile';
+import { isNativeMobile, isIOS } from '../lib/mobile';
 
 export const ADMOB_IDS = {
   appId: 'ca-app-pub-9025413323620577~6223975956',
@@ -17,11 +17,17 @@ export const ADMOB_IDS = {
   rewarded: 'ca-app-pub-9025413323620577/3892618247',
 };
 
-// Google official sample/test IDs for instant display while live IDs activate
+// Google official sample/test IDs for instant display while live IDs activate (platform-aware)
 export const ADMOB_TEST_IDS = {
-  banner: 'ca-app-pub-3940256099942544/6300978111',
-  interstitial: 'ca-app-pub-3940256099942544/1033173712',
-  rewarded: 'ca-app-pub-3940256099942544/5224354917',
+  get banner() {
+    return isIOS() ? 'ca-app-pub-3940256099942544/2934735716' : 'ca-app-pub-3940256099942544/6300978111';
+  },
+  get interstitial() {
+    return isIOS() ? 'ca-app-pub-3940256099942544/4411468910' : 'ca-app-pub-3940256099942544/1033173712';
+  },
+  get rewarded() {
+    return isIOS() ? 'ca-app-pub-3940256099942544/1712485313' : 'ca-app-pub-3940256099942544/5224354917';
+  },
 };
 
 class AdMobService {

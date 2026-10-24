@@ -74,7 +74,7 @@ import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
-import { isNativeMobile } from './lib/mobile';
+import { isNativeMobile, isAndroid, isIOS } from './lib/mobile';
 import { purchasePlaySubscription } from './lib/playBilling';
 import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
@@ -2575,7 +2575,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     
     try {
       // On native Android mobile app, trigger Google Play In-App Billing directly
-      if (isNativeMobile()) {
+      if (isNativeMobile() && isAndroid()) {
         try {
           const purchaseResult = await purchasePlaySubscription(plan.id);
 
@@ -2716,7 +2716,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
       if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
       if (emailInput && !user.email) updateData.email = emailInput.trim();
-      if (isNativeMobile()) updateData.platform = 'android_play_store';
+      if (isNativeMobile() && isAndroid()) updateData.platform = 'android_play_store';
+      else if (isNativeMobile() && isIOS()) updateData.platform = 'ios_app_store';
 
       await updateDoc(userRef, updateData);
 
