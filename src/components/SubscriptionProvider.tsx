@@ -237,9 +237,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
 
             if (!userData.signupPlatform && !firebaseUser.isAnonymous) {
-              const currentPlatform = isNativeMobile() ? 'mobile' : 'web';
-              updateDoc(userRef, { signupPlatform: currentPlatform }).catch(() => {});
-              userData.signupPlatform = currentPlatform;
+              // Existing accounts without a signupPlatform were registered on the Web.
+              // Do NOT mark them as 'mobile' just because they log in from a mobile device or app later.
+              const originalPlatform = 'web';
+              updateDoc(userRef, { signupPlatform: originalPlatform }).catch(() => {});
+              userData.signupPlatform = originalPlatform;
             }
 
             setUser(userData);

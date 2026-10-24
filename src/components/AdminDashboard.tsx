@@ -92,7 +92,7 @@ interface AdminUser extends UserData {
 }
 
 export const getUserPlatform = (u: AdminUser | UserData): 'mobile' | 'web' => {
-  const p = (u.signupPlatform || (u as any).platform || '').toLowerCase();
+  const p = (u.signupPlatform || (u as any).platform || '').toLowerCase().trim();
   if (p === 'mobile' || p === 'android' || p === 'ios') return 'mobile';
   return 'web';
 };
@@ -475,7 +475,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       if (!codeMap[refCode]) {
         codeMap[refCode] = { code: refCode, students: [] };
       }
-      const platform: 'mobile' | 'web' = student.signupPlatform === 'mobile' ? 'mobile' : 'web';
+      const platform: 'mobile' | 'web' = getUserPlatform(student);
       const completedCount = student.completedTasks?.length || 0;
       codeMap[refCode].students.push({
         uid: student.uid,
