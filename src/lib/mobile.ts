@@ -13,6 +13,20 @@ export const isNativeMobile = (): boolean => {
 };
 
 /**
+ * Checks if the application is running natively on iOS (iPhone/iPad).
+ */
+export const isIOS = (): boolean => {
+  return Capacitor.getPlatform() === 'ios';
+};
+
+/**
+ * Checks if the application is running natively on Android.
+ */
+export const isAndroid = (): boolean => {
+  return Capacitor.getPlatform() === 'android';
+};
+
+/**
  * Resolves an API path to an absolute production endpoint when on native mobile,
  * or keeps it relative when on web.
  */

@@ -1,12 +1,17 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.pteninja.android',
+  appId: 'com.pteninja.app',
   appName: 'PTE Ninja',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
     cleartext: false,
+  },
+  ios: {
+    contentInset: 'always',
+    preferredContentMode: 'mobile',
+    scheme: 'PTE Ninja',
   },
   plugins: {
     FirebaseAuthentication: {

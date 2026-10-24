@@ -1,5 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
-import { isNativeMobile } from './mobile';
+import { isNativeMobile, isAndroid } from './mobile';
 
 export interface PlayBillingProduct {
   productId: string;
@@ -58,7 +58,7 @@ export const PLAY_SUBSCRIPTION_MAP: Record<string, { productId: string; basePlan
  * Initiates Google Play in-app purchase for the specified plan ID.
  */
 export async function purchasePlaySubscription(planId: string): Promise<PurchaseResult> {
-  if (!isNativeMobile()) {
+  if (!isNativeMobile() || !isAndroid()) {
     throw new Error('Google Play In-App Billing is only available on native Android devices.');
   }
 
