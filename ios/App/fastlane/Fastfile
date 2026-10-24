@@ -1,0 +1,112 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload iOS app to Apple TestFlight"
+  lane :beta do
+    # Authenticate with App Store Connect using API Key
+    raw_key = ENV["APPSTORE_PRIVATE_KEY"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY_BASE64"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
+    if raw_key && !raw_key.include?("BEGIN PRIVATE KEY")
+      require "base64"
+      raw_key = Base64.decode64(raw_key)
+    end
+
+    key_id = ENV["APPSTORE_KEY_ID"] || ENV["APP_STORE_CONNECT_KEY_ID"]
+    issuer_id = ENV["APPSTORE_ISSUER_ID"] || ENV["APP_STORE_CONNECT_ISSUER_ID"]
+
+    api_key = app_store_connect_api_key(
+      key_id: key_id,
+      issuer_id: issuer_id,
+      key_content: raw_key,
+      is_key_content_base64: false
+    )
+
+    # Create temporary CI keychain on runner to hold certificates
+    keychain_name = "fastlane_tmp_keychain"
+    keychain_password = "fastlane_tmp_password_2026"
+    create_keychain(
+      name: keychain_name,
+      password: keychain_password,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false
+    )
+
+    kc_path = lane_context[SharedValues::KEYCHAIN_PATH]
+    if kc_path
+      if File.exist?("#{kc_path}-db") && !File.exist?(kc_path)
+        begin
+          File.symlink("#{kc_path}-db", kc_path)
+        rescue => e
+          UI.message("Symlink notice: #{e.message}")
+        end
+      end
+    end
+    resolved_kc = (kc_path && File.exist?(kc_path)) ? kc_path : (kc_path ? "#{kc_path}-db" : nil)
+
+    # Automatically ensure an available distribution certificate slot
+    begin
+      certs = Spaceship::ConnectAPI::Certificate.all
+      dist_certs = certs.select { |c| c.certificate_type.to_s.upcase == "DISTRIBUTION" && c.id != "HHFVY63QS6" }
+      if dist_certs && dist_certs.count >= 2
+        sorted = dist_certs.sort_by { |c| c.expiration_date || "" }
+        oldest = sorted.first
+        UI.message("Freeing certificate slot: revoking oldest distribution cert #{oldest.id} (expires #{oldest.expiration_date})")
+        oldest.delete!
+      end
+    rescue => e
+      UI.message("Notice during certificate slot check: #{e.message}")
+    end
+
+    # Automatically generate or fetch Distribution certificate
+    get_certificates(
+      api_key: api_key,
+      keychain_path: resolved_kc,
+      keychain_password: keychain_password
+    )
+
+    # Automatically generate or fetch App Store provisioning profile
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.pteninja.app"
+    )
+
+    profile_name = lane_context[SharedValues::SIGH_NAME] || ENV["sigh_com.pteninja.app_app-store_profile-name"] || ENV["sigh_com.pteninja.app_appstore_profile-name"]
+
+    # Set build number based on GitHub run number or timestamp
+    build_num = ENV["GITHUB_RUN_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
+    increment_build_number(
+      build_number: build_num,
+      xcodeproj: "App.xcodeproj"
+    )
+
+    team_id = ENV["APPLE_TEAM_ID"] || "3WJZNVGDTV"
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "App.xcodeproj",
+      team_id: team_id,
+      code_sign_identity: "Apple Distribution",
+      profile_name: profile_name
+    )
+
+    # Build and sign the IPA archive
+    build_app(
+      project: "App.xcodeproj",
+      scheme: "App",
+      export_method: "app-store",
+      clean: true,
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.pteninja.app" => profile_name
+        }
+      }
+    )
+
+    # Upload directly to Apple TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

@@ -1,22 +1,31 @@
-name: Build & Deploy iOS to TestFlight
+name: Build & Deploy iOS to Apple TestFlight
 
 on:
   workflow_dispatch:
     inputs:
       build_number:
-        description: 'Build Number (leave blank to auto-increment or use project version)'
+        description: 'Build Number (leave blank to use GitHub run number)'
         required: false
         default: ''
+
+concurrency:
+  group: "ios-testflight"
+  cancel-in-progress: false
 
 jobs:
   build-and-upload:
     name: Build & Upload to TestFlight
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+
+      - name: 🍎 Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -24,108 +33,29 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: 📦 Install Dependencies
+      - name: 📦 Install NPM Dependencies
         run: npm install
 
       - name: ⚡ Build Web Assets (Vite)
         run: npm run build
 
-      - name: 📱 Sync Capacitor iOS
+      - name: 📱 Sync Capacitor iOS Platform
         run: npx cap sync ios
 
-      - name: 🔑 Setup App Store Connect API Key
-        env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
-        run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$API_KEY_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
-
-      - name: 🔐 Install Apple Certificate & Provisioning Profile (if provided)
-        env:
-          CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-        run: |
-          if [ -n "$CERT_BASE64" ] && [ -n "$CERT_PASSWORD" ]; then
-            echo "Installing distribution certificate into temporary keychain..."
-            KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
-            KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-            
-            security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-            security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-            
-            CERT_PATH=$RUNNER_TEMP/certificate.p12
-            echo "$CERT_BASE64" | base64 --decode > $CERT_PATH
-            security import $CERT_PATH -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-            security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
-            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          fi
-
-          if [ -n "$PROFILE_BASE64" ]; then
-            echo "Installing provisioning profile..."
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-            echo "$PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-          fi
-
-      - name: 🔢 Bump Build Number
-        if: ${{ github.event.inputs.build_number != '' }}
-        run: |
-          cd ios/App
-          xcrun agvtool new-version -all "${{ github.event.inputs.build_number }}"
-
-      - name: 🏗️ Archive Xcode Project
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          xcodebuild archive \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -archivePath $RUNNER_TEMP/App.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
-
-      - name: 📦 Export IPA
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/App.xcarchive \
-            -exportOptionsPlist ios/App/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/build \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
-
-      - name: 🚀 Upload to TestFlight
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          IPA_PATH=$(find $RUNNER_TEMP/build -name "*.ipa" | head -n 1)
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ No .ipa file found in export directory."
-            exit 1
-          fi
-          echo "Found IPA: $IPA_PATH"
-          echo "Uploading to Apple App Store Connect / TestFlight..."
-          xcrun altool --upload-app \
-            -f "$IPA_PATH" \
-            -t ios \
-            --apiKey "$KEY_ID" \
-            --apiIssuer "$ISSUER_ID"
-
-      - name: 💾 Save IPA Artifact to GitHub
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: 💎 Setup Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          name: pteninja-ios-ipa
-          path: ${{ runner.temp }}/build/*.ipa
-          if-no-files-found: warn
+          ruby-version: '3.3'
+
+      - name: 🚀 Install Fastlane
+        run: gem install fastlane --no-document
+
+      - name: 🛫 Build & Upload to Apple TestFlight
+        working-directory: ios/App
+        env:
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '3WJZNVGDTV' }}
+          GITHUB_RUN_NUMBER: ${{ github.event.inputs.build_number || github.run_number }}
+        run: fastlane ios beta
