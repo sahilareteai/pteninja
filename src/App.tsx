@@ -2870,29 +2870,6 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </p>
               </div>
 
-              {/* Rewarded Video Ad Card for Mobile Users */}
-              {isNativeMobile() && !isPremiumUser && (
-                <div className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
-                  <div className="flex items-center gap-3 text-left">
-                    <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
-                      <Sparkles size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-app-text">Need Quick Practice?</h4>
-                      <p className="text-xs text-app-text-muted">Watch a short video ad to unlock an instant AI Evaluation session.</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleWatchRewardedAd}
-                    disabled={isWatchingAd}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
-                  >
-                    {isWatchingAd ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
-                    {isWatchingAd ? 'Loading Ad...' : 'Watch Ad to Unlock'}
-                  </button>
-                </div>
-              )}
-
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-4">
                 {SUBSCRIPTION_PLANS.map((plan, planIdx) => {
                   const isCurrentPlan = isPremiumUser && (
@@ -3119,6 +3096,34 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 )}
               >
                 Sign Up
+              </button>
+            </div>
+          )}
+
+          {/* Mobile Free Reward Ad Banner - right above sign out */}
+          {isNativeMobile() && !isPremiumUser && (
+            <div className="w-full mt-4 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-left shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Gift size={20} />
+                </div>
+                <div>
+                  <p className="text-xs md:text-sm font-bold text-app-text">
+                    🎁 Free Practice Bonus: <span className="text-emerald-400">Watch Ad for 1 Free AI Evaluation</span>
+                  </p>
+                  <p className="text-[10px] md:text-xs text-app-text-muted">
+                    Earn an instant AI evaluation credit right now without subscribing.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleWatchRewardedAd}
+                disabled={isWatchingAd}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all shrink-0 disabled:opacity-50"
+              >
+                {isWatchingAd ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}
+                {isWatchingAd ? 'Loading Video Ad...' : 'Watch Rewarded Ad'}
               </button>
             </div>
           )}
@@ -5319,55 +5324,6 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
           </div>
 
         </motion.button>
-      )}
-
-      {/* Mobile Free Reward & Ad Card */}
-      {isNativeMobile() && user?.subscriptionStatus !== 'active' && (
-        <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-left shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-              <Gift size={20} />
-            </div>
-            <div>
-              <p className="text-xs md:text-sm font-bold text-app-text">
-                🎁 Free Practice Bonus: <span className="text-emerald-400">Watch Ad for 1 Free AI Evaluation</span>
-              </p>
-              <p className="text-[10px] md:text-xs text-app-text-muted">
-                Earn instant AI evaluation credits anytime without subscribing.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-            <button
-              onClick={async () => {
-                toast.info("Loading Rewarded Video Ad...");
-                const ok = await adMobService.showRewarded(() => {
-                  toast.success("🎉 Reward earned! +1 Free AI Evaluation credited.");
-                  if (user?.uid) {
-                    const userRef = doc(db, 'users', user.uid);
-                    updateDoc(userRef, {
-                      freeEvaluationsBonus: ((user as any)?.freeEvaluationsBonus || 0) + 1,
-                    }).catch(() => {});
-                  }
-                });
-                if (!ok) toast.info("Preparing video ad... Please try again in 5 seconds.");
-              }}
-              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-            >
-              <Play size={14} /> Watch Rewarded Ad
-            </button>
-            <button
-              onClick={async () => {
-                toast.info("Triggering Full-Screen Interstitial Ad...");
-                const ok = await adMobService.showInterstitial(false);
-                if (!ok) toast.info("Preparing interstitial ad... Please try again in 5 seconds.");
-              }}
-              className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-app-surface border border-app-border text-app-text font-bold text-xs flex items-center justify-center gap-1 hover:bg-app-primary/10 transition-all active:scale-95"
-            >
-              Test Interstitial
-            </button>
-          </div>
-        </div>
       )}
 
       {/* Progress Overview */}
