@@ -75,6 +75,7 @@ import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile } from './lib/mobile';
+import { purchasePlaySubscription } from './lib/playBilling';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
 import { 
@@ -2417,7 +2418,42 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     setIsProcessing(true);
     
     try {
-      // If user is guest, we strongly recommend signing up first
+      // On native Android mobile app, trigger Google Play In-App Billing directly
+      if (isNativeMobile()) {
+        try {
+          const purchaseResult = await purchasePlaySubscription(plan.id);
+
+          if (purchaseResult.canceled) {
+            setIsProcessing(false);
+            return;
+          }
+
+          if (purchaseResult.success) {
+            const durationDays = plan.durationDays || 30;
+            const periodEnd = Math.floor((Date.now() + durationDays * 24 * 60 * 60 * 1000) / 1000);
+
+            setPendingSubscriptionId(purchaseResult.orderId || purchaseResult.purchaseToken || `gp_${plan.id}_${Date.now()}`);
+            setPendingPeriodEnd(periodEnd);
+
+            await handlePaymentSuccess({
+              subscriptionId: purchaseResult.orderId || purchaseResult.purchaseToken || `gp_${plan.id}_${Date.now()}`,
+              periodEnd: periodEnd,
+            });
+            return;
+          } else if (purchaseResult.pending) {
+            toast.info("Your subscription purchase is pending with Google Play. Access will activate once confirmed.", { duration: 6000 });
+            return;
+          }
+        } catch (playErr: any) {
+          console.error("Google Play purchase error:", playErr);
+          toast.error(playErr?.message || "Google Play purchase was not completed. Please try again.");
+        } finally {
+          setIsProcessing(false);
+        }
+        return;
+      }
+
+      // If user is guest on web, we strongly recommend signing up first
       if (user?.accessType === 'guest' && !user?.emailVerified) {
         toast.info("We recommend signing up with Google before upgrading to keep your progress safe across devices.", {
           duration: 5000,
@@ -2524,6 +2560,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
       if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
       if (emailInput && !user.email) updateData.email = emailInput.trim();
+      if (isNativeMobile()) updateData.platform = 'android_play_store';
 
       await updateDoc(userRef, updateData);
 
