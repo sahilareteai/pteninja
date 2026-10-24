@@ -98,9 +98,9 @@ export function TermsOfService({ onBack }: { onBack: () => void }) {
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-app-text uppercase tracking-wide">9. Contact Us</h2>
             <p>
-              If you have any questions about these Terms of Service, please contact us at:
+              If you have any questions about these Terms of Service or general inquiries, please contact us at:
               <br />
-              <span className="text-app-primary font-bold">ninja-pte-services@googlegroups.com</span>
+              <a href="mailto:pteninja.support@gmail.com" className="text-app-primary font-bold hover:underline">pteninja.support@gmail.com</a>
             </p>
           </section>
         </div>

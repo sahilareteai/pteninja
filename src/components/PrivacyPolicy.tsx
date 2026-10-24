@@ -196,7 +196,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               <p><strong>Operating Entity:</strong> AI Geek Advisor Pvt. Ltd.</p>
               <p><strong>App:</strong> PTE Ninja - AI Exam Prep</p>
               <p><strong>Data Protection Officer:</strong> <a href="mailto:pteninja.support@gmail.com" className="text-app-primary font-bold hover:underline">pteninja.support@gmail.com</a></p>
-              <p><strong>General Support:</strong> <a href="mailto:support@pteninja.com" className="text-app-primary font-bold hover:underline">support@pteninja.com</a></p>
+              <p><strong>General Support & Inquiries:</strong> <a href="mailto:pteninja.support@gmail.com" className="text-app-primary font-bold hover:underline">pteninja.support@gmail.com</a></p>
               <p><strong>Website:</strong> <a href="https://pteninja.com" className="text-app-primary hover:underline">https://pteninja.com</a></p>
             </div>
           </section>
