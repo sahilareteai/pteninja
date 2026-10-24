@@ -1349,6 +1349,14 @@ function AppContent() {
     }
   }, []);
 
+  const [adBannerHeight, setAdBannerHeight] = useState(0);
+
+  useEffect(() => {
+    return adMobService.onBannerHeightChange((h) => {
+      setAdBannerHeight(h);
+    });
+  }, []);
+
   useEffect(() => {
     if (isNativeMobile()) {
       if (isProSubscriber) {
@@ -2111,8 +2119,11 @@ function AppContent() {
           </AnimatePresence>
         </main>
 
-        {/* Navigation Bar */}
-        <nav className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/90 backdrop-blur-xl sticky bottom-0 z-50">
+        {/* Navigation Bar - elevated above AdMob banner ad when active */}
+        <nav 
+          className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/95 backdrop-blur-xl sticky z-50 transition-all"
+          style={{ bottom: `${adBannerHeight}px` }}
+        >
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
           <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
           <NavButton active={activeTab === 'vocabulary'} onClick={() => setActiveTab('vocabulary')} icon={Book} label="Vocab" />
@@ -2123,6 +2134,9 @@ function AppContent() {
           <NavButton active={activeTab === 'listening'} onClick={() => setActiveTab('listening')} icon={Headphones} label="Listening" />
           <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" className="hidden md:flex" />
         </nav>
+        {adBannerHeight > 0 && (
+          <div style={{ height: `${adBannerHeight}px` }} className="w-full shrink-0 bg-transparent pointer-events-none" />
+        )}
       </div>
 
       {/* Modals */}
@@ -5305,6 +5319,55 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
           </div>
 
         </motion.button>
+      )}
+
+      {/* Mobile Free Reward & Ad Card */}
+      {isNativeMobile() && user?.subscriptionStatus !== 'active' && (
+        <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-left shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <Gift size={20} />
+            </div>
+            <div>
+              <p className="text-xs md:text-sm font-bold text-app-text">
+                🎁 Free Practice Bonus: <span className="text-emerald-400">Watch Ad for 1 Free AI Evaluation</span>
+              </p>
+              <p className="text-[10px] md:text-xs text-app-text-muted">
+                Earn instant AI evaluation credits anytime without subscribing.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              onClick={async () => {
+                toast.info("Loading Rewarded Video Ad...");
+                const ok = await adMobService.showRewarded(() => {
+                  toast.success("🎉 Reward earned! +1 Free AI Evaluation credited.");
+                  if (user?.uid) {
+                    const userRef = doc(db, 'users', user.uid);
+                    updateDoc(userRef, {
+                      freeEvaluationsBonus: ((user as any)?.freeEvaluationsBonus || 0) + 1,
+                    }).catch(() => {});
+                  }
+                });
+                if (!ok) toast.info("Preparing video ad... Please try again in 5 seconds.");
+              }}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+            >
+              <Play size={14} /> Watch Rewarded Ad
+            </button>
+            <button
+              onClick={async () => {
+                toast.info("Triggering Full-Screen Interstitial Ad...");
+                const ok = await adMobService.showInterstitial(false);
+                if (!ok) toast.info("Preparing interstitial ad... Please try again in 5 seconds.");
+              }}
+              className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-app-surface border border-app-border text-app-text font-bold text-xs flex items-center justify-center gap-1 hover:bg-app-primary/10 transition-all active:scale-95"
+            >
+              Test Interstitial
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Progress Overview */}
