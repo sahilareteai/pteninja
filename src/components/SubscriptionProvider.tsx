@@ -752,18 +752,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const logout = async () => {
     try {
       localStorage.removeItem('pte_session_id');
-      if (isNativeMobile()) {
+      setUser(null);
+      setShowAuthModal(false);
+
+      if (auth.currentUser) {
         try {
-          const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-          await FirebaseAuthentication.signOut();
-        } catch (e) {
-          console.warn('Native signOut warning:', e);
+          await auth.signOut();
+        } catch (authErr) {
+          console.warn('Firebase signOut warning:', authErr);
         }
       }
-      await auth.signOut();
-      setShowAuthModal(false);
     } catch (error) {
       console.error("Logout failed:", error);
+      setUser(null);
       setAuthError("Failed to sign out. Please try again.");
     }
   };
