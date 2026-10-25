@@ -1427,6 +1427,7 @@ function AppContent() {
   }, []);
 
   const [adBannerHeight, setAdBannerHeight] = useState(0);
+  const [isDiwaliBannerVisible, setIsDiwaliBannerVisible] = useState(false);
 
   useEffect(() => {
     return adMobService.onBannerHeightChange((h) => {
@@ -1967,10 +1968,18 @@ function AppContent() {
       <div className="relative z-10 flex flex-col h-dvh">
         {/* Diwali Festive Announcement Banner - hidden for annual users, visible for trial, guest, expired, and weekly/monthly/quarterly users */}
         {!(user?.subscriptionStatus === 'active' && ((user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim() === 'annual')) && (
-          <DiwaliBanner onClaim={() => setShowSubscriptionModal(true)} />
+          <DiwaliBanner
+            onClaim={() => setShowSubscriptionModal(true)}
+            onVisibilityChange={setIsDiwaliBannerVisible}
+          />
         )}
         {/* Header */}
-        <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md">
+        <header
+          style={{
+            paddingTop: isDiwaliBannerVisible ? undefined : 'calc(env(safe-area-inset-top, 0px) + 0.75rem)',
+          }}
+          className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-app-border bg-app-bg/80 backdrop-blur-md transition-all duration-200"
+        >
           <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(69,162,158,0.3)]" />
           
           <div className="flex items-center gap-2 sm:gap-4">

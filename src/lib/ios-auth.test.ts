@@ -44,6 +44,16 @@ describe('iOS Authentication & Error Handling Unit Tests', () => {
         'Apple Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.'
       );
     });
+
+    it('translates "Apple Sign-in provider is not enabled" error cleanly into user guidance', () => {
+      const err = new Error('Apple Sign-in provider is not enabled. Make sure to add the provider to system settings.');
+      const formatted = formatAuthError(err);
+      expect(formatted).toBe(
+        'Apple Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.'
+      );
+      expect(formatted).not.toContain('system settings');
+      expect(formatted).not.toContain('Firebase');
+    });
   });
 
   describe('Mobile Platform Detection', () => {

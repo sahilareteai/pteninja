@@ -59,6 +59,9 @@ class AdMobService {
   private bannerListeners: Array<(height: number) => void> = [];
   private isInterstitialPrepared = false;
   private isRewardedPrepared = false;
+  private hasFallbackBannerLoaded = false;
+  private hasFallbackInterstitialLoaded = false;
+  private hasFallbackRewardedLoaded = false;
 
   /**
    * Register a callback to listen for banner height changes
@@ -106,6 +109,27 @@ class AdMobService {
         this.notifyBannerListeners(this.bannerHeight || 56);
       });
 
+      // Banner failure listener: automatically fallback to official Google test banner
+      // when live ad unit returns "No Fill" (error 1), which is standard for unreleased TestFlight builds
+      AdMob.addListener(BannerAdPluginEvents.FailedToLoad, async (err) => {
+        console.warn('AdMob Banner live fill failed (common in TestFlight/unreleased builds):', err);
+        if (!this.hasFallbackBannerLoaded) {
+          this.hasFallbackBannerLoaded = true;
+          try {
+            console.log('🔄 Serving AdMob test banner so ad space is populated during development/TestFlight...');
+            await AdMob.showBanner({
+              adId: ADMOB_TEST_IDS.banner,
+              adSize: BannerAdSize.ADAPTIVE_BANNER,
+              position: BannerAdPosition.BOTTOM_CENTER,
+              margin: 0,
+              isTesting: true,
+            });
+          } catch (fallbackErr) {
+            console.warn('AdMob test banner fallback error:', fallbackErr);
+          }
+        }
+      });
+
       // Interstitial listeners
       AdMob.addListener(InterstitialAdPluginEvents.Loaded, () => {
         this.isInterstitialPrepared = true;
@@ -116,9 +140,21 @@ class AdMobService {
         this.prepareInterstitial().catch(() => {});
       });
 
-      AdMob.addListener(InterstitialAdPluginEvents.FailedToLoad, (err) => {
+      AdMob.addListener(InterstitialAdPluginEvents.FailedToLoad, async (err) => {
         console.warn('AdMob Interstitial failed to load:', err);
         this.isInterstitialPrepared = false;
+        if (!this.hasFallbackInterstitialLoaded) {
+          this.hasFallbackInterstitialLoaded = true;
+          try {
+            await AdMob.prepareInterstitial({
+              adId: ADMOB_TEST_IDS.interstitial,
+              isTesting: true,
+            });
+            this.isInterstitialPrepared = true;
+          } catch (fallbackErr) {
+            console.warn('AdMob test interstitial fallback failed:', fallbackErr);
+          }
+        }
       });
 
       // Rewarded listeners
@@ -131,9 +167,21 @@ class AdMobService {
         this.prepareRewarded().catch(() => {});
       });
 
-      AdMob.addListener(RewardAdPluginEvents.FailedToLoad, (err) => {
+      AdMob.addListener(RewardAdPluginEvents.FailedToLoad, async (err) => {
         console.warn('AdMob Rewarded ad failed to load:', err);
         this.isRewardedPrepared = false;
+        if (!this.hasFallbackRewardedLoaded) {
+          this.hasFallbackRewardedLoaded = true;
+          try {
+            await AdMob.prepareRewardVideoAd({
+              adId: ADMOB_TEST_IDS.rewarded,
+              isTesting: true,
+            });
+            this.isRewardedPrepared = true;
+          } catch (fallbackErr) {
+            console.warn('AdMob test rewarded fallback failed:', fallbackErr);
+          }
+        }
       });
 
       // Preload initial interstitial & rewarded ads
@@ -174,14 +222,15 @@ class AdMobService {
 
       try {
         await AdMob.showBanner({
-          adId: ADMOB_IDS.banner,
+          adId: this.hasFallbackBannerLoaded ? ADMOB_TEST_IDS.banner : ADMOB_IDS.banner,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
           position: BannerAdPosition.BOTTOM_CENTER,
           margin: 0,
-          isTesting: false,
+          isTesting: this.hasFallbackBannerLoaded,
         });
       } catch (liveErr) {
         console.warn('Live banner failed, using test banner while AdMob activates:', liveErr);
+        this.hasFallbackBannerLoaded = true;
         await AdMob.showBanner({
           adId: ADMOB_TEST_IDS.banner,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
@@ -207,6 +256,7 @@ class AdMobService {
       await AdMob.hideBanner().catch(() => {});
       await AdMob.removeBanner().catch(() => {});
       this.isBannerShowing = false;
+      this.hasFallbackBannerLoaded = false;
       this.notifyBannerListeners(0);
     } catch (error) {
       console.warn('AdMob hideBanner warning:', error);

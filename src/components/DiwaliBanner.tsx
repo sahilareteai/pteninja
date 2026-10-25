@@ -7,6 +7,7 @@ interface DiwaliBannerProps {
   variant?: 'banner' | 'card';
   onClaim?: () => void;
   onApply?: () => void;
+  onVisibilityChange?: (visible: boolean) => void;
   className?: string;
   dismissible?: boolean;
   isApplied?: boolean;
@@ -16,6 +17,7 @@ export function DiwaliBanner({
   variant = 'banner',
   onClaim,
   onApply,
+  onVisibilityChange,
   className = '',
   dismissible = true,
   isApplied = false,
@@ -29,10 +31,13 @@ export function DiwaliBanner({
         const dismissed = sessionStorage.getItem('pte_diwali_banner_dismissed');
         if (dismissed === 'true') {
           setIsDismissed(true);
+          onVisibilityChange?.(false);
+          return;
         }
       } catch (e) {}
+      onVisibilityChange?.(true);
     }
-  }, [variant]);
+  }, [variant, onVisibilityChange]);
 
   const handleCopyCode = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -69,6 +74,7 @@ export function DiwaliBanner({
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
+    onVisibilityChange?.(false);
     try {
       sessionStorage.setItem('pte_diwali_banner_dismissed', 'true');
     } catch (err) {}
@@ -161,6 +167,9 @@ export function DiwaliBanner({
           transition={{ duration: 0.3 }}
           onClick={handleClaim}
           className={`relative z-40 w-full overflow-hidden bg-gradient-to-r from-amber-700 via-orange-600 to-amber-700 dark:from-[#5c2306] dark:via-[#7c2d12] dark:to-[#5c2306] text-white border-b border-amber-400/40 shadow-md cursor-pointer select-none ${className}`}
+          style={{
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)',
+          }}
         >
           {/* Subtle animated light effect */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-400/20 via-transparent to-transparent pointer-events-none" />

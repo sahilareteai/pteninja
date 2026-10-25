@@ -110,6 +110,13 @@ export function formatAuthError(error: any): string {
     return "Google Sign-In is being finalized for iOS. Please sign in with Email or continue with Instant Guest.";
   }
 
+  if (
+    rawMessage.toLowerCase().includes('apple') &&
+    (rawMessage.toLowerCase().includes('not enabled') || rawMessage.toLowerCase().includes('provider is not enabled'))
+  ) {
+    return "Apple Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.";
+  }
+
   if (code.includes('operation-not-allowed') || rawMessage.includes('operation-not-allowed')) {
     if (rawMessage.toLowerCase().includes('google')) {
       return "Google Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.";
