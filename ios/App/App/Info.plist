@@ -26,6 +26,17 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.352036646207-f0jfe0hfldgmsmn3r195fdcb83quv16l</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PTE Ninja requires access to your microphone to record speaking practice tasks and provide instant Pearson-standard AI scoring.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
