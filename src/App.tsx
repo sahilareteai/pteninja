@@ -1778,7 +1778,20 @@ function AppContent() {
     }
 
     if (isNativeMobile() && !isProSubscriber) {
-      adMobService.showInterstitial(false);
+      toast.info('📊 AI Scoring Complete! Your scorecard will appear right after this brief sponsor message.', {
+        id: 'interstitial-score-toast',
+        duration: 5000,
+      });
+      adMobService.showInterstitial(false, {
+        preMessage: 'score-reveal',
+        delayMs: 1400,
+        onDismiss: () => {
+          toast.success('🏆 Your AI Scorecard is ready below!', {
+            id: 'interstitial-score-toast',
+            duration: 3500,
+          });
+        }
+      });
     }
   };
 
@@ -1807,7 +1820,20 @@ function AppContent() {
     }
 
     if (isNativeMobile() && !isProSubscriber) {
-      adMobService.showInterstitial(false);
+      toast.info('📊 Mock Test Complete! Your comprehensive scorecard will appear right after this brief sponsor message.', {
+        id: 'interstitial-score-toast',
+        duration: 5000,
+      });
+      adMobService.showInterstitial(false, {
+        preMessage: 'score-reveal',
+        delayMs: 1400,
+        onDismiss: () => {
+          toast.success('🏆 Overall Score Calculated! Your mock test performance report is ready below.', {
+            id: 'interstitial-score-toast',
+            duration: 3500,
+          });
+        }
+      });
     }
     // Do NOT close the session here. The scorecard inside MockTestSession is still
     // visible. The user will dismiss it via the "Back to Dojo" button, which calls
@@ -2220,8 +2246,10 @@ function AppContent() {
 
         {/* Navigation Bar - elevated above AdMob banner ad when active */}
         <nav 
-          className="flex items-center justify-between md:justify-around px-2 md:px-4 py-3 border-t border-app-border bg-app-bg/95 backdrop-blur-xl sticky z-50 transition-all"
-          style={{ bottom: `${adBannerHeight}px` }}
+          className="shrink-0 flex items-center justify-between md:justify-around px-2 md:px-4 py-2 sm:py-3 border-t border-app-border bg-app-bg/95 backdrop-blur-xl z-40 transition-all shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
+          style={{
+            paddingBottom: adBannerHeight > 0 ? '0.5rem' : 'max(env(safe-area-inset-bottom, 0px), 0.75rem)',
+          }}
         >
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
           <NavButton active={activeTab === 'mock-tests'} onClick={() => setActiveTab('mock-tests')} icon={Trophy} label="Mock" />
@@ -2234,7 +2262,12 @@ function AppContent() {
           <NavButton active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={AlertCircle} label="FAQ" className="hidden md:flex" />
         </nav>
         {adBannerHeight > 0 && (
-          <div style={{ height: `${adBannerHeight}px` }} className="w-full shrink-0 bg-transparent pointer-events-none" />
+          <div 
+            style={{ 
+              height: `calc(${adBannerHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` 
+            }} 
+            className="w-full shrink-0 bg-transparent pointer-events-none" 
+          />
         )}
       </div>
 
@@ -5001,8 +5034,13 @@ function MockTestSession({
           animate={{ opacity: 1, scale: 1 }}
           className="bg-app-surface rounded-[2.5rem] p-8 md:p-12 border border-app-primary/20 max-w-2xl w-full text-center space-y-8 shadow-2xl"
         >
-          <div className="w-20 h-20 bg-app-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 bg-app-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-2">
             <Trophy className="text-app-primary" size={40} />
+          </div>
+          
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mx-auto mb-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Official Pearson AI Scorecard
           </div>
           
           <div>
@@ -9007,6 +9045,17 @@ function TaskModal({
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
               >
+                {/* Scorecard Ready Announcement */}
+                <div className="bg-gradient-to-r from-emerald-500/10 via-app-primary/10 to-emerald-500/10 border border-app-primary/30 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base select-none">🎯</span>
+                    <span className="font-bold text-app-text">Official AI Evaluation Scorecard</span>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-app-primary bg-app-primary/20 px-2 py-0.5 rounded-full border border-app-primary/30 shrink-0">
+                    Pearson Standard
+                  </span>
+                </div>
+
                 {/* Scoreboard */}
                 <div className="bg-app-bg rounded-3xl p-6 border border-app-primary/20">
                   {task.category === 'Answer Short Question' ? (
