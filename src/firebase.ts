@@ -1,6 +1,9 @@
 import { initializeApp, FirebaseError } from 'firebase/app';
 import { 
   getAuth,
+  initializeAuth,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
@@ -24,10 +27,30 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocFromServer, collection, getDocs, query, where, addDoc, deleteField } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { isNativeMobile } from './lib/mobile';
 
 // Initialize Firebase SDK
 export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+
+/**
+ * On native iOS / Android WKWebView containers (e.g. capacitor://localhost),
+ * Firebase Web SDK's default indexedDBLocalPersistence can hang indefinitely
+ * due to WebKit storage isolation bugs. Using browserLocalPersistence (localStorage)
+ * on mobile guarantees instant, non-blocking authentication.
+ */
+function getOrInitializeAuth() {
+  try {
+    return initializeAuth(app, {
+      persistence: isNativeMobile()
+        ? [browserLocalPersistence]
+        : [indexedDBLocalPersistence, browserLocalPersistence]
+    });
+  } catch {
+    return getAuth(app);
+  }
+}
+
+export const auth = getOrInitializeAuth();
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 

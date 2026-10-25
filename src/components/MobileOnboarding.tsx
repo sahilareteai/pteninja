@@ -13,13 +13,16 @@ import {
   Zap, 
   Mail, 
   Globe2,
+  ChevronLeft,
   ChevronRight,
   BookOpen
 } from 'lucide-react';
 import { Logo } from './Logo';
+import { isIOS } from '../lib/mobile';
 
 interface MobileOnboardingProps {
   onGoogleLogin: () => void;
+  onAppleLogin?: () => void;
   onEmailLogin: (mode?: 'signin' | 'register') => void;
   onGuestAccess: () => void;
   authError?: string | null;
@@ -28,6 +31,7 @@ interface MobileOnboardingProps {
 
 export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
   onGoogleLogin,
+  onAppleLogin,
   onEmailLogin,
   onGuestAccess,
   authError,
@@ -36,7 +40,9 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
   const [activeSlide, setActiveSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signingInProvider, setSigningInProvider] = useState<'google' | 'apple' | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const SLIDES_COUNT = 4;
   const SLIDE_DURATION = 5000; // 5 seconds per slide
@@ -62,12 +68,72 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     setActiveSlide((prev) => (prev - 1 + SLIDES_COUNT) % SLIDES_COUNT);
   };
 
+  // Touch gesture listeners engineered for iOS WKWebView & Android touch surfaces
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsPaused(true);
+    if (e.touches && e.touches[0]) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        time: Date.now()
+      };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    setIsPaused(false);
+    if (!touchStartRef.current) return;
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    const touch = e.changedTouches?.[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const elapsedTime = Date.now() - start.time;
+
+    // 1. Horizontal swipe gesture detection
+    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
+      if (deltaX < 0) {
+        handleNextSlide();
+      } else {
+        handlePrevSlide();
+      }
+      return;
+    }
+
+    // 2. Tap gesture detection (Tap left 35% to go back, tap right 65% to advance)
+    if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15 && elapsedTime < 450) {
+      const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 375;
+      if (touch.clientX < screenWidth * 0.35) {
+        handlePrevSlide();
+      } else {
+        handleNextSlide();
+      }
+    }
+  };
+
   const handleGoogleClick = async () => {
     try {
       setIsSigningIn(true);
+      setSigningInProvider('google');
       await onGoogleLogin();
     } finally {
       setIsSigningIn(false);
+      setSigningInProvider(null);
+    }
+  };
+
+  const handleAppleClick = async () => {
+    if (!onAppleLogin) return;
+    try {
+      setIsSigningIn(true);
+      setSigningInProvider('apple');
+      await onAppleLogin();
+    } finally {
+      setIsSigningIn(false);
+      setSigningInProvider(null);
     }
   };
 
@@ -92,10 +158,16 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
         {/* Story Progress Indicators */}
         <div className="flex gap-1.5 mb-3">
           {Array.from({ length: SLIDES_COUNT }).map((_, idx) => (
-            <div 
+            <button 
               key={idx}
+              type="button"
               onClick={() => setActiveSlide(idx)}
-              className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden cursor-pointer relative"
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                setActiveSlide(idx);
+              }}
+              className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden cursor-pointer relative focus:outline-none"
+              aria-label={`Jump to slide ${idx + 1}`}
             >
               <motion.div 
                 className="h-full bg-gradient-to-r from-[#45A29E] to-[#66FCF1] rounded-full"
@@ -108,7 +180,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
                   ease: 'linear' 
                 }}
               />
-            </div>
+            </button>
           ))}
         </div>
 
@@ -123,8 +195,13 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onGuestAccess}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white/90 backdrop-blur-md transition-all active:scale-95"
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              onGuestAccess();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white/90 backdrop-blur-md transition-all active:scale-95 cursor-pointer"
           >
             <span>Explore App</span>
             <ChevronRight size={14} className="text-[#66FCF1]" />
@@ -132,25 +209,46 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
         </div>
       </div>
 
-      {/* Main Interactive Animated Stage (Tap left/right to navigate, hold to pause) */}
+      {/* Main Interactive Animated Stage (Swipe left/right, tap sides, hold to pause) */}
       <div 
-        className="relative z-10 flex-1 flex flex-col justify-center px-6 py-2 touch-pan-y"
-        onTouchStart={() => setIsPaused(true)}
-        onTouchEnd={() => setIsPaused(false)}
+        className="relative z-10 flex-1 flex flex-col justify-center px-6 py-2 touch-none cursor-pointer"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         onMouseDown={() => setIsPaused(true)}
         onMouseUp={() => setIsPaused(false)}
       >
-        {/* Invisible tap areas for quick story skip */}
-        <div 
-          onClick={handlePrevSlide} 
-          className="absolute left-0 top-0 bottom-0 w-1/4 z-30 opacity-0 cursor-pointer" 
+        {/* Subtle Side Navigation Chevrons for visual affordance */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrevSlide();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            handlePrevSlide();
+          }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-black/30 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all active:scale-90"
           aria-label="Previous slide"
-        />
-        <div 
-          onClick={handleNextSlide} 
-          className="absolute right-0 top-0 bottom-0 w-1/4 z-30 opacity-0 cursor-pointer" 
+        >
+          <ChevronLeft size={18} />
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNextSlide();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            handleNextSlide();
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-black/30 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all active:scale-90"
           aria-label="Next slide"
-        />
+        >
+          <ChevronRight size={18} />
+        </button>
 
         <AnimatePresence mode="wait">
           {/* SLIDE 0: Dream to Australia, UK & Canada */}
@@ -451,7 +549,12 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           {Array.from({ length: SLIDES_COUNT }).map((_, idx) => (
             <button
               key={idx}
+              type="button"
               onClick={() => setActiveSlide(idx)}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                setActiveSlide(idx);
+              }}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 activeSlide === idx 
                   ? 'w-6 bg-[#66FCF1]' 
@@ -474,7 +577,15 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           >
             <span className="line-clamp-2">{authError}</span>
             {onClearError && (
-              <button onClick={onClearError} className="p-1 hover:text-white font-bold shrink-0 ml-2">
+              <button 
+                type="button"
+                onClick={onClearError} 
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  onClearError();
+                }}
+                className="p-1 hover:text-white font-bold shrink-0 ml-2"
+              >
                 ✕
               </button>
             )}
@@ -482,16 +593,48 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
         )}
 
         <div className="space-y-2.5 max-w-sm mx-auto">
-          {/* Primary Action: Continue with Google (World-Class Clean Look) */}
+          {/* Sign In with Apple (Required for iOS App Store & Instant Experience) */}
+          {(isIOS() || onAppleLogin) && (
+            <button
+              type="button"
+              onClick={handleAppleClick}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                handleAppleClick();
+              }}
+              disabled={isSigningIn}
+              className="w-full py-3.5 px-4 rounded-2xl bg-white text-black font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-white/5 active:scale-[0.98] transition-all disabled:opacity-70 cursor-pointer"
+            >
+              {isSigningIn && signingInProvider === 'apple' ? (
+                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4 fill-black" viewBox="0 0 170 170">
+                  <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.67-7.81-11.94-14.32-6.19-9.46-10.97-20.2-14.34-32.22-3.37-12.02-5.06-23.27-5.06-33.75 0-14.92 3.63-27.24 10.89-36.96 7.26-9.72 16.59-14.66 27.99-14.82 4.12 0 9.09 1.15 14.91 3.45 5.82 2.3 9.4 3.48 10.74 3.54 1.13 0 4.96-1.28 11.49-3.83 6.53-2.56 12.06-3.69 16.59-3.41 12.44.8 22.48 5.64 30.12 14.51-10.88 6.64-16.18 15.75-15.9 27.32.28 9.09 3.73 16.63 10.35 22.61 6.62 5.98 14.49 9.38 23.6 10.2-2.12 6.53-4.76 13.06-7.91 19.59zM119.22 31.84c0-7.39 2.66-14.42 7.98-21.09 5.32-6.67 11.95-10.59 19.89-11.75.22 1.45.33 2.76.33 3.93 0 7.39-2.77 14.53-8.31 21.42-5.54 6.89-12.18 10.74-19.92 11.55-.22-1.34-.33-2.67-.33-4.06z"/>
+                </svg>
+              )}
+              <span>Continue with Apple</span>
+            </button>
+          )}
+
+          {/* Continue with Google */}
           <button
+            type="button"
             onClick={handleGoogleClick}
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              handleGoogleClick();
+            }}
             disabled={isSigningIn}
-            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-gray-100 text-gray-900 font-extrabold text-sm flex items-center justify-center gap-3 shadow-xl shadow-white/10 active:scale-[0.98] transition-all disabled:opacity-70 cursor-pointer"
+            className={`w-full py-3.5 px-4 rounded-2xl ${
+              isIOS() 
+                ? 'bg-white/10 hover:bg-white/15 text-white border border-white/15' 
+                : 'bg-white hover:bg-gray-100 text-gray-900 shadow-xl shadow-white/10'
+            } font-extrabold text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-70 cursor-pointer`}
           >
-            {isSigningIn ? (
-              <div className="w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            {isSigningIn && signingInProvider === 'google' ? (
+              <div className={`w-5 h-5 border-2 ${isIOS() ? 'border-white' : 'border-gray-900'} border-t-transparent rounded-full animate-spin`} />
             ) : (
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -510,13 +653,18 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
                 />
               </svg>
             )}
-            <span>{isSigningIn ? 'Connecting to Google...' : 'Continue with Google'}</span>
+            <span>{isSigningIn && signingInProvider === 'google' ? 'Connecting to Google...' : 'Continue with Google'}</span>
           </button>
 
-          {/* Secondary Action: Email Sign Up / Sign In */}
+          {/* Secondary Action: Email Sign Up / Sign In & Instant Guest */}
           <div className="grid grid-cols-2 gap-2">
             <button
+              type="button"
               onClick={() => onEmailLogin('register')}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onEmailLogin('register');
+              }}
               className="py-3 px-3 rounded-2xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer"
             >
               <Mail size={15} className="text-[#66FCF1]" />
@@ -524,7 +672,12 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={onGuestAccess}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onGuestAccess();
+              }}
               className="py-3 px-3 rounded-2xl bg-gradient-to-r from-[#45A29E]/20 to-[#66FCF1]/20 hover:from-[#45A29E]/30 hover:to-[#66FCF1]/30 border border-[#45A29E]/40 text-[#66FCF1] font-bold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer"
             >
               <Sparkles size={14} className="text-yellow-400" />
@@ -535,8 +688,13 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           {/* Login prompt for existing members */}
           <div className="pt-2 text-center">
             <button
+              type="button"
               onClick={() => onEmailLogin('signin')}
-              className="text-xs text-white/60 hover:text-white transition-colors"
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onEmailLogin('signin');
+              }}
+              className="text-xs text-white/60 hover:text-white transition-colors cursor-pointer"
             >
               Already have an account? <span className="font-bold text-[#66FCF1] underline underline-offset-2">Sign In</span>
             </button>
