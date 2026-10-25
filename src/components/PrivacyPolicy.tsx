@@ -58,9 +58,9 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               <li><strong>Voice & Microphone Recordings:</strong> Audio captured during speaking practice questions (Read Aloud, Repeat Sentence, Describe Image, Re-tell Lecture, Answer Short Question). Recorded strictly on-demand.</li>
               <li><strong>Written Practice Responses:</strong> Essay submissions, text summaries, and question answers for Writing and Reading sections.</li>
               <li><strong>Study & Performance Metrics:</strong> AI score breakdowns (pronunciation, fluency, grammar, vocabulary, spelling, content), mock test results, and daily study targets.</li>
-              <li><strong>Subscription & Purchase Records:</strong> Purchase tokens, active plan duration, and renewal dates processed via <strong>Google Play In-App Billing</strong> on Android, or <strong>Stripe / Razorpay</strong> on the web. We never store raw credit card numbers.</li>
+              <li><strong>Subscription & Purchase Records:</strong> Purchase tokens, active plan duration, and renewal dates processed via <strong>Apple In-App Purchase</strong> on iOS, <strong>Google Play In-App Billing</strong> on Android, or <strong>Stripe / Razorpay</strong> on the web. We never store raw credit card numbers.</li>
               <li><strong>Technical Diagnostics:</strong> IP address (processed ephemerally for regional currency localization), device model, OS version, app version, and crash analytics.</li>
-              <li><strong>Advertising Data (Android Mobile App):</strong> Android Advertising ID (AAID) processed by Google AdMob for ad presentation.</li>
+              <li><strong>Advertising Data (Mobile App):</strong> Mobile Advertising ID processed by Google AdMob for ad presentation.</li>
             </ul>
           </section>
 
@@ -112,7 +112,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
             <ul className="list-disc pl-6 space-y-2 text-sm sm:text-base">
               <li><strong>Google Firebase & Google Cloud:</strong> Secure database storage (Firestore), cloud hosting, and user identity management.</li>
               <li><strong>Google AdMob:</strong> Mobile ad serving and rewarded video infrastructure.</li>
-              <li><strong>Google Play Billing:</strong> Secure Android in-app subscription and order processing.</li>
+              <li><strong>Apple In-App Purchase & Google Play Billing:</strong> Secure mobile in-app subscription and order processing.</li>
               <li><strong>Google Gemini AI:</strong> Automated speech and essay evaluation.</li>
               <li><strong>Stripe & Razorpay:</strong> PCI-DSS Level 1 compliant payment processing for web subscriptions.</li>
             </ul>
