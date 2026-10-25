@@ -342,7 +342,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
                     <span className="text-[11px] font-bold text-white uppercase tracking-wider">AI Speech Engine</span>
                   </div>
                   <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#45A29E]/20 text-[#66FCF1] border border-[#66FCF1]/30">
-                    Pearson 1:1 Calibrated
+                    PTE 1:1 Benchmark Calibrated
                   </span>
                 </div>
 
@@ -406,7 +406,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
                   </span>
                 </h2>
                 <p className="text-xs text-white/70 leading-relaxed max-w-xs mx-auto">
-                  Practice Read Aloud, Repeat Sentence, and Describe Image with official Pearson phoneme evaluation.
+                  Practice Read Aloud, Repeat Sentence, and Describe Image with real-time phoneme evaluation aligned to the PTE Academic rubric.
                 </p>
               </div>
             </motion.div>
@@ -427,7 +427,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-1.5">
                     <Award size={16} className="text-amber-400" />
-                    <span className="text-[11px] font-bold text-white uppercase tracking-wider">Official Mock Exam</span>
+                    <span className="text-[11px] font-bold text-white uppercase tracking-wider">Full Mock Exam</span>
                   </div>
                   <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                     Passed (79+)
@@ -468,13 +468,13 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
               {/* Title & Desc */}
               <div className="space-y-1.5 pt-1">
                 <h2 className="text-2xl font-black text-white tracking-tight leading-tight">
-                  Full Pearson Exam Simulator <br />
+                  Full PTE Academic Exam Simulator <br />
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-[#66FCF1]">
                     Real Test Conditions
                   </span>
                 </h2>
                 <p className="text-xs text-white/70 leading-relaxed max-w-xs mx-auto">
-                  Experience the exact interface, official timing algorithms, and instant diagnostic score reports.
+                  Experience the authentic interface, calibrated timing algorithms, and instant diagnostic score reports.
                 </p>
               </div>
             </motion.div>

@@ -63,6 +63,10 @@ class AdMobService {
   private hasFallbackInterstitialLoaded = false;
   private hasFallbackRewardedLoaded = false;
 
+  // Interstitial frequency cap: minimum 2 minutes (120,000ms) between impressions
+  private lastInterstitialTime = 0;
+  private readonly INTERSTITIAL_MIN_INTERVAL_MS = 120_000;
+
   /**
    * Register a callback to listen for banner height changes
    * so UI components (like bottom navigation bar) can lift above it.
@@ -97,16 +101,17 @@ class AdMobService {
       this.isInitialized = true;
       console.log('✅ AdMob SDK successfully initialized');
 
-      // Banner size listener
+      // Banner size listener: exact height with zero added gap
       AdMob.addListener(BannerAdPluginEvents.SizeChanged, (size: AdMobBannerSize) => {
         if (size && size.height > 0) {
-          this.notifyBannerListeners(Math.max(size.height, 60));
+          this.bannerHeight = size.height;
+          this.notifyBannerListeners(size.height);
         }
       });
 
       AdMob.addListener(BannerAdPluginEvents.Loaded, () => {
         this.isBannerShowing = true;
-        this.notifyBannerListeners(Math.max(this.bannerHeight || 60, 60));
+        this.notifyBannerListeners(this.bannerHeight || 50);
       });
 
       // Banner failure listener: automatically fallback to official Google test banner
@@ -208,7 +213,7 @@ class AdMobService {
     }
 
     if (this.isBannerShowing) {
-      this.notifyBannerListeners(Math.max(this.bannerHeight || 60, 60));
+      this.notifyBannerListeners(this.bannerHeight || 50);
       return;
     }
 
@@ -217,8 +222,8 @@ class AdMobService {
         await this.initialize();
       }
 
-      // Immediately lift bottom navigation so buttons are never covered
-      this.notifyBannerListeners(60);
+      // Immediately lift bottom navigation flush above banner ad
+      this.notifyBannerListeners(this.bannerHeight || 50);
 
       try {
         await AdMob.showBanner({
@@ -293,8 +298,8 @@ class AdMobService {
   }
 
   /**
-   * Displays full-screen interstitial ad (e.g. after completing a practice test).
-   * Automatically suppressed for Pro subscribers.
+   * Displays full-screen interstitial ad (e.g. after user navigates away from scorecard).
+   * Automatically suppressed for Pro subscribers and throttled to a minimum 2-minute interval.
    */
   async showInterstitial(
     isProSubscriber: boolean,
@@ -303,9 +308,19 @@ class AdMobService {
       delayMs?: number;
       onBeforeShow?: () => void;
       onDismiss?: () => void;
+      force?: boolean;
     }
   ): Promise<boolean> {
     if (!isNativeMobile() || isProSubscriber) return false;
+
+    // Enforce 2-minute frequency cap unless explicitly forced
+    const now = Date.now();
+    const timeSinceLastAd = now - this.lastInterstitialTime;
+    if (!options?.force && timeSinceLastAd < this.INTERSTITIAL_MIN_INTERVAL_MS) {
+      const remainingSec = Math.ceil((this.INTERSTITIAL_MIN_INTERVAL_MS - timeSinceLastAd) / 1000);
+      console.log(`[AdMob] Interstitial suppressed: 2-minute cooldown active (${remainingSec}s remaining)`);
+      return false;
+    }
 
     try {
       if (options?.preMessage) {
@@ -319,6 +334,7 @@ class AdMobService {
       }
 
       await AdMob.showInterstitial();
+      this.lastInterstitialTime = Date.now();
       this.isInterstitialPrepared = false;
       this.prepareInterstitial().catch(() => {});
       options?.onDismiss?.();
@@ -331,6 +347,7 @@ class AdMobService {
           isTesting: true,
         });
         await AdMob.showInterstitial();
+        this.lastInterstitialTime = Date.now();
         this.isInterstitialPrepared = false;
         options?.onDismiss?.();
         return true;

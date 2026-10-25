@@ -883,7 +883,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       `🎁 Get an Additional 20% OFF on all PTE Ninja plans!\n` +
       `Voucher Code: DIWALI20\n\n` +
       `Whether you are beginning your preparation or targeting a 79+ score for your migration or study goals, PTE Ninja equips you with:\n` +
-      `• 🎙️ Pearson-calibrated AI scoring for Speaking, Writing, Reading & Listening\n` +
+      `• 🎙️ PTE-calibrated AI scoring for Speaking, Writing, Reading & Listening\n` +
       `• 📚 5,000+ latest real exam-predicted questions and full mock tests\n` +
       `• ⚡ Instant phoneme-level pronunciation breakdown and score-boosting tips\n\n` +
       `How to claim your festive discount:\n` +
@@ -3318,7 +3318,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
                     {/* Highlights Box */}
                     <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300 space-y-1.5">
                       <div className="font-black text-amber-400 text-[10px] uppercase tracking-wider mb-1">Why Top Scorers Choose PTE Ninja:</div>
-                      <div>🎯 <strong>Pearson-Calibrated AI Scoring:</strong> Real-time phoneme-level feedback</div>
+                      <div>🎯 <strong>PTE-Calibrated AI Scoring:</strong> Real-time phoneme-level feedback</div>
                       <div>📚 <strong>5,000+ Real Exam Questions:</strong> High-frequency prediction bank</div>
                       <div>⚡ <strong>Full Mock Tests & Analytics:</strong> Instant scorecards with 79+ target tracker</div>
                     </div>
