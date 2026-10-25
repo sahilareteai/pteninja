@@ -32,7 +32,7 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { generateUserReferralCode } from '../services/promoService';
-import { isNativeMobile } from '../lib/mobile';
+import { isNativeMobile, isIOS } from '../lib/mobile';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
 import { getLocalDateStr, formatAuthError } from '../lib/utils';
@@ -60,6 +60,7 @@ interface SubscriptionContextType {
   resendEmailVerification: () => Promise<void>;
   checkEmailVerification: () => Promise<boolean>;
   googleLogin: () => Promise<void>;
+  appleLogin?: () => Promise<void>;
   quickGuestAccess: () => Promise<void>;
 }
 
@@ -482,11 +483,17 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
+      setIsAuthenticating(false);
     } catch (error: any) {
       console.error('[GoogleAuth] Login failure:', error);
-      const errMsg = error?.message || '';
+      const errMsg = error?.message || String(error || '');
       if (errMsg.toLowerCase().includes('cancel') || error?.code === '16' || error?.code === '12501') {
         setIsAuthenticating(false);
+        return;
+      }
+      if (isIOS() && (errMsg.toLowerCase().includes('not enabled') || errMsg.toLowerCase().includes('googleservice-info') || errMsg.toLowerCase().includes('configuration'))) {
+        setIsAuthenticating(false);
+        setAuthError("Google Sign-In is being finalized for iOS. Please sign in with Email or continue with Instant Guest Access.");
         return;
       }
       if (!isNativeMobile() && (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request')) {
@@ -496,6 +503,59 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         } catch (redirectErr: any) {
           console.error("Fallback redirect sign-in error:", redirectErr);
         }
+      }
+      setIsAuthenticating(false);
+      setAuthError(formatAuthError(error));
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    if (isAuthenticating) return;
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('pte_session_id', newSessionId);
+
+    try {
+      if (isNativeMobile()) {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        const res = await FirebaseAuthentication.signInWithApple();
+
+        const idToken = res.credential?.idToken;
+        if (idToken) {
+          const { OAuthProvider } = await import('firebase/auth');
+          const provider = new OAuthProvider('apple.com');
+          const credential = provider.credential({
+            idToken,
+            rawNonce: res.credential?.nonce
+          });
+          if (auth.currentUser && auth.currentUser.isAnonymous) {
+            try {
+              await linkWithCredential(auth.currentUser, credential);
+            } catch {
+              await signInWithCredential(auth, credential);
+            }
+          } else {
+            await signInWithCredential(auth, credential);
+          }
+        }
+        setShowAuthModal(false);
+        setIsAuthenticating(false);
+        return;
+      }
+
+      const { OAuthProvider } = await import('firebase/auth');
+      const provider = new OAuthProvider('apple.com');
+      await signInWithPopup(auth, provider);
+      setShowAuthModal(false);
+      setIsAuthenticating(false);
+    } catch (error: any) {
+      console.error('[AppleAuth] Login failure:', error);
+      const errMsg = error?.message || String(error || '');
+      if (errMsg.toLowerCase().includes('cancel') || error?.code === '1001' || errMsg.toLowerCase().includes('canceled')) {
+        setIsAuthenticating(false);
+        return;
       }
       setIsAuthenticating(false);
       setAuthError(formatAuthError(error));
@@ -720,7 +780,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       localStorage.setItem('pte_session_id', newSessionId);
       pendingGuestWriteRef.current = true;
-      const cred = await signInAnonymously(auth);
+
+      // Safety timeout race: Never allow signInAnonymously to freeze on mobile (WKWebView)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Guest access timeout. Connecting locally...')), 7500)
+      );
+
+      const cred: any = await Promise.race([signInAnonymously(auth), timeoutPromise]);
       const firebaseUser = cred.user;
       const userRef = doc(db, 'users', firebaseUser.uid);
       const now = new Date();
@@ -741,16 +807,53 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         goals: [],
         currentSessionId: newSessionId
       };
-      await setDoc(userRef, newUser, { merge: true });
+
+      // Non-blocking firestore sync
+      try {
+        await Promise.race([
+          setDoc(userRef, newUser, { merge: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
+        ]);
+      } catch (writeErr) {
+        console.warn('Firestore guest profile write deferred:', writeErr);
+      }
+
       pendingGuestWriteRef.current = false;
       setUser(newUser);
       setShowAuthModal(false);
       setIsAuthenticating(false);
     } catch (err: any) {
       pendingGuestWriteRef.current = false;
-      setIsAuthenticating(false);
-      console.warn("Quick guest login fallback:", err);
-      setShowGuestModal(true);
+      console.warn("Quick guest login fallback triggered:", err);
+
+      // Instant local fallback: guarantee user can explore the app without getting stuck
+      try {
+        const localUid = 'guest_' + Math.random().toString(36).substring(2, 10);
+        const now = new Date();
+        const fallbackUser: UserData = {
+          uid: localUid,
+          email: null,
+          displayName: 'Guest Ninja',
+          createdAt: now.toISOString(),
+          accessType: 'guest',
+          subscriptionStatus: 'guest',
+          signupPlatform: isNativeMobile() ? 'mobile' : 'web',
+          activityLog: [getLocalDateStr(now)],
+          completedTasks: [],
+          completedTasksDetailed: [],
+          taskScores: {},
+          favoriteWords: [],
+          schedule: [],
+          goals: [],
+          currentSessionId: localStorage.getItem('pte_session_id') || 'guest_session'
+        };
+        setUser(fallbackUser);
+        setShowAuthModal(false);
+      } catch (fallbackErr) {
+        setShowGuestModal(true);
+      } finally {
+        setIsAuthenticating(false);
+      }
     }
   };
 
@@ -956,6 +1059,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       resendEmailVerification,
       checkEmailVerification,
       googleLogin: handleGoogleLogin,
+      appleLogin: handleAppleLogin,
       quickGuestAccess: handleQuickGuestAccess
     }}>
       {children}

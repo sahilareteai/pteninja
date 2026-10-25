@@ -103,7 +103,20 @@ export function formatAuthError(error: any): string {
     return "Sign-in popup was blocked by your browser. Please allow popups to continue.";
   }
 
+  if (
+    rawMessage.toLowerCase().includes('google sign in is not enabled') ||
+    rawMessage.toLowerCase().includes('googleservice-info')
+  ) {
+    return "Google Sign-In is being finalized for iOS. Please sign in with Email or continue with Instant Guest.";
+  }
+
   if (code.includes('operation-not-allowed') || rawMessage.includes('operation-not-allowed')) {
+    if (rawMessage.toLowerCase().includes('google')) {
+      return "Google Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.";
+    }
+    if (rawMessage.toLowerCase().includes('apple')) {
+      return "Apple Sign-In is not enabled yet. Please sign in with Email or continue with Instant Guest.";
+    }
     return "SMS verification is currently unavailable for this region. You can still save your phone number.";
   }
 

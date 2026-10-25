@@ -1340,7 +1340,7 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, quickGuestAccess } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, appleLogin, quickGuestAccess } = useSubscription();
 
   const [appReadyTimeout, setAppReadyTimeout] = useState(false);
 
@@ -1886,6 +1886,7 @@ function AppContent() {
       return (
         <MobileOnboarding 
           onGoogleLogin={googleLogin}
+          onAppleLogin={appleLogin}
           onEmailLogin={(mode) => login(mode || 'register')}
           onGuestAccess={quickGuestAccess}
           authError={authError}
