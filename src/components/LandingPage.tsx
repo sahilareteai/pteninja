@@ -88,6 +88,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
   setIsDarkMode: (val: boolean) => void
 }) {
   const [activePolicy, setActivePolicy] = useState<keyof typeof POLICIES | null>(null);
+  const [isDiwaliBannerVisible, setIsDiwaliBannerVisible] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -99,7 +100,10 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text-muted font-sans selection:bg-app-primary/30 overflow-x-hidden transition-colors duration-300">
-      <DiwaliBanner onClaim={() => onLogin('register')} />
+      <DiwaliBanner
+        onClaim={() => onLogin('register')}
+        onVisibilityChange={setIsDiwaliBannerVisible}
+      />
       <ScrollNinja onClaim={() => onLogin('register')} />
       <AnimatePresence>
         {activePolicy === 'privacy' ? (
@@ -157,7 +161,12 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
       </div>
 
       {/* Navbar */}
-      <nav className="relative z-20 flex items-center justify-between px-4 sm:px-8 py-6 max-w-7xl mx-auto">
+      <nav
+        style={{
+          paddingTop: isDiwaliBannerVisible ? undefined : 'calc(env(safe-area-inset-top, 0px) + 1.5rem)',
+        }}
+        className="relative z-20 flex items-center justify-between px-4 sm:px-8 py-6 max-w-7xl mx-auto transition-all duration-200"
+      >
         <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
         <div className="flex items-center gap-2 sm:gap-6 bg-app-surface/50 backdrop-blur-md px-4 py-2 rounded-full border border-app-border">
           <button 
