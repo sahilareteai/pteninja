@@ -137,6 +137,16 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     initCurrency();
   }, []);
 
+  // Safety fallback: Never keep the user stuck on the loading screen for more than 2.5s on cold boot.
+  // If Firebase Auth restoration or Firestore takes longer, release the screen so user sees onboarding/app.
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      setIsAuthenticating(false);
+    }, 2500);
+    return () => clearTimeout(safetyTimer);
+  }, []);
+
   useEffect(() => {
     let unsubDoc: (() => void) | null = null;
 

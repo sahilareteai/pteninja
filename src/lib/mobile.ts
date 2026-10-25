@@ -80,8 +80,10 @@ export const initMobileApp = async () => {
   try {
     // 2. Configure Status Bar
     await StatusBar.setStyle({ style: Style.Dark });
-    await StatusBar.setBackgroundColor({ color: '#0B0C10' });
-    await StatusBar.setOverlaysWebView({ overlay: false });
+    if (isAndroid()) {
+      await StatusBar.setBackgroundColor({ color: '#0B0C10' });
+      await StatusBar.setOverlaysWebView({ overlay: false });
+    }
   } catch (err) {
     console.warn('[MobileApp] StatusBar setup warning:', err);
   }
