@@ -1435,20 +1435,30 @@ function AppContent() {
     });
   }, []);
 
+  // Screen categories where bottom banner ads are enabled (practice question banks)
+  // Excluded: 'dashboard' (Home), 'mock-tests', 'roadmap', and utility/account screens
+  const BANNER_PRACTICE_TABS = new Set(['speaking', 'writing', 'reading', 'listening', 'vocabulary']);
+
   useEffect(() => {
-    if (isNativeMobile()) {
-      if (isProSubscriber) {
-        adMobService.hideBanner();
-      } else {
-        // While user is in a full-screen practice session or mock test, hide bottom banner
-        if (activeMockTest || selectedTask) {
-          adMobService.hideBanner();
-        } else {
-          adMobService.showBanner(false);
-        }
-      }
+    if (!isNativeMobile()) return;
+
+    if (isProSubscriber) {
+      adMobService.hideBanner();
+      return;
     }
-  }, [isProSubscriber, activeMockTest, selectedTask]);
+
+    // Do NOT show banner on home screen (dashboard), during mock tests, during active tasks,
+    // or on full-page utility screens (roadmap, profile, settings, faq, terms, privacy).
+    // Only display on designated question practice tabs.
+    const isEligibleTab = BANNER_PRACTICE_TABS.has(activeTab);
+    const isInSession = !!(activeMockTest || selectedTask);
+
+    if (isEligibleTab && !isInSession) {
+      adMobService.showBanner(false);
+    } else {
+      adMobService.hideBanner();
+    }
+  }, [isProSubscriber, activeTab, activeMockTest, selectedTask]);
 
   useEffect(() => {
     if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
@@ -1776,23 +1786,6 @@ function AppContent() {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
-
-    if (isNativeMobile() && !isProSubscriber) {
-      toast.info('📊 AI Scoring Complete! Your scorecard will appear right after this brief sponsor message.', {
-        id: 'interstitial-score-toast',
-        duration: 5000,
-      });
-      adMobService.showInterstitial(false, {
-        preMessage: 'score-reveal',
-        delayMs: 1400,
-        onDismiss: () => {
-          toast.success('🏆 Your AI Scorecard is ready below!', {
-            id: 'interstitial-score-toast',
-            duration: 3500,
-          });
-        }
-      });
-    }
   };
 
   const handleMockTestFinish = async (result: MockTestResult) => {
@@ -1817,23 +1810,6 @@ function AppContent() {
       toast.success(`Mock Test Completed! Overall Score: ${result.overallScore}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-    }
-
-    if (isNativeMobile() && !isProSubscriber) {
-      toast.info('📊 Mock Test Complete! Your comprehensive scorecard will appear right after this brief sponsor message.', {
-        id: 'interstitial-score-toast',
-        duration: 5000,
-      });
-      adMobService.showInterstitial(false, {
-        preMessage: 'score-reveal',
-        delayMs: 1400,
-        onDismiss: () => {
-          toast.success('🏆 Overall Score Calculated! Your mock test performance report is ready below.', {
-            id: 'interstitial-score-toast',
-            duration: 3500,
-          });
-        }
-      });
     }
     // Do NOT close the session here. The scorecard inside MockTestSession is still
     // visible. The user will dismiss it via the "Back to Dojo" button, which calls
@@ -2248,7 +2224,7 @@ function AppContent() {
         <nav 
           className="shrink-0 flex items-center justify-between md:justify-around px-2 md:px-4 py-2 sm:py-3 border-t border-app-border bg-app-bg/95 backdrop-blur-xl z-40 transition-all shadow-[0_-4px_20px_rgba(0,0,0,0.3)]"
           style={{
-            paddingBottom: adBannerHeight > 0 ? '0.5rem' : 'max(env(safe-area-inset-bottom, 0px), 0.75rem)',
+            paddingBottom: adBannerHeight > 0 ? '0.25rem' : 'max(env(safe-area-inset-bottom, 0px), 0.75rem)',
           }}
         >
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={BarChart3} label="Dojo" />
@@ -2264,7 +2240,7 @@ function AppContent() {
         {adBannerHeight > 0 && (
           <div 
             style={{ 
-              height: `calc(${adBannerHeight}px + env(safe-area-inset-bottom, 0px) + 16px)` 
+              height: `calc(${adBannerHeight}px + env(safe-area-inset-bottom, 0px))` 
             }} 
             className="w-full shrink-0 bg-transparent pointer-events-none" 
           />
@@ -5040,7 +5016,7 @@ function MockTestSession({
           
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mx-auto mb-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Official Pearson AI Scorecard
+            PTE Academic AI Scorecard
           </div>
           
           <div>
@@ -5069,7 +5045,10 @@ function MockTestSession({
           </div>
 
           <button 
-            onClick={onClose}
+            onClick={() => {
+              adMobService.showInterstitial(false);
+              onClose();
+            }}
             className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20"
           >
             Back to Dojo
@@ -8144,7 +8123,16 @@ function TaskModal({
             )}
             <div className="w-px h-6 bg-app-primary/20 mx-2" />
             {!isMockTest && (
-              <button onClick={onClose} className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted">
+              <button 
+                onClick={() => {
+                  if (phase === 'feedback') {
+                    adMobService.showInterstitial(false);
+                  }
+                  onClose();
+                }} 
+                className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted"
+                aria-label="Close task modal"
+              >
                 <X size={20} />
               </button>
             )}
@@ -9049,10 +9037,10 @@ function TaskModal({
                 <div className="bg-gradient-to-r from-emerald-500/10 via-app-primary/10 to-emerald-500/10 border border-app-primary/30 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs shadow-sm">
                   <div className="flex items-center gap-2">
                     <span className="text-base select-none">🎯</span>
-                    <span className="font-bold text-app-text">Official AI Evaluation Scorecard</span>
+                    <span className="font-bold text-app-text">AI Diagnostic Scorecard</span>
                   </div>
                   <span className="text-[10px] font-black uppercase tracking-wider text-app-primary bg-app-primary/20 px-2 py-0.5 rounded-full border border-app-primary/30 shrink-0">
-                    Pearson Standard
+                    PTE 10–90 Scale
                   </span>
                 </div>
 
@@ -9409,8 +9397,10 @@ function TaskModal({
                       if (isMockTest) {
                         onFinish(feedback.overall);
                       } else if (onNext) {
+                        adMobService.showInterstitial(false);
                         onNext();
                       } else {
+                        adMobService.showInterstitial(false);
                         onClose();
                       }
                     }}

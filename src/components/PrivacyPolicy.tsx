@@ -88,7 +88,7 @@ export function PrivacyPolicy({ onBack }: { onBack: () => void }) {
               4. Artificial Intelligence (AI) Scoring
             </h2>
             <p>
-              PTE Ninja utilizes Google Gemini AI models to generate Pearson-aligned scoring. Audio clips and text transcripts are transmitted via TLS 1.3 encryption and analyzed in real-time to generate your detailed diagnostic scorecard.
+              PTE Ninja utilizes Google Gemini AI models to generate PTE-aligned scoring. Audio clips and text transcripts are transmitted via TLS 1.3 encryption and analyzed in real-time to generate your detailed diagnostic scorecard.
             </p>
           </section>
 

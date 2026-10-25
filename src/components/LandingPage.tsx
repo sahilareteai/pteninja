@@ -651,7 +651,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               },
               {
                 q: "How does PTE Ninja's AI scoring engine work?",
-                a: "PTE Ninja uses advanced speech recognition and natural language processing models to replicate Pearson's official scoring algorithms. It provides real-time scoring on Oral Fluency, Pronunciation, Grammar, Content, and Vocabulary."
+                a: "PTE Ninja uses advanced speech recognition and natural language processing models calibrated to the PTE Academic scoring rubric. It provides real-time scoring on Oral Fluency, Pronunciation, Grammar, Content, and Vocabulary."
               },
               {
                 q: "How are the mock tests structured?",
