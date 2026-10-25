@@ -65,35 +65,6 @@ platform :ios do
       keychain_password: keychain_password
     )
 
-    # Ensure Bundle ID exists on Apple Developer Portal
-    begin
-      UI.message("Checking if Bundle ID 'com.pteninja.app' exists...")
-      b_id = Spaceship::ConnectAPI::BundleId.find(identifier: "com.pteninja.app")
-      if b_id.nil?
-        UI.message("Registering Bundle ID 'com.pteninja.app' via App Store Connect API...")
-        Spaceship::ConnectAPI.post_bundle_id(
-          name: "PTE Ninja",
-          identifier: "com.pteninja.app",
-          platform: "IOS"
-        )
-        UI.message("Successfully registered 'com.pteninja.app' on Apple Developer Portal!")
-      else
-        UI.message("Found existing Bundle ID: #{b_id.identifier}")
-      end
-    rescue => e
-      UI.message("Notice during Bundle ID registration: #{e.message}")
-      begin
-        produce(
-          api_key: api_key,
-          app_identifier: "com.pteninja.app",
-          app_name: "PTE Ninja",
-          skip_itc: true
-        )
-      rescue => err2
-        UI.message("Notice from produce: #{err2.message}")
-      end
-    end
-
     # Automatically generate or fetch App Store provisioning profile
     get_provisioning_profile(
       api_key: api_key,
