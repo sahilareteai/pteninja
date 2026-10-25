@@ -1,0 +1,17 @@
+Welcome Apple Review Team!
+
+Thank you for reviewing PTE Ninja - AI Exam Prep. Here is everything you need to test the application:
+
+1. SIGN-IN & DEMO ACCESS:
+• You can test all features immediately by tapping "Continue as Guest" / "Instant Guest" on the initial welcome screen. No credentials, SMS verification, or credit card are required.
+• Alternatively, you may sign in with Apple, sign in with Google, or sign up with any test email address.
+
+2. HARDWARE & PERMISSIONS:
+• Microphone (NSMicrophoneUsageDescription): Used solely during Speaking practice tasks (Read Aloud, Repeat Sentence, etc.) to record user speech for real-time pronunciation and fluency evaluation.
+• Speech Recognition: AI models analyze audio transcripts to calculate diagnostic scores on the PTE 10–90 scale.
+
+3. ADVERTISING & IN-APP PURCHASES:
+• The app uses Google AdMob for banner and interstitial ads for free users.
+• All core features and practice question banks are accessible without requiring a purchase.
+
+If you have any questions or require anything further during review, please contact us at support@pteninja.com.

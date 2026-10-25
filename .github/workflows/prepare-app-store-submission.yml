@@ -1,0 +1,41 @@
+name: Prepare App Store Submission (Without Submitting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Build Number to attach (default 14)'
+        required: true
+        default: '14'
+      app_version:
+        description: 'App Version (default 1.0)'
+        required: true
+        default: '1.0'
+
+jobs:
+  prepare-submission:
+    name: Upload Metadata & Screenshots to App Store Connect
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 💎 Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: 🚀 Install Fastlane
+        run: gem install fastlane --no-document
+
+      - name: 📤 Deliver Metadata & Screenshots to App Store Connect
+        working-directory: ios/App
+        env:
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          BUILD_NUMBER: ${{ github.event.inputs.build_number || '14' }}
+          APP_VERSION: ${{ github.event.inputs.app_version || '1.0' }}
+        run: fastlane ios prepare_submission
