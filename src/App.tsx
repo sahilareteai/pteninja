@@ -2267,17 +2267,27 @@ function AppContent() {
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
               className="relative w-full max-w-sm sm:max-w-md h-full bg-app-bg border-l border-app-border shadow-2xl flex flex-col z-10"
             >
-              <div className="flex items-center justify-between p-5 border-b border-app-border bg-app-surface/30">
+              <div 
+                style={{
+                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.875rem)',
+                }}
+                className="flex items-center justify-between px-5 pb-4 border-b border-app-border bg-app-surface/30 shrink-0"
+              >
                 <Logo showText={true} size={36} />
                 <button 
                   onClick={() => setIsMenuOpen(false)} 
-                  className="p-2 hover:bg-app-surface rounded-full text-app-text-muted hover:text-app-text transition-colors"
+                  className="p-2.5 hover:bg-app-surface rounded-full text-app-text-muted hover:text-app-text transition-colors active:scale-95 touch-manipulation"
                   aria-label="Close menu"
                 >
-                  <X size={22} />
+                  <X size={24} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-5 space-y-1.5">
+              <div 
+                style={{
+                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)',
+                }}
+                className="flex-1 overflow-y-auto p-5 space-y-1.5"
+              >
                 <MenuLink icon={BarChart3} label="Dojo" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Trophy} label="Mock Tests" active={activeTab === 'mock-tests'} onClick={() => { setActiveTab('mock-tests'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Book} label="Vocabulary" active={activeTab === 'vocabulary'} onClick={() => { setActiveTab('vocabulary'); setIsMenuOpen(false); }} />
