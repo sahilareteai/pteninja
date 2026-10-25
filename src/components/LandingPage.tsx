@@ -7,6 +7,7 @@ import { TermsOfService } from './TermsOfService';
 import { POLICIES } from '../data/policies';
 import { ScrollNinja } from './ScrollNinja';
 import { DiwaliBanner } from './DiwaliBanner';
+import { isNativeMobile, isIOS } from '../lib/mobile';
 
 export function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
   const policy = POLICIES[type];
@@ -770,7 +771,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
 
             <div className="flex items-center gap-6">
               <span className="text-[10px] font-bold text-app-primary uppercase tracking-widest flex items-center gap-2">
-                <Shield size={12} /> Secure Payments with Razorpay
+                <Shield size={12} /> {isNativeMobile() ? (isIOS() ? 'Secure In-App Purchases via App Store' : 'Secure In-App Purchases via Google Play') : 'Secure Payments with Razorpay'}
               </span>
             </div>
           </div>

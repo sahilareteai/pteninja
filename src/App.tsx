@@ -75,7 +75,8 @@ import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile, isAndroid, isIOS } from './lib/mobile';
-import { purchasePlaySubscription } from './lib/playBilling';
+import { purchasePlaySubscription, restorePlayPurchases } from './lib/playBilling';
+import { purchaseAppleSubscription, restoreApplePurchases, APPLE_SUBSCRIPTION_MAP } from './lib/appleBilling';
 import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
@@ -2602,6 +2603,67 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     }
   };
 
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const handleRestorePurchases = async () => {
+    if (!user?.uid) {
+      toast.info("Please sign in first so we can restore your subscription to your account.");
+      return;
+    }
+
+    setIsRestoring(true);
+    try {
+      if (isIOS()) {
+        const purchases = await restoreApplePurchases();
+        if (purchases && purchases.length > 0) {
+          const latest = purchases[0];
+          let matchedPlan: any = SUBSCRIPTION_PLANS.find(p => p.id === 'annual');
+          for (const [pId, cfg] of Object.entries(APPLE_SUBSCRIPTION_MAP)) {
+            if (cfg.productId === latest.productId) {
+              const found = SUBSCRIPTION_PLANS.find(p => p.id === pId);
+              if (found) matchedPlan = found;
+              break;
+            }
+          }
+          if (matchedPlan) {
+            setSelectedPlan(matchedPlan);
+          }
+
+          const periodEnd = latest.expirationTime 
+            ? Math.floor(latest.expirationTime / 1000)
+            : Math.floor((Date.now() + 30 * 24 * 60 * 60 * 1000) / 1000);
+
+          const orderId = latest.orderId || latest.originalTransactionId || `apple_restored_${Date.now()}`;
+          await handlePaymentSuccess({
+            subscriptionId: orderId,
+            periodEnd: periodEnd,
+          });
+          toast.success("Active Apple App Store subscription restored successfully!");
+          return;
+        } else {
+          toast.info("No active subscriptions found for this Apple ID.");
+        }
+      } else if (isAndroid()) {
+        const purchases = await restorePlayPurchases();
+        if (purchases && purchases.length > 0) {
+          const latest = purchases[0];
+          await handlePaymentSuccess({
+            subscriptionId: latest.orderId || latest.purchaseToken || `gp_restored_${Date.now()}`,
+          });
+          toast.success("Active Google Play subscription restored successfully!");
+          return;
+        } else {
+          toast.info("No active subscriptions found for this Google Play account.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Restore purchases error:", err);
+      toast.error(err?.message || "Failed to restore purchases. Please try again.");
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleSelectPlan = async (plan: any) => {
     if (!user?.email && !emailInput) {
       setShowEmailPrompt(true);
@@ -2613,6 +2675,44 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     setIsProcessing(true);
     
     try {
+      // On native iOS mobile app, trigger Apple StoreKit 2 In-App Purchase directly
+      if (isNativeMobile() && isIOS()) {
+        try {
+          const purchaseResult = await purchaseAppleSubscription(plan.id);
+
+          if (purchaseResult.canceled) {
+            setIsProcessing(false);
+            return;
+          }
+
+          if (purchaseResult.success) {
+            const durationDays = plan.durationDays || 30;
+            const periodEnd = purchaseResult.expirationTime 
+              ? Math.floor(purchaseResult.expirationTime / 1000)
+              : Math.floor((Date.now() + durationDays * 24 * 60 * 60 * 1000) / 1000);
+
+            const orderId = purchaseResult.orderId || purchaseResult.originalTransactionId || `apple_${plan.id}_${Date.now()}`;
+            setPendingSubscriptionId(orderId);
+            setPendingPeriodEnd(periodEnd);
+
+            await handlePaymentSuccess({
+              subscriptionId: orderId,
+              periodEnd: periodEnd,
+            });
+            return;
+          } else if (purchaseResult.pending) {
+            toast.info("Your subscription purchase is pending with Apple. Access will activate once confirmed.", { duration: 6000 });
+            return;
+          }
+        } catch (appleErr: any) {
+          console.error("Apple StoreKit purchase error:", appleErr);
+          toast.error(appleErr?.message || "Apple purchase was not completed. Please try again.");
+        } finally {
+          setIsProcessing(false);
+        }
+        return;
+      }
+
       // On native Android mobile app, trigger Google Play In-App Billing directly
       if (isNativeMobile() && isAndroid()) {
         try {
@@ -2645,6 +2745,13 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         } finally {
           setIsProcessing(false);
         }
+        return;
+      }
+
+      // Native mobile apps MUST NOT proceed to web checkout (strict App Store / Play Store compliance)
+      if (isNativeMobile()) {
+        toast.error("In-app purchases are only available on Android or iOS native builds.");
+        setIsProcessing(false);
         return;
       }
 
@@ -3122,7 +3229,22 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 })}
               </div>
 
-              {!isAnnualUser && (
+              {/* Native Mobile In-App Purchase: Restore Purchases button (Mandatory for App Store review) */}
+              {isNativeMobile() && (
+                <div className="w-full flex items-center justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={handleRestorePurchases}
+                    disabled={isRestoring}
+                    className="inline-flex items-center gap-1.5 text-xs text-app-text-muted hover:text-app-primary font-bold py-2 px-4 rounded-xl border border-app-primary/20 bg-app-bg/50 hover:bg-app-primary/10 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={isRestoring ? "animate-spin text-app-primary" : ""} />
+                    <span>{isRestoring ? "Restoring Purchases..." : "Restore Purchases"}</span>
+                  </button>
+                </div>
+              )}
+
+              {!isAnnualUser && !isNativeMobile() && (
                 <div className="w-full max-w-md mx-auto space-y-2">
                   {appliedPromo && (
                     <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
@@ -3327,6 +3449,18 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 <span>Have an account with active access? Sign In</span>
               </button>
             )}
+          </div>
+
+          {/* Legal Disclaimers & EULA links (Mandatory for Apple App Store Guideline 3.1.2) */}
+          <div className="w-full mt-3 pt-3 border-t border-app-primary/10 text-center space-y-1 text-[11px] text-app-text-muted/70">
+            <p>
+              Auto-renewable subscriptions renew automatically unless canceled at least 24 hours before the end of the active period. Manage or cancel anytime in your account settings.
+            </p>
+            <div className="flex items-center justify-center gap-3 text-app-primary font-medium">
+              <a href="https://pteninja.com/terms" target="_blank" rel="noopener noreferrer" className="hover:underline">Terms of Use (EULA)</a>
+              <span>•</span>
+              <a href="https://pteninja.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:underline">Privacy Policy</a>
+            </div>
           </div>
         </div>
       </motion.div>
