@@ -100,13 +100,13 @@ class AdMobService {
       // Banner size listener
       AdMob.addListener(BannerAdPluginEvents.SizeChanged, (size: AdMobBannerSize) => {
         if (size && size.height > 0) {
-          this.notifyBannerListeners(size.height);
+          this.notifyBannerListeners(Math.max(size.height, 60));
         }
       });
 
       AdMob.addListener(BannerAdPluginEvents.Loaded, () => {
         this.isBannerShowing = true;
-        this.notifyBannerListeners(this.bannerHeight || 56);
+        this.notifyBannerListeners(Math.max(this.bannerHeight || 60, 60));
       });
 
       // Banner failure listener: automatically fallback to official Google test banner
@@ -208,7 +208,7 @@ class AdMobService {
     }
 
     if (this.isBannerShowing) {
-      this.notifyBannerListeners(this.bannerHeight || 56);
+      this.notifyBannerListeners(Math.max(this.bannerHeight || 60, 60));
       return;
     }
 
@@ -218,7 +218,7 @@ class AdMobService {
       }
 
       // Immediately lift bottom navigation so buttons are never covered
-      this.notifyBannerListeners(56);
+      this.notifyBannerListeners(60);
 
       try {
         await AdMob.showBanner({
@@ -296,10 +296,24 @@ class AdMobService {
    * Displays full-screen interstitial ad (e.g. after completing a practice test).
    * Automatically suppressed for Pro subscribers.
    */
-  async showInterstitial(isProSubscriber: boolean): Promise<boolean> {
+  async showInterstitial(
+    isProSubscriber: boolean,
+    options?: {
+      preMessage?: string;
+      delayMs?: number;
+      onBeforeShow?: () => void;
+      onDismiss?: () => void;
+    }
+  ): Promise<boolean> {
     if (!isNativeMobile() || isProSubscriber) return false;
 
     try {
+      if (options?.preMessage) {
+        options.onBeforeShow?.();
+        const delay = options.delayMs ?? 1400;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
       if (!this.isInterstitialPrepared) {
         await this.prepareInterstitial();
       }
@@ -307,6 +321,7 @@ class AdMobService {
       await AdMob.showInterstitial();
       this.isInterstitialPrepared = false;
       this.prepareInterstitial().catch(() => {});
+      options?.onDismiss?.();
       return true;
     } catch (error) {
       console.warn('AdMob showInterstitial error, attempting fallback:', error);
@@ -317,9 +332,11 @@ class AdMobService {
         });
         await AdMob.showInterstitial();
         this.isInterstitialPrepared = false;
+        options?.onDismiss?.();
         return true;
       } catch (testErr) {
         console.warn('Fallback interstitial failed:', testErr);
+        options?.onDismiss?.();
         return false;
       }
     }
