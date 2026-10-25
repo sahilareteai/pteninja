@@ -1342,6 +1342,16 @@ function AppContent() {
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
   const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, quickGuestAccess } = useSubscription();
 
+  const [appReadyTimeout, setAppReadyTimeout] = useState(false);
+
+  useEffect(() => {
+    // Safety release: Never leave user stuck on "Entering the Dojo" longer than 2.5s on mobile cold start
+    const timer = setTimeout(() => {
+      setAppReadyTimeout(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Remaining days in the current trial / guest period (recalculated whenever user changes)
   const trialRemainingDays = React.useMemo(() => {
     if (!user) return 0;
@@ -1819,7 +1829,7 @@ function AppContent() {
     }
   };
 
-  if (loading) {
+  if (loading && !appReadyTimeout) {
     return (
       <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center relative overflow-hidden">
         {/* Background Glows */}

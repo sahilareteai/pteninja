@@ -9,18 +9,18 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   ios: {
-    contentInset: 'always',
+    contentInset: 'never',
     preferredContentMode: 'mobile',
-    scheme: 'PTE Ninja',
+    backgroundColor: '#0B0C10',
   },
   plugins: {
     FirebaseAuthentication: {
-      skipNativeAuth: false,
+      skipNativeAuth: true,
       providers: ['google.com'],
     },
     SplashScreen: {
-      launchShowDuration: 2000,
-      launchAutoHide: false,
+      launchShowDuration: 1500,
+      launchAutoHide: true,
       backgroundColor: '#0B0C10',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
