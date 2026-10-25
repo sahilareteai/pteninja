@@ -7,6 +7,15 @@ on:
         description: 'Build Number (leave blank to use GitHub run number)'
         required: false
         default: ''
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'ios/**'
+      - 'package.json'
+      - '.github/workflows/ios-testflight.yml'
 
 concurrency:
   group: "ios-testflight"
