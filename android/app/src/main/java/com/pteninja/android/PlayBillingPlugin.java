@@ -202,11 +202,16 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
 
                         List<ProductDetails.PricingPhase> phases = firstOffer.getPricingPhases().getPricingPhaseList();
                         if (!phases.isEmpty()) {
-                            ProductDetails.PricingPhase phase = phases.get(0);
-                            item.put("formattedPrice", phase.getFormattedPrice());
-                            item.put("priceAmountMicros", phase.getPriceAmountMicros());
-                            item.put("priceCurrencyCode", phase.getPriceCurrencyCode());
-                            item.put("billingPeriod", phase.getBillingPeriod());
+                            ProductDetails.PricingPhase currentPhase = phases.get(0);
+                            item.put("formattedPrice", currentPhase.getFormattedPrice());
+                            item.put("priceAmountMicros", currentPhase.getPriceAmountMicros());
+                            item.put("priceCurrencyCode", currentPhase.getPriceCurrencyCode());
+                            item.put("billingPeriod", currentPhase.getBillingPeriod());
+                            if (phases.size() > 1) {
+                                ProductDetails.PricingPhase recurringPhase = phases.get(phases.size() - 1);
+                                item.put("recurringFormattedPrice", recurringPhase.getFormattedPrice());
+                                item.put("hasOffer", true);
+                            }
                         }
                     }
                     result.put(item);

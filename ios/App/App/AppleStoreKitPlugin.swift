@@ -122,6 +122,10 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                     if let subscription = product.subscription {
                         item["billingPeriodUnit"] = "\(subscription.subscriptionPeriod.unit)"
                         item["billingPeriodValue"] = subscription.subscriptionPeriod.value
+                        if let intro = subscription.introductoryOffer {
+                            item["introductoryPrice"] = intro.displayPrice
+                            item["hasIntroductoryOffer"] = true
+                        }
                     }
                     result.append(item)
                 }
