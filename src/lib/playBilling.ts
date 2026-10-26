@@ -11,6 +11,8 @@ export interface PlayBillingProduct {
   priceAmountMicros?: number;
   priceCurrencyCode?: string;
   billingPeriod?: string;
+  recurringFormattedPrice?: string;
+  hasOffer?: boolean;
 }
 
 export interface PurchaseResult {

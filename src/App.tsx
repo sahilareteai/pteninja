@@ -75,8 +75,8 @@ import { TermsOfService } from './components/TermsOfService';
 import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile, isAndroid, isIOS } from './lib/mobile';
-import { purchasePlaySubscription, restorePlayPurchases } from './lib/playBilling';
-import { purchaseAppleSubscription, restoreApplePurchases, APPLE_SUBSCRIPTION_MAP } from './lib/appleBilling';
+import { purchasePlaySubscription, restorePlayPurchases, queryPlayProducts, PLAY_SUBSCRIPTION_MAP } from './lib/playBilling';
+import { purchaseAppleSubscription, restoreApplePurchases, queryAppleProducts, APPLE_SUBSCRIPTION_MAP } from './lib/appleBilling';
 import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
@@ -2531,9 +2531,66 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
-  // Auto-apply pending referral code if available and none currently applied (skip if already annual)
+  // Native store prices (queried directly from Apple StoreKit 2 or Google Play Billing)
+  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string }>>({});
+  const [isLoadingStorePrices, setIsLoadingStorePrices] = useState(isNativeMobile());
+
   useEffect(() => {
-    if (isAnnualUser) return;
+    if (!isNativeMobile()) return;
+    let isCancelled = false;
+
+    const fetchStorePrices = async () => {
+      setIsLoadingStorePrices(true);
+      try {
+        if (isIOS()) {
+          const appleProds = await queryAppleProducts();
+          if (!isCancelled && appleProds && appleProds.length > 0) {
+            const priceMap: Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string }> = {};
+            appleProds.forEach(p => {
+              for (const [planId, cfg] of Object.entries(APPLE_SUBSCRIPTION_MAP)) {
+                if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
+                  priceMap[planId] = {
+                    formattedPrice: p.formattedPrice,
+                    price: p.price,
+                    introductoryPrice: p.introductoryPrice
+                  };
+                }
+              }
+            });
+            setNativeStorePrices(priceMap);
+          }
+        } else if (isAndroid()) {
+          const playProds = await queryPlayProducts();
+          if (!isCancelled && playProds && playProds.length > 0) {
+            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string }> = {};
+            playProds.forEach(p => {
+              for (const [planId, cfg] of Object.entries(PLAY_SUBSCRIPTION_MAP)) {
+                if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
+                  priceMap[planId] = {
+                    formattedPrice: p.formattedPrice,
+                    price: p.priceAmountMicros ? p.priceAmountMicros / 1000000 : undefined,
+                    recurringFormattedPrice: p.recurringFormattedPrice
+                  };
+                }
+              }
+            });
+            setNativeStorePrices(priceMap);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query native store prices:', err);
+      } finally {
+        if (!isCancelled) setIsLoadingStorePrices(false);
+      }
+    };
+
+    fetchStorePrices();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // Auto-apply pending referral code if available and none currently applied (skip if already annual or on mobile)
+  useEffect(() => {
+    if (isAnnualUser || isNativeMobile()) return;
     const applyPendingReferral = async () => {
       try {
         const pendingRef = localStorage.getItem('pte_pending_referral');
@@ -3087,8 +3144,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           ) : !selectedPlan ? (
             <>
-              {/* Diwali Festive 20% Voucher Card - only shown if user does not already have an active Annual plan */}
-              {!isAnnualUser && (
+              {/* Diwali Festive 20% Voucher Card - only shown on web if user does not already have an active Annual plan */}
+              {!isAnnualUser && !isNativeMobile() && (
                 <DiwaliBanner
                   variant="card"
                   className="w-full mb-3"
@@ -3102,6 +3159,23 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     }
                   }}
                 />
+              )}
+
+              {/* On native mobile, display official store assurance banner */}
+              {isNativeMobile() && (
+                <div className="w-full mb-3 p-3.5 rounded-2xl bg-app-primary/10 border border-app-primary/20 flex items-center justify-between gap-3 text-left">
+                  <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="text-emerald-400 shrink-0" size={20} />
+                    <div>
+                      <p className="text-xs font-bold text-app-text">
+                        {isIOS() ? 'Official Apple App Store Subscriptions' : 'Official Google Play In-App Billing'}
+                      </p>
+                      <p className="text-[11px] text-app-text-muted">
+                        Live verified prices directly from your {isIOS() ? 'Apple ID' : 'Google Play account'}. Cancel or restore anytime.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
 
               <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.4)]">
@@ -3180,9 +3254,24 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       
                       <div className="flex flex-col items-center">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-app-text-muted/40 line-through font-medium">{formatPrice(plan.originalPrice)}</span>
+                          <span className="text-sm text-app-text-muted/40 line-through font-medium">
+                            {isNativeMobile() && nativeStorePrices[plan.id]?.price ? (
+                              (() => {
+                                const np = nativeStorePrices[plan.id];
+                                const sym = np.formattedPrice.replace(/[0-9.,\s]/g, '') || '$';
+                                const orig = Math.round(np.price! * (plan.originalPrice / plan.price));
+                                return `${sym}${orig}`;
+                              })()
+                            ) : (
+                              formatPrice(plan.originalPrice)
+                            )}
+                          </span>
                           <div className="flex flex-col items-center">
-                            {appliedPromo ? (
+                            {isNativeMobile() ? (
+                              <span className="text-2xl sm:text-3xl font-bold text-app-accent">
+                                {nativeStorePrices[plan.id]?.formattedPrice || (isLoadingStorePrices ? '...' : formatPrice(plan.price))}
+                              </span>
+                            ) : appliedPromo ? (
                               <>
                                 <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>
                                 <span className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(plan.price, appliedPromo.discountPercent))}</span>
@@ -3193,6 +3282,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                           </div>
                         </div>
                         <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
+                        {isNativeMobile() && nativeStorePrices[plan.id]?.introductoryPrice && (
+                          <span className="text-[10px] font-bold text-emerald-400 mt-1">
+                            Intro Offer: {nativeStorePrices[plan.id].introductoryPrice}
+                          </span>
+                        )}
+                        {isNativeMobile() && nativeStorePrices[plan.id]?.recurringFormattedPrice && (
+                          <span className="text-[10px] text-app-text-muted/70 mt-0.5">
+                            then {nativeStorePrices[plan.id].recurringFormattedPrice}/{plan.interval}
+                          </span>
+                        )}
                       </div>
 
                       <ul className="text-xs text-app-text-muted space-y-2 text-left w-full">

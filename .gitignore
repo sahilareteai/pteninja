@@ -11,3 +11,4 @@ firebase-applet-config.json
 *backup*.json
 *auth*.json
 backups/
+release_builds/

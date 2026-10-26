@@ -9,6 +9,8 @@ export interface AppleProduct {
   price?: number;
   billingPeriodUnit?: string;
   billingPeriodValue?: number;
+  introductoryPrice?: string;
+  hasIntroductoryOffer?: boolean;
 }
 
 export interface ApplePurchaseResult {
