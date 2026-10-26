@@ -4,6 +4,7 @@ import {
   initializeAuth,
   browserLocalPersistence,
   indexedDBLocalPersistence,
+  browserPopupRedirectResolver,
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
@@ -33,18 +34,19 @@ import { isNativeMobile } from './lib/mobile';
 export const app = initializeApp(firebaseConfig);
 
 /**
- * On native iOS / Android WKWebView containers (e.g. capacitor://localhost),
- * Firebase Web SDK's default indexedDBLocalPersistence can hang indefinitely
- * due to WebKit storage isolation bugs. Using browserLocalPersistence (localStorage)
- * on mobile guarantees instant, non-blocking authentication.
+ * On web, getAuth(app) provides full browser popup and redirect resolver support for Google Sign-In.
+ * On native iOS / Android mobile WKWebView containers, using browserLocalPersistence (localStorage)
+ * with browserPopupRedirectResolver guarantees non-blocking auth without WebKit indexedDB isolation hangs.
  */
 function getOrInitializeAuth() {
   try {
-    return initializeAuth(app, {
-      persistence: isNativeMobile()
-        ? [browserLocalPersistence]
-        : [indexedDBLocalPersistence, browserLocalPersistence]
-    });
+    if (isNativeMobile()) {
+      return initializeAuth(app, {
+        persistence: [browserLocalPersistence],
+        popupRedirectResolver: browserPopupRedirectResolver
+      });
+    }
+    return getAuth(app);
   } catch {
     return getAuth(app);
   }
