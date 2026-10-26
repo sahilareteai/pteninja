@@ -2532,7 +2532,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
   // Native store prices (queried directly from Apple StoreKit 2 or Google Play Billing)
-  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string }>>({});
+  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string; offerId?: string }>>({});
   const [isLoadingStorePrices, setIsLoadingStorePrices] = useState(isNativeMobile());
 
   useEffect(() => {
@@ -2562,14 +2562,15 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         } else if (isAndroid()) {
           const playProds = await queryPlayProducts();
           if (!isCancelled && playProds && playProds.length > 0) {
-            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string }> = {};
+            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string; offerId?: string }> = {};
             playProds.forEach(p => {
               for (const [planId, cfg] of Object.entries(PLAY_SUBSCRIPTION_MAP)) {
                 if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
                   priceMap[planId] = {
                     formattedPrice: p.formattedPrice,
                     price: p.priceAmountMicros ? p.priceAmountMicros / 1000000 : undefined,
-                    recurringFormattedPrice: p.recurringFormattedPrice
+                    recurringFormattedPrice: p.recurringFormattedPrice,
+                    offerId: p.offerId
                   };
                 }
               }
@@ -2777,7 +2778,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       // On native Android mobile app, trigger Google Play In-App Billing directly
       if (isNativeMobile() && isAndroid()) {
         try {
-          const purchaseResult = await purchasePlaySubscription(plan.id);
+          const purchaseResult = await purchasePlaySubscription(plan.id, nativeStorePrices[plan.id]?.offerId);
 
           if (purchaseResult.canceled) {
             setIsProcessing(false);
@@ -3283,9 +3284,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                           </span>
                           <div className="flex flex-col items-center">
                             {isNativeMobile() ? (
-                              <span className="text-2xl sm:text-3xl font-bold text-app-accent">
-                                {nativeStorePrices[plan.id]?.formattedPrice || (isLoadingStorePrices ? '...' : formatPrice(plan.price))}
-                              </span>
+                              <>
+                                {nativeStorePrices[plan.id]?.recurringFormattedPrice && (
+                                  <span className="text-xs text-app-text-muted/40 line-through font-medium">
+                                    {nativeStorePrices[plan.id].recurringFormattedPrice}
+                                  </span>
+                                )}
+                                <span className="text-2xl sm:text-3xl font-bold text-app-accent">
+                                  {nativeStorePrices[plan.id]?.formattedPrice || (isLoadingStorePrices ? '...' : formatPrice(plan.price))}
+                                </span>
+                              </>
                             ) : appliedPromo ? (
                               <>
                                 <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>

@@ -6,6 +6,7 @@ export interface PlayBillingProduct {
   title: string;
   description: string;
   basePlanId?: string;
+  offerId?: string;
   offerToken?: string;
   formattedPrice?: string;
   priceAmountMicros?: number;
@@ -27,7 +28,7 @@ export interface PurchaseResult {
 }
 
 export interface PlayBillingPluginInterface {
-  purchase(options: { productId: string; basePlanId?: string }): Promise<PurchaseResult>;
+  purchase(options: { productId: string; basePlanId?: string; offerId?: string }): Promise<PurchaseResult>;
   queryProductDetails(options: { productIds: string[] }): Promise<{ products: PlayBillingProduct[] }>;
   restorePurchases(): Promise<{ purchases: PurchaseResult[] }>;
 }
@@ -57,9 +58,9 @@ export const PLAY_SUBSCRIPTION_MAP: Record<string, { productId: string; basePlan
 };
 
 /**
- * Initiates Google Play in-app purchase for the specified plan ID.
+ * Initiates Google Play in-app purchase for the specified plan ID, optionally targeting a specific offer.
  */
-export async function purchasePlaySubscription(planId: string): Promise<PurchaseResult> {
+export async function purchasePlaySubscription(planId: string, offerId?: string): Promise<PurchaseResult> {
   if (!isNativeMobile() || !isAndroid()) {
     throw new Error('Google Play In-App Billing is only available on native Android devices.');
   }
@@ -73,6 +74,7 @@ export async function purchasePlaySubscription(planId: string): Promise<Purchase
   return await NativePlayBilling.purchase({
     productId: config.productId,
     basePlanId: config.basePlanId,
+    offerId: offerId,
   });
 }
 
