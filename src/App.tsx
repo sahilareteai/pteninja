@@ -7355,10 +7355,9 @@ function TaskModal({
   // Always-current ref to handleFinish so the RAF silence-detection can call it
   const handleFinishRef = useRef<(() => void) | null>(null);
 
-  const needsBeep = task.section === 'listening' || 
-                   task.category === 'Repeat Sentence' || 
-                   task.category === 'Answer Short Question' || 
-                   task.category === 'Write from Dictation';
+  // Pre-audio beeps are only needed for speaking tasks before mic recording starts (handled in startRecording).
+  // Standard listening tasks (Multiple Choice, Fill in the Blanks, Summarize Spoken Text, etc.) never have a beep before audio.
+  const needsBeep = false;
   const [hasAudioError, setHasAudioError] = useState(false);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [userInput, setUserInput] = useState('');
@@ -7504,7 +7503,7 @@ function TaskModal({
     } else if (task.category === 'Summarize Spoken Text') {
       initialTime = 12;
     } else if (task.section === 'listening' && task.hasAudio) {
-      initialTime = 1; // Reduced from 7 to 1 for near-instant start
+      initialTime = 7; // Pearson PTE standard listening countdown: 7s
     } else if (task.hasAudio) {
       initialTime = 0;
     } else if (task.prepTime === 0 || task.section === 'reading') {
@@ -7523,6 +7522,11 @@ function TaskModal({
       initialTime = task.prepTime ?? 35;
     }
     setTimeLeft(initialTime);
+
+    // Ensure audio pre-fetch begins immediately on task change/mount
+    if (task.hasAudio) {
+      preFetchAudio(task);
+    }
 
     // Shuffle paragraphs for Re-order tasks
     if (task.category === 'Re-order Paragraphs' && task.paragraphs) {
@@ -7582,7 +7586,10 @@ function TaskModal({
 
       const speakFallback = (text: string) => {
         if (typeof window === 'undefined' || !window.speechSynthesis) {
-          handleAudioEnd();
+          console.warn("[Audio] SpeechSynthesis not available in this environment");
+          setHasAudioError(true);
+          setIsAudioPlaying(false);
+          setIsPreparingAudio(false);
           return;
         }
         
@@ -7606,6 +7613,7 @@ function TaskModal({
           console.log("[Audio] Browser TTS started");
           setIsAudioPlaying(true);
           setIsPreparingAudio(false);
+          setHasAudioError(false);
         };
         
         utterance.onend = () => {
@@ -7615,7 +7623,9 @@ function TaskModal({
         
         utterance.onerror = (err) => {
           console.error("[Audio] Browser TTS error:", err);
-          handleAudioEnd();
+          setHasAudioError(true);
+          setIsAudioPlaying(false);
+          setIsPreparingAudio(false);
         };
         
         window.speechSynthesis.speak(utterance);
@@ -7630,7 +7640,7 @@ function TaskModal({
 
           // --- HIGH-PERFORMANCE AUDIOBUFFER LOGIC ---
           if (globalAudioCache[task.id]) {
-            console.log("[Audio] Using global cache for task ${task.id}");
+            console.log(`[Audio] Using global cache for task ${task.id}`);
             const cached = globalAudioCache[task.id];
             
             const ctx = getAudioContext();
@@ -7681,6 +7691,7 @@ function TaskModal({
           // the cache and make the on-demand call unnecessary entirely.
           if (preFetchInFlight[task.id]) {
             console.log("[Audio] Background prefetch in-flight, awaiting before on-demand generation...");
+            setIsPreparingAudio(true);
             await preFetchInFlight[task.id].catch(() => {});
             if (isCancelled) return;
             // If the prefetch succeeded the cache is now populated — re-enter from top.
@@ -8888,7 +8899,7 @@ function TaskModal({
               )}
 
               {/* Audio Controls (For non-Read Aloud/Repeat Sentence/Retell Lecture/Summarize Group Discussion tasks) */}
-              {task.category !== 'Read Aloud' && task.category !== 'Repeat Sentence' && task.category !== 'Retell Lecture' && task.category !== 'Summarize Group Discussion' && (phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
+              {task.category !== 'Read Aloud' && task.category !== 'Repeat Sentence' && task.category !== 'Retell Lecture' && task.category !== 'Summarize Group Discussion' && (hasAudioError || phase === 'audio' || (phase === 'prep' && (task.section === 'speaking' || task.section === 'listening' || task.hasAudio)) || (phase === 'recording' && task.section === 'speaking')) && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -8901,9 +8912,12 @@ function TaskModal({
                       </span>
                       <span className={cn(
                         "font-bold text-base",
+                        hasAudioError ? "text-red-500" :
                         (phase === 'prep' || (phase === 'audio' && !isAudioPlaying)) ? "text-red-500" : "text-app-primary"
                       )}>
-                        {phase === 'prep' ? (
+                        {hasAudioError ? (
+                          'Audio Failed to Load'
+                        ) : phase === 'prep' ? (
                           `Beginning in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
                           isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
@@ -8914,7 +8928,20 @@ function TaskModal({
                     </div>
                     <div className="flex items-center gap-6 pt-2">
                       {/* Control Button — hidden while audio is being prepared or during post-audio transition */}
-                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying) && (
+                      {hasAudioError ? (
+                        <button
+                          onClick={() => {
+                            setHasAudioError(false);
+                            setAudioRetryCount(c => c + 1);
+                            setPhase('audio');
+                          }}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-semibold flex items-center gap-2 text-sm shadow transition-all shrink-0"
+                          title="Retry audio"
+                        >
+                          <RotateCcw size={16} />
+                          <span>Retry Audio</span>
+                        </button>
+                      ) : !isPreparingAudio && !(phase === 'audio' && !isAudioPlaying) && (
                         <button 
                           onClick={() => {
                             if (phase === 'prep') {
@@ -8951,7 +8978,11 @@ function TaskModal({
 
                       <div className="flex-1 overflow-hidden">
                         {/* Spinner when preparing or audio loading, wave when active, progress bar otherwise */}
-                        {(isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
+                        {hasAudioError ? (
+                          <p className="text-sm text-gray-500">
+                            The audio stream could not be loaded. Tap "Retry Audio" to reload.
+                          </p>
+                        ) : (isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
                           <div className="w-full h-12 flex items-center justify-center">
                             <Loader2 size={28} className="text-blue-400 animate-spin" />
                           </div>

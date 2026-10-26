@@ -95,11 +95,9 @@ const TRANSIENT_RETRY_BASE_MS = 1000;
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
 
 
-// TTS model. gemini-2.5-flash-preview-tts is the dedicated TTS model available on both
-// the Gemini Developer API and Vertex AI (Express Mode and service-account backends).
-// Use VERTEX_AI_LOCATION=global in your environment if calling via a service-account
-// key, as TTS preview models require the global endpoint on Vertex AI.
-const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+// TTS model. gemini-2.0-flash is the GA multimodal model with native audio output
+// support across both the Gemini Developer API and Vertex AI.
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.0-flash";
 
 interface ServerKeyState {
   client: GoogleGenAI;
@@ -4115,8 +4113,8 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     }
 
     let response: any = null;
-    // 1. Primary try: gemini-2.5-flash-preview-tts for Gemini Developer API keys;
-    // for Vertex AI keys (billed accounts), use gemini-2.0-flash which has native audio output and full GA availability.
+    // 1. Primary try: gemini-2.0-flash (native GA audio modality)
+    // 2. Fallback: gemini-2.5-flash-preview-tts
     try {
       response = await serverCallGemini(
         {
@@ -4132,10 +4130,10 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
         "gemini-2.0-flash",
       );
     } catch (primaryErr: any) {
-      console.warn(`[TTS] Primary TTS call failed (${primaryErr.message}) — attempting fallback with gemini-2.0-flash.`);
+      console.warn(`[TTS] Primary TTS call failed (${primaryErr.message}) — attempting fallback with gemini-2.5-flash-preview-tts.`);
       response = await serverCallGemini(
         {
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-flash-preview-tts",
           contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],

@@ -728,13 +728,23 @@ describe("POST /api/check-email-availability", () => {
 
 // ─── Support Chat endpoint ─────────────────────────────────────────────────────
 describe("POST /api/support-chat", () => {
+  let savedGroqKey: string | undefined;
+
   beforeEach(() => {
+    savedGroqKey = process.env.GROQ_API_KEY;
+    delete process.env.GROQ_API_KEY;
     mockGenerateContent.mockReset();
     mockGetApps.mockReturnValue([{}]); // so getAdminApp returns truthy
     mockFirestoreDocSet.mockReset();
     for (const k of serverGeminiKeys) {
       k.exhaustedUntil = 0;
       k.consecutiveExhaustions = 0;
+    }
+  });
+
+  afterEach(() => {
+    if (savedGroqKey !== undefined) {
+      process.env.GROQ_API_KEY = savedGroqKey;
     }
   });
 
