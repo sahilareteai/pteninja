@@ -55,6 +55,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── AdMob / IAB app-ads.txt & ads.txt Verification ──────────────────────────
+const ADS_TXT_CONTENT = "google.com, pub-9025413323620577, DIRECT, f08c47fec0942fa0\n";
+app.get(["/app-ads.txt", "/ads.txt", "/api/app-ads.txt", "/api/ads.txt"], (_req, res) => {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.status(200).send(ADS_TXT_CONTENT);
+});
+
 // DPDP/GDPR Compliance: Global Rate Limiter for all public endpoints
 const publicApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

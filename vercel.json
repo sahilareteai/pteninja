@@ -8,6 +8,14 @@
   ],
   "headers": [
     {
+      "source": "/(app-)?ads.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },
@@ -31,6 +39,7 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/app-ads.txt", "destination": "/app-ads.txt" },
     { "source": "/ads.txt", "destination": "/ads.txt" },
     { "source": "/robots.txt", "destination": "/robots.txt" },
     { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
@@ -38,6 +47,6 @@
     { "source": "/terms.html", "destination": "/terms.html" },
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/((?!ads\\.txt|robots\\.txt|sitemap\\.xml|privacy\\.html|terms\\.html|privacy|terms|.*\\.).*)", "destination": "/index.html" }
+    { "source": "/((?!app-ads\\.txt|ads\\.txt|robots\\.txt|sitemap\\.xml|privacy\\.html|terms\\.html|privacy|terms|.*\\.).*)", "destination": "/index.html" }
   ]
 }

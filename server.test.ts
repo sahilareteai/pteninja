@@ -1017,4 +1017,21 @@ describe("POST /api/verify-razorpay-payment", () => {
   });
 });
 
+// ─── AdMob / IAB app-ads.txt verification ─────────────────────────────────────
+describe("GET /app-ads.txt & /ads.txt", () => {
+  it("serves app-ads.txt with correct Content-Type and AdMob publisher record", async () => {
+    const res = await request(app).get("/app-ads.txt");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.text).toContain("google.com, pub-9025413323620577, DIRECT, f08c47fec0942fa0");
+  });
+
+  it("serves ads.txt with correct Content-Type and AdMob publisher record", async () => {
+    const res = await request(app).get("/ads.txt");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.text).toContain("google.com, pub-9025413323620577, DIRECT, f08c47fec0942fa0");
+  });
+});
+
 
