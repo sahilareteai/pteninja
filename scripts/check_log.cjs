@@ -15,10 +15,19 @@ try {
     console.log(`- ${r.name} (#${r.id}) Status: ${r.status}, Conclusion: ${r.conclusion}`);
   }
 
-  console.log(`\nInspecting job #121444373477...`);
-  const log = execSync(`curl.exe -s -L -H "Authorization: Bearer ${token}" "https://api.github.com/repos/sahilareteai/pteninja/actions/jobs/121444373477/logs"`).toString();
-  const lines = log.split('\n');
-  console.log(lines.slice(-150, -20).join('\n'));
+  const currentRun = runs[0];
+  console.log(`\nInspecting ${currentRun.name} (#${currentRun.id}): Status: ${currentRun.status}`);
+  const jobsJson = execSync(`curl.exe -s -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/sahilareteai/pteninja/actions/runs/${currentRun.id}/jobs"`).toString();
+  const jobs = JSON.parse(jobsJson).jobs;
+  for (const j of jobs) {
+    console.log(`Job: ${j.name} (Status: ${j.status})`);
+    if (j.conclusion === 'failure') {
+      console.log('Fetching logs for job #' + j.id + '...');
+      const log = execSync(`curl.exe -s -L -H "Authorization: Bearer ${token}" "https://api.github.com/repos/sahilareteai/pteninja/actions/jobs/${j.id}/logs"`).toString();
+      const lines = log.split('\n');
+      console.log(lines.slice(-60).join('\n'));
+    }
+  }
 } catch (e) {
   console.error(e.message);
 }
