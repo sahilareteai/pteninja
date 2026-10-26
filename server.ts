@@ -4085,6 +4085,11 @@ const geminiProxyLimiter = rateLimit({
   message: { error: "Too many AI requests. Please try again later." },
 });
 
+// In-memory cache for generated TTS audio to save quotas on repeated listening questions
+const ttsMemoryCache = new Map<string, { audio: string; timestamp: number }>();
+const TTS_CACHE_MAX_ENTRIES = 1000;
+const TTS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
   const authResult = await requireAuth(req, res);
   if (!authResult) return;
@@ -4102,21 +4107,46 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     if (safeText.length === 0) {
       return res.status(400).json({ error: "text content is required." });
     }
-    const response = await serverCallGemini(
-      {
-        model: TTS_MODEL,
-        contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+
+    const cacheKey = safeText.toLowerCase().replace(/\s+/g, " ");
+    const cached = ttsMemoryCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < TTS_CACHE_TTL_MS)) {
+      return res.json({ audio: cached.audio, cached: true });
+    }
+
+    let response: any = null;
+    // 1. Primary try: gemini-2.5-flash-preview-tts for Gemini Developer API keys;
+    // for Vertex AI keys (billed accounts), use gemini-2.0-flash which has native audio output and full GA availability.
+    try {
+      response = await serverCallGemini(
+        {
+          model: TTS_MODEL,
+          contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+          },
         },
-      },
-      serverTTSGeminiKeys,
-      "ttsKeys",
-      // TTS_MODEL (gemini-2.5-flash-preview-tts) is the dedicated TTS model available on
-      // both the Gemini Developer API and Vertex AI. Both backends share the same model name.
-      TTS_MODEL,
-    );
+        serverTTSGeminiKeys,
+        "ttsKeys",
+        "gemini-2.0-flash",
+      );
+    } catch (primaryErr: any) {
+      console.warn(`[TTS] Primary TTS call failed (${primaryErr.message}) — attempting fallback with gemini-2.0-flash.`);
+      response = await serverCallGemini(
+        {
+          model: "gemini-2.0-flash",
+          contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+          },
+        },
+        serverTTSGeminiKeys,
+        "ttsKeys",
+        "gemini-2.0-flash",
+      );
+    }
 
     const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64) {
@@ -4124,6 +4154,13 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
       console.error(`[TTS] No audio data in response. finishReason=${finishReason}`);
       return res.status(500).json({ error: "No audio data returned from AI." });
     }
+
+    if (ttsMemoryCache.size >= TTS_CACHE_MAX_ENTRIES) {
+      const oldestKey = ttsMemoryCache.keys().next().value;
+      if (oldestKey) ttsMemoryCache.delete(oldestKey);
+    }
+    ttsMemoryCache.set(cacheKey, { audio: base64, timestamp: Date.now() });
+
     res.json({ audio: base64 });
   } catch (error: any) {
     if (error.message === "GEMINI_QUOTA_EXCEEDED") {

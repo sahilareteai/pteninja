@@ -2542,7 +2542,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
   // Native store prices (queried directly from Apple StoreKit 2 or Google Play Billing)
-  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string; offerId?: string; offers?: any[] }>>({});
+  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string; offerId?: string; offers?: any[]; productId?: string; basePlanId?: string }>>({});
   const [isLoadingStorePrices, setIsLoadingStorePrices] = useState(isNativeMobile());
 
   useEffect(() => {
@@ -2555,11 +2555,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         if (isIOS()) {
           const appleProds = await queryAppleProducts();
           if (!isCancelled && appleProds && appleProds.length > 0) {
-            const priceMap: Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string }> = {};
+            const priceMap: Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; productId?: string }> = {};
             appleProds.forEach(p => {
               for (const [planId, cfg] of Object.entries(APPLE_SUBSCRIPTION_MAP)) {
                 if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
                   priceMap[planId] = {
+                    productId: p.productId,
                     formattedPrice: p.formattedPrice,
                     price: p.price,
                     introductoryPrice: p.introductoryPrice
@@ -2572,20 +2573,107 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         } else if (isAndroid()) {
           const playProds = await queryPlayProducts();
           if (!isCancelled && playProds && playProds.length > 0) {
-            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string; offerId?: string; offers?: any[] }> = {};
+            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string; offerId?: string; offers?: any[]; productId?: string; basePlanId?: string }> = {};
+
+            interface PlayCandidate {
+              productId: string;
+              basePlanId?: string;
+              billingPeriod?: string;
+              price: number;
+              formattedPrice: string;
+              recurringFormattedPrice?: string;
+              offerId?: string;
+              offers?: any[];
+              inferredCadence?: 'weekly' | 'monthly' | 'quarterly' | 'annual';
+            }
+
+            const candidates: PlayCandidate[] = [];
+
             playProds.forEach(p => {
-              for (const [planId, cfg] of Object.entries(PLAY_SUBSCRIPTION_MAP)) {
-                if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
-                  priceMap[planId] = {
-                    formattedPrice: p.formattedPrice,
-                    price: p.priceAmountMicros ? p.priceAmountMicros / 1000000 : undefined,
-                    recurringFormattedPrice: p.recurringFormattedPrice,
-                    offerId: p.offerId,
-                    offers: p.offers,
-                  };
-                }
+              const basePrice = p.priceAmountMicros ? p.priceAmountMicros / 1000000 : 0;
+              const period = (p.billingPeriod || '').toUpperCase();
+              const bPlanId = (p.basePlanId || '').toLowerCase();
+              const pId = (p.productId || '').toLowerCase();
+
+              // Infer cadence from billingPeriod (ISO-8601), basePlanId, or productId
+              let cadence: 'weekly' | 'monthly' | 'quarterly' | 'annual' | undefined;
+              if (period.includes('1W') || period.includes('7D') || bPlanId.includes('week') || pId.includes('week')) {
+                cadence = 'weekly';
+              } else if (period.includes('3M') || period.includes('90D') || bPlanId.includes('quarter') || pId.includes('quarter')) {
+                cadence = 'quarterly';
+              } else if (period.includes('1M') || period.includes('30D') || bPlanId.includes('month') || pId.includes('month')) {
+                cadence = 'monthly';
+              } else if (period.includes('1Y') || period.includes('12M') || period.includes('365D') || bPlanId.includes('annual') || bPlanId.includes('year') || pId.includes('annual') || pId.includes('year')) {
+                cadence = 'annual';
+              }
+
+              if (p.formattedPrice && basePrice > 0) {
+                candidates.push({
+                  productId: p.productId,
+                  basePlanId: p.basePlanId,
+                  billingPeriod: p.billingPeriod,
+                  price: basePrice,
+                  formattedPrice: p.formattedPrice,
+                  recurringFormattedPrice: p.recurringFormattedPrice,
+                  offerId: p.offerId,
+                  offers: p.offers,
+                  inferredCadence: cadence,
+                });
               }
             });
+
+            // Initial mapping by inferred cadence or product ID config
+            const planKeys: ('weekly' | 'monthly' | 'quarterly' | 'annual')[] = ['weekly', 'monthly', 'quarterly', 'annual'];
+            for (const key of planKeys) {
+              const match = candidates.find(c => c.inferredCadence === key) 
+                || candidates.find(c => c.productId.toLowerCase() === PLAY_SUBSCRIPTION_MAP[key]?.productId.toLowerCase());
+              if (match) {
+                priceMap[key] = {
+                  productId: match.productId,
+                  basePlanId: match.basePlanId,
+                  formattedPrice: match.formattedPrice,
+                  price: match.price,
+                  recurringFormattedPrice: match.recurringFormattedPrice,
+                  offerId: match.offerId,
+                  offers: match.offers,
+                };
+              }
+            }
+
+            // Price Inversion & Sanity Guard:
+            // Weekly cost should NEVER exceed annual or monthly in standard SaaS subscriptions.
+            // If store prices are inverted (e.g. Weekly = ₹2,657 and Annual = ₹793),
+            // sort available distinct candidates ascending so:
+            // lowest price -> weekly, second lowest -> monthly, third -> quarterly, highest -> annual.
+            const weeklyP = priceMap['weekly']?.price ?? 0;
+            const monthlyP = priceMap['monthly']?.price ?? 0;
+            const annualP = priceMap['annual']?.price ?? 0;
+            const quarterlyP = priceMap['quarterly']?.price ?? 0;
+
+            const isInverted = (weeklyP > 0 && annualP > 0 && weeklyP > annualP)
+              || (weeklyP > 0 && monthlyP > 0 && weeklyP > monthlyP)
+              || (quarterlyP > 0 && annualP > 0 && quarterlyP > annualP);
+
+            if (isInverted && candidates.length >= 2) {
+              console.warn('[PlayBilling] Detected inverted subscription pricing from Google Play. Rectifying plan mapping by price hierarchy...', {
+                weeklyP, monthlyP, quarterlyP, annualP
+              });
+              const sorted = [...candidates].sort((a, b) => a.price - b.price);
+              
+              if (sorted.length >= 4) {
+                priceMap['weekly'] = { ...sorted[0] };
+                priceMap['monthly'] = { ...sorted[1] };
+                priceMap['quarterly'] = { ...sorted[2] };
+                priceMap['annual'] = { ...sorted[3] };
+              } else if (sorted.length >= 2) {
+                priceMap['weekly'] = { ...sorted[0] };
+                priceMap['annual'] = { ...sorted[sorted.length - 1] };
+                if (sorted.length >= 3) {
+                  priceMap['monthly'] = { ...sorted[1] };
+                }
+              }
+            }
+
             setNativeStorePrices(priceMap);
           }
         }
@@ -2742,7 +2830,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       return;
     }
 
-    setSelectedPlan(plan);
+    if (!isNativeMobile()) {
+      setSelectedPlan(plan);
+    }
     setIsProcessing(true);
     
     try {
@@ -2753,6 +2843,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
           if (purchaseResult.canceled) {
             setIsProcessing(false);
+            if (isNativeMobile()) setSelectedPlan(null);
             return;
           }
 
@@ -2782,6 +2873,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           toast.error(appleErr?.message || "Apple purchase was not completed. Please try again.");
         } finally {
           setIsProcessing(false);
+          if (isNativeMobile()) setSelectedPlan(null);
         }
         return;
       }
@@ -2812,6 +2904,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           }
 
           const purchaseResult = await purchasePlaySubscription(plan.id, {
+            productId: planStoreData?.productId,
+            basePlanId: planStoreData?.basePlanId,
             offerId: targetOfferId,
             promoCode: promoCode,
             hasPromo: hasPromo,
@@ -2819,6 +2913,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
           if (purchaseResult.canceled) {
             setIsProcessing(false);
+            if (isNativeMobile()) setSelectedPlan(null);
             return;
           }
 
@@ -2845,6 +2940,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           toast.error(playErr?.message || "Google Play purchase was not completed. Please try again.");
         } finally {
           setIsProcessing(false);
+          if (isNativeMobile()) setSelectedPlan(null);
         }
         return;
       }
@@ -2853,6 +2949,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       if (isNativeMobile()) {
         toast.error("In-app purchases are only available on Android or iOS native builds.");
         setIsProcessing(false);
+        setSelectedPlan(null);
         return;
       }
 
@@ -3195,7 +3292,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 Or <button onClick={onLogin} className="text-app-primary hover:underline">Sign in with Google</button> for a faster experience.
               </p>
             </div>
-          ) : !selectedPlan ? (
+          ) : (!selectedPlan || isNativeMobile()) ? (
             <>
               {/* Diwali Festive 20% Voucher Card - shown if user does not already have an active Annual plan */}
               {!isAnnualUser && (
@@ -7693,16 +7790,7 @@ function TaskModal({
               }
             }
           } catch (prepErr: any) {
-            console.error("[Audio] Audio preparation failed or timed out:", prepErr);
-            if (prepErr.message === "GEMINI_QUOTA_EXCEEDED" || prepErr.message?.includes("429")) {
-              toast.error("AI Quota Exceeded", {
-                description: "Switching to browser-native voice for this task."
-              });
-            } else if (prepErr.message?.includes("timed out")) {
-              toast.error("Audio Generation Slow", {
-                description: "Switching to browser-native voice to avoid delay."
-              });
-            }
+            console.warn("[Audio] Audio preparation failed or timed out, seamlessly falling back to native voice synthesis:", prepErr);
             base64 = null;
           } finally {
             if (safetyTimeout) clearTimeout(safetyTimeout);

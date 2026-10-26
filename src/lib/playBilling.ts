@@ -78,7 +78,7 @@ export const PLAY_SUBSCRIPTION_MAP: Record<string, { productId: string; basePlan
 
 export type PurchaseSubscriptionOptions = 
   | string 
-  | { offerId?: string; promoCode?: string; hasPromo?: boolean };
+  | { productId?: string; basePlanId?: string; offerId?: string; promoCode?: string; hasPromo?: boolean };
 
 /**
  * Initiates Google Play checkout for the specified plan ID, optionally targeting a promo or specific offer.
@@ -93,17 +93,19 @@ export async function purchasePlaySubscription(
 
   const normalizedPlanId = planId.toLowerCase().trim();
   const config = PLAY_SUBSCRIPTION_MAP[normalizedPlanId];
-  if (!config) {
+  if (!config && !(typeof options === 'object' && options?.productId)) {
     throw new Error(`No Google Play product mapped for plan: ${planId}`);
   }
 
+  const explicitProductId = typeof options === 'object' ? options?.productId : undefined;
+  const explicitBasePlanId = typeof options === 'object' ? options?.basePlanId : undefined;
   const offerId = typeof options === 'string' ? options : options?.offerId;
   const promoCode = typeof options === 'object' ? options?.promoCode : undefined;
   const hasPromo = typeof options === 'object' ? options?.hasPromo : Boolean(offerId);
 
   return await NativePlayBilling.purchase({
-    productId: config.productId,
-    basePlanId: config.basePlanId,
+    productId: explicitProductId || config?.productId || planId,
+    basePlanId: explicitBasePlanId || config?.basePlanId,
     offerId: offerId,
     promoCode: promoCode,
     hasPromo: hasPromo,
