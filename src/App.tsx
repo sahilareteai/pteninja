@@ -2588,9 +2588,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     return () => { isCancelled = true; };
   }, []);
 
-  // Auto-apply pending referral code if available and none currently applied (skip if already annual or on mobile)
+  // Auto-apply pending referral code if available and none currently applied (skip if already annual)
   useEffect(() => {
-    if (isAnnualUser || isNativeMobile()) return;
+    if (isAnnualUser) return;
     const applyPendingReferral = async () => {
       try {
         const pendingRef = localStorage.getItem('pte_pending_referral');
@@ -2600,7 +2600,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             setAppliedPromo(res.promo);
             setPromoInput(res.promo.code);
             if (res.promo.isReferral) {
-              toast.info(`Referral code ${res.promo.code} applied! 10% discount included.`, { id: 'diwali-promo-toast' });
+              toast.info(`Referral code ${res.promo.code} applied! +7 Days Free Access & 10 Extra AI Credits included upon subscribing.`, { id: 'diwali-promo-toast' });
             } else {
               toast.info(`Voucher code ${res.promo.code} applied! Additional ${res.promo.discountPercent}% discount included.`, { id: 'diwali-promo-toast' });
             }
@@ -2620,7 +2620,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
     if (res.promo) {
       setAppliedPromo(res.promo);
       if (res.promo.isReferral) {
-        toast.success(`Referral code applied! 10% discount from ${res.promo.referrerName || 'your friend'}.`);
+        toast.success(`🎉 Referral code applied! You'll receive +7 Days Free Access & 10 Extra AI Credits from ${res.promo.referrerName || 'your friend'} upon subscribing!`);
+      } else if (isNativeMobile()) {
+        toast.info(`Promo code ${res.promo.code} recognized! Store discounts can be redeemed directly via ${isIOS() ? 'App Store' : 'Google Play'}.`);
       } else {
         toast.success(`Promo code ${res.promo.code} applied! ${res.promo.discountPercent}% off.`);
       }
@@ -2744,9 +2746,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
           if (purchaseResult.success) {
             const durationDays = plan.durationDays || 30;
+            const bonusDays = appliedPromo?.isReferral ? (appliedPromo.bonusDays || 7) : 0;
+            const totalDays = durationDays + bonusDays;
             const periodEnd = purchaseResult.expirationTime 
-              ? Math.floor(purchaseResult.expirationTime / 1000)
-              : Math.floor((Date.now() + durationDays * 24 * 60 * 60 * 1000) / 1000);
+              ? Math.floor(purchaseResult.expirationTime / 1000) + (bonusDays * 24 * 60 * 60)
+              : Math.floor((Date.now() + totalDays * 24 * 60 * 60 * 1000) / 1000);
 
             const orderId = purchaseResult.orderId || purchaseResult.originalTransactionId || `apple_${plan.id}_${Date.now()}`;
             setPendingSubscriptionId(orderId);
@@ -2782,7 +2786,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
           if (purchaseResult.success) {
             const durationDays = plan.durationDays || 30;
-            const periodEnd = Math.floor((Date.now() + durationDays * 24 * 60 * 60 * 1000) / 1000);
+            const bonusDays = appliedPromo?.isReferral ? (appliedPromo.bonusDays || 7) : 0;
+            const totalDays = durationDays + bonusDays;
+            const periodEnd = Math.floor((Date.now() + totalDays * 24 * 60 * 60 * 1000) / 1000);
 
             setPendingSubscriptionId(purchaseResult.orderId || purchaseResult.purchaseToken || `gp_${plan.id}_${Date.now()}`);
             setPendingPeriodEnd(periodEnd);
@@ -2904,10 +2910,13 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       const resolvedCustomerId     = overrides?.customerId     !== undefined ? overrides.customerId     : pendingCustomerId;
       const resolvedPeriodEnd      = overrides?.periodEnd      !== undefined ? overrides.periodEnd      : pendingPeriodEnd;
 
-      // Use Stripe's authoritative period end if available, otherwise fall back
+      const bonusDays = appliedPromo?.isReferral ? (appliedPromo.bonusDays || 7) : 0;
+      const bonusCredits = appliedPromo?.isReferral ? (appliedPromo.bonusCredits || 10) : 0;
+
+      // Use authoritative period end if available, otherwise calculate from durationDays + bonusDays
       const periodEnd = resolvedPeriodEnd
-        ? new Date(resolvedPeriodEnd * 1000).toISOString()
-        : new Date(Date.now() + selectedPlan.durationDays * 24 * 60 * 60 * 1000).toISOString();
+        ? new Date((resolvedPeriodEnd + bonusDays * 24 * 60 * 60) * 1000).toISOString()
+        : new Date(Date.now() + (selectedPlan.durationDays + bonusDays) * 24 * 60 * 60 * 1000).toISOString();
 
       const updateData: any = {
         subscriptionStatus: 'active',
@@ -2915,6 +2924,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         subscriptionEndsAt: periodEnd,
         cancelAtPeriodEnd: false,
       };
+
+      if (bonusCredits > 0) {
+        updateData.freeEvaluationsBonus = ((user as any)?.freeEvaluationsBonus || 0) + bonusCredits;
+      }
 
       if (resolvedSubscriptionId) updateData.stripeSubscriptionId = resolvedSubscriptionId;
       if (resolvedCustomerId)     updateData.stripeCustomerId    = resolvedCustomerId;
@@ -2929,7 +2942,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           appliedPromo.referrerUid,
           user.uid,
           selectedPlan.id,
-          appliedPromo.code
+          appliedPromo.code,
+          bonusDays,
+          bonusCredits
         ).catch(() => {});
         try { localStorage.removeItem('pte_pending_referral'); } catch (e) {}
       }
@@ -3282,6 +3297,11 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                           </div>
                         </div>
                         <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
+                        {appliedPromo?.isReferral && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md mt-1 border border-amber-500/20">
+                            <Sparkles size={10} /> +7 Days Free Bonus Added
+                          </span>
+                        )}
                         {isNativeMobile() && nativeStorePrices[plan.id]?.introductoryPrice && (
                           <span className="text-[10px] font-bold text-emerald-400 mt-1">
                             Intro Offer: {nativeStorePrices[plan.id].introductoryPrice}
@@ -3298,6 +3318,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                         <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Full Question Bank</li>
                         <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> AI Scoring</li>
                         <li className="flex items-center gap-2"><Check size={12} className="text-app-primary" /> Detailed Feedback</li>
+                        {appliedPromo?.isReferral && (
+                          <li className="flex items-center gap-2 text-amber-500 font-bold"><Sparkles size={12} className="text-amber-500" /> +10 Extra AI Credits</li>
+                        )}
                       </ul>
 
                       {isCurrentPlan ? (
@@ -3343,15 +3366,17 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 </div>
               )}
 
-              {!isAnnualUser && !isNativeMobile() && (
+              {!isAnnualUser && (
                 <div className="w-full max-w-md mx-auto space-y-2">
                   {appliedPromo && (
                     <div className="flex items-center justify-between bg-app-accent/10 border border-app-accent/30 rounded-xl px-4 py-2.5">
                       <div className="flex items-center gap-2 min-w-0">
                         <Sparkles className="shrink-0 text-app-accent" size={14} />
                         <span className="text-app-accent text-xs font-bold uppercase tracking-wide truncate" title={appliedPromo.code}>{appliedPromo.code}</span>
-                        <span className="text-app-accent/80 text-xs font-medium shrink-0">
-                          — {appliedPromo.discountPercent}% off {appliedPromo.isReferral ? `(Referral: ${appliedPromo.referrerName || 'Friend'})` : ''}
+                        <span className="text-app-accent/90 text-xs font-medium shrink-0">
+                          {appliedPromo.isReferral 
+                            ? `— +7 Days Free & 10 AI Credits (${appliedPromo.referrerName || 'Friend'})`
+                            : `— ${appliedPromo.discountPercent}% off`}
                         </span>
                       </div>
                       <button
@@ -3370,7 +3395,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                         value={promoInput}
                         onChange={(e) => setPromoInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-                        placeholder="Referral or Gift Code"
+                        placeholder={isNativeMobile() ? "Referral code (e.g. ALICE-9X2K)" : "Referral or Promo Code"}
                         className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/40 text-sm font-medium outline-none"
                       />
                     </div>
@@ -3382,7 +3407,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     </button>
                   </div>
                   <p className="text-[11px] text-app-text-muted/60 text-center">
-                    Only one referral or promo code can be applied at a time.
+                    {isNativeMobile() 
+                      ? "Have a friend's referral code? Apply it to get +7 days free and 10 extra AI credits!" 
+                      : "Only one referral or promo code can be applied at a time."}
                   </p>
                 </div>
               )}
@@ -3813,7 +3840,7 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
   };
 
   const handleWhatsAppShare = () => {
-    const text = `Hey! I'm practicing for my PTE exam on PTE Ninja. Use my referral code ${userReferralCode} (or sign up using my link: ${referralLink}) to get an extra 10% off any plan! 🎯🥋`;
+    const text = `Hey! I'm practicing for my PTE exam on PTE Ninja. Use my referral code ${userReferralCode} (or sign up using my link: ${referralLink}) to get +7 days of free access and 10 extra AI evaluation credits! 🎯🥋`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -4594,12 +4621,12 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-app-text">Invite Friends & Earn</h3>
-                  <p className="text-xs text-app-text-muted">Give friends an extra 10% off when they upgrade</p>
+                  <p className="text-xs text-app-text-muted">Give friends +7 days free access & 10 AI credits, and get the same when they upgrade!</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-bold text-amber-500">
                 <Sparkles size={12} />
-                <span>10% OFF</span>
+                <span>+7 DAYS & 10 AI CREDITS</span>
               </div>
             </div>
 
@@ -4645,11 +4672,19 @@ function ProfileView({ user, onLogout, onLogin, onUpgrade, isDarkMode, onOpenAdm
                 </button>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-app-primary/10 text-xs">
-                <span className="text-app-text-muted">Friends Successfully Joined & Upgraded</span>
-                <span className="font-bold text-app-text bg-app-surface px-2.5 py-1 rounded-lg border border-app-primary/10">
-                  {user?.referralCount || 0}
-                </span>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-app-primary/10 text-xs">
+                <div className="flex flex-col gap-1">
+                  <span className="text-app-text-muted">Friends Joined & Upgraded</span>
+                  <span className="font-bold text-app-text bg-app-surface px-2.5 py-1 rounded-lg border border-app-primary/10 w-fit">
+                    {user?.referralCount || 0}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-app-text-muted">Your Bonus AI Credits</span>
+                  <span className="font-bold text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 w-fit">
+                    +{user?.freeEvaluationsBonus || 0} Credits
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -4785,7 +4820,7 @@ function MockTestView({
   };
   const visibleTests = MOCK_TESTS.slice(0, visibleCount);
   const completedTestsCount = (user.mockTestResults || []).length;
-  const guestLimitReached = user?.accessType === 'guest' && completedTestsCount >= 10;
+  const guestLimitReached = user?.accessType === 'guest' && completedTestsCount >= (10 + (user?.freeEvaluationsBonus || 0));
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
@@ -6852,7 +6887,7 @@ function SectionView({ section, user, allTasks, onBack, onSelectTask, onHoverTas
               const completedTasksForCategory = (user.completedTasks || [])
                 .map(taskId => allTasks.find(t => t.id === taskId && t.category === selectedCategory))
                 .filter(Boolean);
-              const guestLimitReached = user?.accessType === 'guest' && completedTasksForCategory.length >= 10;
+              const guestLimitReached = user?.accessType === 'guest' && completedTasksForCategory.length >= (10 + (user?.freeEvaluationsBonus || 0));
 
               return filteredTasks.map(task => {
                   const isCompleted = user?.completedTasks?.includes(task.id);

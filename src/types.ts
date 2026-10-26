@@ -129,6 +129,7 @@ export interface UserData {
   referredBy?: string | null;
   referralCount?: number;
   signupPlatform?: 'web' | 'mobile' | 'ios' | 'android';
+  freeEvaluationsBonus?: number;
 }
 
 export const SUBSCRIPTION_PLANS = [

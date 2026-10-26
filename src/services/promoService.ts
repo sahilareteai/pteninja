@@ -9,6 +9,8 @@ export interface PromoCode {
   isReferral?: boolean;
   referrerUid?: string;
   referrerName?: string;
+  bonusDays?: number;
+  bonusCredits?: number;
 }
 
 export function generateUserReferralCode(displayName?: string | null, uid?: string): string {
@@ -107,8 +109,10 @@ export class PromoService {
 
         const referralPromo: PromoCode = {
           code: normalizedCode,
-          discountPercent: 10,
-          description: `Referral 10% discount from ${referrerData.displayName || 'a fellow Ninja'}!`,
+          discountPercent: 0,
+          bonusDays: 7,
+          bonusCredits: 10,
+          description: `Referral Bonus: +7 Days Free Access & 10 Extra AI Credits from ${referrerData.displayName || 'a fellow Ninja'}!`,
           isActive: true,
           isReferral: true,
           referrerUid: referrerDoc.id,
@@ -136,23 +140,37 @@ export class PromoService {
   }
 
   /**
-   * Increments the referrer's referral count and logs the referral event in Firestore.
+   * Increments the referrer's referral count, awards bonus AI credits and +7 days extension, and logs the referral event.
    */
   static async recordReferralUse(
     referrerUid: string,
     buyerUid: string,
     planId: string,
-    code: string
+    code: string,
+    bonusDays: number = 7,
+    bonusCredits: number = 10
   ): Promise<void> {
     try {
       if (!referrerUid) return;
       const referrerRef = doc(db, 'users', referrerUid);
       const referrerSnap = await getDoc(referrerRef);
       if (referrerSnap.exists()) {
-        const currentCount = (referrerSnap.data().referralCount || 0) + 1;
-        await updateDoc(referrerRef, {
+        const referrerData = referrerSnap.data();
+        const currentCount = (referrerData.referralCount || 0) + 1;
+        const currentBonus = (referrerData.freeEvaluationsBonus || 0) + bonusCredits;
+        
+        const updateFields: any = {
           referralCount: currentCount,
-        });
+          freeEvaluationsBonus: currentBonus,
+        };
+
+        // If referrer has an active subscription, extend it by bonusDays
+        if (referrerData.subscriptionEndsAt && new Date(referrerData.subscriptionEndsAt) > new Date()) {
+          const currentEnd = new Date(referrerData.subscriptionEndsAt).getTime();
+          updateFields.subscriptionEndsAt = new Date(currentEnd + bonusDays * 24 * 60 * 60 * 1000).toISOString();
+        }
+
+        await updateDoc(referrerRef, updateFields);
       }
 
       // Log the referral event
@@ -161,6 +179,8 @@ export class PromoService {
         buyerUid,
         planId,
         referralCode: code,
+        bonusDays,
+        bonusCredits,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
     } catch (e) {
