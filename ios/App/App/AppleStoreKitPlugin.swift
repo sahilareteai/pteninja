@@ -9,7 +9,8 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "purchase", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "queryProductDetails", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "restorePurchases", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "restorePurchases", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "presentCodeRedemptionSheet", returnType: CAPPluginReturnPromise)
     ]
 
     private var updateListenerTask: Task<Void, Never>? = nil
@@ -172,6 +173,18 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["purchases": activePurchases])
             } catch {
                 call.reject("Failed to restore purchases: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Presents Apple's native Code Redemption sheet (iOS 14+) for promotional / offer codes
+    @objc func presentCodeRedemptionSheet(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if #available(iOS 14.0, *) {
+                SKPaymentQueue.default().presentCodeRedemptionSheet()
+                call.resolve(["success": true])
+            } else {
+                call.reject("Offer code redemption requires iOS 14 or later")
             }
         }
     }
