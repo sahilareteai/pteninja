@@ -105,7 +105,7 @@ describe('PromoService', () => {
       expect(res.promo?.code).toBe('DIWALI20');
     });
 
-    it('validates a valid friend referral code with 10% discount', async () => {
+    it('validates a valid friend referral code with +7 days free and extra AI credits', async () => {
       // Mock Firestore query returning a referrer user doc
       mockGetDocs.mockResolvedValueOnce({
         empty: false,
@@ -123,7 +123,9 @@ describe('PromoService', () => {
       const res = await PromoService.validateDetailed('ALICE-9X2K', 'different_buyer_uid');
       expect(res.promo).not.toBeNull();
       expect(res.promo?.isReferral).toBe(true);
-      expect(res.promo?.discountPercent).toBe(10);
+      expect(res.promo?.discountPercent).toBe(0);
+      expect(res.promo?.bonusDays).toBe(7);
+      expect(res.promo?.bonusCredits).toBe(10);
       expect(res.promo?.referrerUid).toBe('referrer_user_id');
       expect(res.promo?.referrerName).toBe('Alice Ninja');
     });
@@ -160,19 +162,22 @@ describe('PromoService', () => {
   });
 
   describe('recordReferralUse', () => {
-    it('increments referrer referralCount and logs referral event', async () => {
+    it('increments referrer referralCount, adds bonus credits and logs referral event', async () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
-        data: () => ({ referralCount: 2 }),
+        data: () => ({ referralCount: 2, freeEvaluationsBonus: 5 }),
       });
       mockUpdateDoc.mockResolvedValueOnce(undefined);
       mockAddDoc.mockResolvedValueOnce({ id: 'log_123' });
 
-      await PromoService.recordReferralUse('referrer_123', 'buyer_456', 'monthly', 'ALICE-9X2K');
+      await PromoService.recordReferralUse('referrer_123', 'buyer_456', 'monthly', 'ALICE-9X2K', 7, 10);
 
       expect(mockUpdateDoc).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'referrer_123' }),
-        { referralCount: 3 }
+        expect.objectContaining({
+          referralCount: 3,
+          freeEvaluationsBonus: 15,
+        })
       );
       expect(mockAddDoc).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'referralLogs' }),
@@ -181,6 +186,8 @@ describe('PromoService', () => {
           buyerUid: 'buyer_456',
           planId: 'monthly',
           referralCode: 'ALICE-9X2K',
+          bonusDays: 7,
+          bonusCredits: 10,
         })
       );
     });
