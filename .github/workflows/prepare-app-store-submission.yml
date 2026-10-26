@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       build_number:
-        description: 'Build Number to attach (default 14)'
-        required: true
-        default: '14'
+        description: 'Build Number to attach (leave empty to attach latest or select in App Store Connect UI)'
+        required: false
+        default: ''
       app_version:
         description: 'App Version (default 1.0)'
         required: true
@@ -36,6 +36,6 @@ jobs:
           APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          BUILD_NUMBER: ${{ github.event.inputs.build_number || '14' }}
+          BUILD_NUMBER: ${{ github.event.inputs.build_number }}
           APP_VERSION: ${{ github.event.inputs.app_version || '1.0' }}
         run: fastlane ios prepare_submission

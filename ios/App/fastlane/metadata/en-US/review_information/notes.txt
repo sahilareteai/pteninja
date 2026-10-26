@@ -10,8 +10,13 @@ Thank you for reviewing PTE Ninja - AI Exam Prep. Here is everything you need to
 • Microphone (NSMicrophoneUsageDescription): Used solely during Speaking practice tasks (Read Aloud, Repeat Sentence, etc.) to record user speech for real-time pronunciation and fluency evaluation.
 • Speech Recognition: AI models analyze audio transcripts to calculate diagnostic scores on the PTE 10–90 scale.
 
-3. ADVERTISING & IN-APP PURCHASES:
-• The app uses Google AdMob for banner and interstitial ads for free users.
-• All core features and practice question banks are accessible without requiring a purchase.
+3. IN-APP PURCHASES & SUBSCRIPTIONS:
+• The app includes optional VIP Auto-Renewable Subscriptions (Weekly, Monthly, Quarterly, Annual) configured under the "PTE Ninja VIP Subscriptions" group.
+• In-app subscription plans and native Apple Offer Code redemption can be reviewed by tapping "Upgrade" or "VIP" in the top bar or sidebar.
+• Core practice question banks and trial evaluations are fully accessible without requiring any purchase.
+
+4. ADVERTISING:
+• The app uses Google AdMob banners and interstitials for free users with frequency caps (cooldowns) to ensure a smooth user experience.
 
 If you have any questions or require anything further during review, please contact us at support@pteninja.com.
+
