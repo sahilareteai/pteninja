@@ -29,6 +29,7 @@ export interface AppleStoreKitPluginInterface {
   purchase(options: { productId: string }): Promise<ApplePurchaseResult>;
   queryProductDetails(options: { productIds: string[] }): Promise<{ products: AppleProduct[] }>;
   restorePurchases(): Promise<{ purchases: ApplePurchaseResult[] }>;
+  presentCodeRedemptionSheet(): Promise<{ success?: boolean }>;
 }
 
 const NativeAppleStoreKit = registerPlugin<AppleStoreKitPluginInterface>('AppleStoreKit');
@@ -103,5 +104,21 @@ export async function restoreApplePurchases(): Promise<ApplePurchaseResult[]> {
   } catch (err) {
     console.warn('Failed to restore Apple purchases:', err);
     return [];
+  }
+}
+
+/**
+ * Opens Apple's native Offer Code redemption sheet (iOS 14+).
+ * Allows users to redeem custom promotional codes or one-time offer codes from App Store Connect.
+ */
+export async function presentAppleCodeRedemptionSheet(): Promise<void> {
+  if (!isNativeMobile() || !isIOS()) {
+    return;
+  }
+
+  try {
+    await NativeAppleStoreKit.presentCodeRedemptionSheet();
+  } catch (err) {
+    console.warn('Failed to present Apple code redemption sheet:', err);
   }
 }

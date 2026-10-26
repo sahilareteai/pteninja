@@ -76,7 +76,7 @@ import { LandingPage } from './components/LandingPage';
 import { MobileOnboarding } from './components/MobileOnboarding';
 import { isNativeMobile, isAndroid, isIOS } from './lib/mobile';
 import { purchasePlaySubscription, restorePlayPurchases, queryPlayProducts, PLAY_SUBSCRIPTION_MAP } from './lib/playBilling';
-import { purchaseAppleSubscription, restoreApplePurchases, queryAppleProducts, APPLE_SUBSCRIPTION_MAP } from './lib/appleBilling';
+import { purchaseAppleSubscription, restoreApplePurchases, queryAppleProducts, presentAppleCodeRedemptionSheet, APPLE_SUBSCRIPTION_MAP } from './lib/appleBilling';
 import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
@@ -3368,9 +3368,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                 })}
               </div>
 
-              {/* Native Mobile In-App Purchase: Restore Purchases button (Mandatory for App Store review) */}
+              {/* Native Mobile In-App Purchase: Restore Purchases & Apple Offer Code Redemption */}
               {isNativeMobile() && (
-                <div className="w-full flex items-center justify-center pt-2">
+                <div className="w-full flex flex-wrap items-center justify-center gap-2 pt-2">
                   <button
                     type="button"
                     onClick={handleRestorePurchases}
@@ -3380,6 +3380,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     <RefreshCw size={13} className={isRestoring ? "animate-spin text-app-primary" : ""} />
                     <span>{isRestoring ? "Restoring Purchases..." : "Restore Purchases"}</span>
                   </button>
+                  {isIOS() && (
+                    <button
+                      type="button"
+                      onClick={() => presentAppleCodeRedemptionSheet()}
+                      className="inline-flex items-center gap-1.5 text-xs text-app-accent hover:text-emerald-300 font-bold py-2 px-4 rounded-xl border border-app-accent/30 bg-app-accent/10 hover:bg-app-accent/20 transition-all cursor-pointer active:scale-95"
+                    >
+                      <Sparkles size={13} />
+                      <span>Redeem Apple Offer Code</span>
+                    </button>
+                  )}
                 </div>
               )}
 
