@@ -11,6 +11,12 @@ on:
         description: 'App Version (default 1.0)'
         required: true
         default: '1.0'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ios/App/fastlane/**'
+      - '.github/workflows/prepare-app-store-submission.yml'
 
 jobs:
   prepare-submission:
