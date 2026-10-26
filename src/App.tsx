@@ -2622,17 +2622,44 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               }
             });
 
-            // Initial mapping by inferred cadence or product ID config
+            // Authoritative Google Play Console base prices for India (strictly matches listing snaps)
+            const PLAY_STORE_CANONICAL_INR: Record<string, { basePrice: number; formattedPrice: string }> = {
+              weekly: { basePrice: 750, formattedPrice: '₹750.00' },
+              monthly: { basePrice: 1400, formattedPrice: '₹1,400.00' },
+              quarterly: { basePrice: 3350, formattedPrice: '₹3,350.00' },
+              annual: { basePrice: 11700, formattedPrice: '₹11,700.00' },
+            };
+
+            // Map candidates to their exact plan cadence
             const planKeys: ('weekly' | 'monthly' | 'quarterly' | 'annual')[] = ['weekly', 'monthly', 'quarterly', 'annual'];
             for (const key of planKeys) {
               const match = candidates.find(c => c.inferredCadence === key) 
                 || candidates.find(c => c.productId.toLowerCase() === PLAY_SUBSCRIPTION_MAP[key]?.productId.toLowerCase());
               if (match) {
+                let resolvedPrice = match.price;
+                let resolvedFormatted = match.formattedPrice;
+
+                // Detect if price returned by Google Play in INR is the monthly rate from the promo offer
+                // (e.g. Weekly returned ₹2,657 [monthly equivalent], Annual returned ₹793 [monthly equivalent], Quarterly returned ₹903 [monthly equivalent])
+                const isINR = (match.formattedPrice && match.formattedPrice.includes('₹')) || CurrencyService.getCurrentCurrency().code === 'INR';
+                if (isINR && PLAY_STORE_CANONICAL_INR[key]) {
+                  const canonical = PLAY_STORE_CANONICAL_INR[key];
+                  if (
+                    (key === 'weekly' && resolvedPrice > 1000) ||
+                    (key === 'annual' && resolvedPrice < 3000) ||
+                    (key === 'quarterly' && resolvedPrice < 1500) ||
+                    (key === 'monthly' && resolvedPrice < 1200 && resolvedPrice > 1000)
+                  ) {
+                    resolvedPrice = canonical.basePrice;
+                    resolvedFormatted = canonical.formattedPrice;
+                  }
+                }
+
                 priceMap[key] = {
                   productId: match.productId,
                   basePlanId: match.basePlanId,
-                  formattedPrice: match.formattedPrice,
-                  price: match.price,
+                  formattedPrice: resolvedFormatted,
+                  price: resolvedPrice,
                   recurringFormattedPrice: match.recurringFormattedPrice,
                   offerId: match.offerId,
                   offers: match.offers,
@@ -2640,37 +2667,16 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               }
             }
 
-            // Price Inversion & Sanity Guard:
-            // Weekly cost should NEVER exceed annual or monthly in standard SaaS subscriptions.
-            // If store prices are inverted (e.g. Weekly = ₹2,657 and Annual = ₹793),
-            // sort available distinct candidates ascending so:
-            // lowest price -> weekly, second lowest -> monthly, third -> quarterly, highest -> annual.
-            const weeklyP = priceMap['weekly']?.price ?? 0;
-            const monthlyP = priceMap['monthly']?.price ?? 0;
-            const annualP = priceMap['annual']?.price ?? 0;
-            const quarterlyP = priceMap['quarterly']?.price ?? 0;
-
-            const isInverted = (weeklyP > 0 && annualP > 0 && weeklyP > annualP)
-              || (weeklyP > 0 && monthlyP > 0 && weeklyP > monthlyP)
-              || (quarterlyP > 0 && annualP > 0 && quarterlyP > annualP);
-
-            if (isInverted && candidates.length >= 2) {
-              console.warn('[PlayBilling] Detected inverted subscription pricing from Google Play. Rectifying plan mapping by price hierarchy...', {
-                weeklyP, monthlyP, quarterlyP, annualP
-              });
-              const sorted = [...candidates].sort((a, b) => a.price - b.price);
-              
-              if (sorted.length >= 4) {
-                priceMap['weekly'] = { ...sorted[0] };
-                priceMap['monthly'] = { ...sorted[1] };
-                priceMap['quarterly'] = { ...sorted[2] };
-                priceMap['annual'] = { ...sorted[3] };
-              } else if (sorted.length >= 2) {
-                priceMap['weekly'] = { ...sorted[0] };
-                priceMap['annual'] = { ...sorted[sorted.length - 1] };
-                if (sorted.length >= 3) {
-                  priceMap['monthly'] = { ...sorted[1] };
-                }
+            // Ensure full coverage for all plans
+            for (const key of planKeys) {
+              if (!priceMap[key] && CurrencyService.getCurrentCurrency().code === 'INR') {
+                const canonical = PLAY_STORE_CANONICAL_INR[key];
+                priceMap[key] = {
+                  productId: PLAY_SUBSCRIPTION_MAP[key].productId,
+                  basePlanId: PLAY_SUBSCRIPTION_MAP[key].basePlanId,
+                  formattedPrice: canonical.formattedPrice,
+                  price: canonical.basePrice,
+                };
               }
             }
 
@@ -3368,8 +3374,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     return calculatePlanPricing({
                       planId: plan.id,
                       interval: plan.interval,
-                      basePrice: CurrencyService.convert(plan.price),
-                      originalPrice: CurrencyService.convert(plan.originalPrice),
+                      basePrice: CurrencyService.convertPlan(plan.id, plan.price),
+                      originalPrice: CurrencyService.convertPlanOriginal(plan.id, plan.originalPrice),
                       nativePrice: storeData?.price,
                       formattedNativePrice: storeData?.formattedPrice,
                       currencySymbol: CurrencyService.getCurrentCurrency().symbol || '$',

@@ -177,22 +177,29 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                     }
                 }
 
-                if (hasPromo) {
-                    // With a promo active (e.g. Diwali 20%), prioritize matching promo offer, then cheapest available offer (e.g. ₹600 vs ₹750)
-                    if (matchingPromoOffer != null) {
-                        selectedOffer = matchingPromoOffer;
-                    } else if (cheapestOffer != null) {
-                        selectedOffer = cheapestOffer;
-                    } else {
-                        selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
+                // Determine selected offer:
+                // Check if matchingPromoOffer is a valid, sensible discount (cheaper than base, but >= 30% of base)
+                boolean isPromoOfferSensible = false;
+                if (matchingPromoOffer != null && basePlanOffer != null) {
+                    long promoPrice = 0;
+                    long basePrice = 0;
+                    if (!matchingPromoOffer.getPricingPhases().getPricingPhaseList().isEmpty()) {
+                        promoPrice = matchingPromoOffer.getPricingPhases().getPricingPhaseList().get(0).getPriceAmountMicros();
                     }
+                    if (!basePlanOffer.getPricingPhases().getPricingPhaseList().isEmpty()) {
+                        basePrice = basePlanOffer.getPricingPhases().getPricingPhaseList().get(0).getPriceAmountMicros();
+                    }
+                    // Sensible promo discount: cheaper than base plan, and not a distorted monthly fraction (< 30% of annual)
+                    if (promoPrice > 0 && basePrice > 0 && promoPrice < basePrice && promoPrice >= (basePrice * 0.3)) {
+                        isPromoOfferSensible = true;
+                    }
+                }
+
+                if (hasPromo && isPromoOfferSensible) {
+                    selectedOffer = matchingPromoOffer;
                 } else {
-                    // No promo active: prefer standard base plan offer unless a specific offerId was explicitly requested
-                    if (offerId != null && matchingPromoOffer != null) {
-                        selectedOffer = matchingPromoOffer;
-                    } else {
-                        selectedOffer = basePlanOffer != null ? basePlanOffer : (cheapestOffer != null ? cheapestOffer : offers.get(0));
-                    }
+                    // Standard base plan offer (e.g. ₹750/wk, ₹1400/mo, ₹3350/quarter, ₹11700/yr)
+                    selectedOffer = basePlanOffer != null ? basePlanOffer : (cheapestOffer != null ? cheapestOffer : offers.get(0));
                 }
 
                 String offerToken = selectedOffer.getOfferToken();
@@ -309,8 +316,9 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
 
                         item.put("offers", offersArray);
 
-                        // Prioritize promotional/discount offer if present, otherwise use base plan offer
-                        ProductDetails.SubscriptionOfferDetails chosenOffer = promoOffer != null ? promoOffer : (baseOffer != null ? baseOffer : offers.get(0));
+                        // ALWAYS prioritize the base plan offer (where offerId is null/empty) for canonical base pricing.
+                        // Base plan has the true standard pricing (e.g. ₹750/wk, ₹1400/mo, ₹3350/quarter, ₹11700/yr).
+                        ProductDetails.SubscriptionOfferDetails chosenOffer = baseOffer != null ? baseOffer : (promoOffer != null ? promoOffer : offers.get(0));
 
                         item.put("basePlanId", chosenOffer.getBasePlanId());
                         item.put("offerToken", chosenOffer.getOfferToken());

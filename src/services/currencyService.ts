@@ -107,8 +107,32 @@ export class CurrencyService {
     return this.currentCurrency;
   }
 
+  // Authoritative Google Play Store & India regional base prices (strictly matching store listings)
+  private static readonly INR_PLAN_PRICES: Record<string, { price: number; originalPrice: number }> = {
+    weekly: { price: 750, originalPrice: 1000 },
+    monthly: { price: 1400, originalPrice: 2000 },
+    quarterly: { price: 3350, originalPrice: 4500 },
+    annual: { price: 11700, originalPrice: 15000 },
+  };
+
   static convert(baseAmount: number): number {
     return Math.round(baseAmount * this.currentCurrency.rate);
+  }
+
+  static convertPlan(planId: string, baseFallback: number): number {
+    const normalized = (planId || '').toLowerCase().trim();
+    if (this.currentCurrency.code === 'INR' && this.INR_PLAN_PRICES[normalized]) {
+      return this.INR_PLAN_PRICES[normalized].price;
+    }
+    return this.convert(baseFallback);
+  }
+
+  static convertPlanOriginal(planId: string, originalFallback: number): number {
+    const normalized = (planId || '').toLowerCase().trim();
+    if (this.currentCurrency.code === 'INR' && this.INR_PLAN_PRICES[normalized]) {
+      return this.INR_PLAN_PRICES[normalized].originalPrice;
+    }
+    return this.convert(originalFallback);
   }
 
   static format(amount: number, currencyCode?: string): string {
@@ -126,8 +150,8 @@ export class CurrencyService {
     const plan = SUBSCRIPTION_PLANS.find(p => p.id === planId);
     if (!plan) return { price: 0, originalPrice: 0, formattedPrice: '$0', formattedOriginalPrice: '$0' };
 
-    const convertedPrice = this.convert(plan.price);
-    const convertedOriginalPrice = this.convert(plan.originalPrice);
+    const convertedPrice = this.convertPlan(plan.id, plan.price);
+    const convertedOriginalPrice = this.convertPlanOriginal(plan.id, plan.originalPrice);
 
     return {
       price: convertedPrice,

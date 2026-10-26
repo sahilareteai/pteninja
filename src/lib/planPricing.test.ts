@@ -88,35 +88,70 @@ describe('calculatePlanPricing', () => {
     expect(res.bracketBreakdown).toBe('(₹709 / month • approx ₹164 / week • Billed every 3 months)');
   });
 
-  it('formats Monthly plan correctly with weekly breakdown in brackets', () => {
+  it('formats Monthly plan correctly with Google Play Store base price (₹1400 -> ₹1120 with 20% discount)', () => {
     const res = calculatePlanPricing({
       planId: 'monthly',
       interval: 'month',
-      basePrice: 1155,
-      originalPrice: 1925,
-      nativePrice: 1155,
+      basePrice: 1400,
+      originalPrice: 2000,
+      nativePrice: 1400,
+      formattedNativePrice: '₹1,400.00',
       currencySymbol: '₹',
+      discountPercent: 20,
     });
 
-    expect(res.primaryDisplay).toBe('₹1,155');
+    expect(res.symbol).toBe('₹');
+    expect(res.baseNumPrice).toBe(1400);
+    expect(res.effectiveNumPrice).toBe(1120);
+    expect(res.strikeThroughNum).toBe(1400);
+    expect(res.primaryDisplay).toBe('₹1,120');
     expect(res.cadenceSubtext).toBe('/ month');
-    // 1155 * 12 / 52 = 267
-    expect(res.bracketBreakdown).toBe('(approx ₹267 / week • Billed monthly)');
+    // 1120 * 12 / 52 = 258
+    expect(res.bracketBreakdown).toBe('(approx ₹258 / week • Billed monthly)');
   });
 
-  it('formats Annual plan correctly with monthly and weekly breakdown in brackets', () => {
+  it('formats Quarterly plan correctly with Google Play Store base price (₹3350 -> ₹2680 with 20% discount)', () => {
+    const res = calculatePlanPricing({
+      planId: 'quarterly',
+      interval: '3 months',
+      basePrice: 3350,
+      originalPrice: 4500,
+      nativePrice: 3350,
+      formattedNativePrice: '₹3,350.00',
+      currencySymbol: '₹',
+      discountPercent: 20,
+    });
+
+    expect(res.symbol).toBe('₹');
+    expect(res.baseNumPrice).toBe(3350);
+    expect(res.effectiveNumPrice).toBe(2680);
+    expect(res.strikeThroughNum).toBe(3350);
+    expect(res.primaryDisplay).toBe('₹2,680');
+    expect(res.cadenceSubtext).toBe('for 3 months');
+    // Monthly = 2680 / 3 = 893, Weekly = 2680 / 13 = 206
+    expect(res.bracketBreakdown).toBe('(₹893 / month • approx ₹206 / week • Billed every 3 months)');
+  });
+
+  it('formats Annual plan correctly with Google Play Store base price (₹11700 -> ₹9360 with 20% discount)', () => {
     const res = calculatePlanPricing({
       planId: 'annual',
       interval: 'year',
-      basePrice: 9625,
-      originalPrice: 19250,
+      basePrice: 11700,
+      originalPrice: 15000,
+      nativePrice: 11700,
+      formattedNativePrice: '₹11,700.00',
       currencySymbol: '₹',
+      discountPercent: 20,
     });
 
-    expect(res.primaryDisplay).toBe('₹9,625');
+    expect(res.symbol).toBe('₹');
+    expect(res.baseNumPrice).toBe(11700);
+    expect(res.effectiveNumPrice).toBe(9360);
+    expect(res.strikeThroughNum).toBe(11700);
+    expect(res.primaryDisplay).toBe('₹9,360');
     expect(res.cadenceSubtext).toBe('/ year');
-    // 9625 / 12 = 802, 9625 / 52 = 185
-    expect(res.bracketBreakdown).toBe('(₹802 / month • approx ₹185 / week • Billed annually)');
+    // Monthly = 9360 / 12 = 780, Weekly = 9360 / 52 = 180
+    expect(res.bracketBreakdown).toBe('(₹780 / month • approx ₹180 / week • Billed annually)');
   });
 
   it('extracts currency symbol from formatted native price if symbol not provided', () => {
