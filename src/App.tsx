@@ -7316,7 +7316,7 @@ function TaskModal({
     return task.hasAudio ? 'audio' : (task.prepTime === 0 || task.section === 'reading' ? 'recording' : 'prep');
   });
   const [timeLeft, setTimeLeft] = useState(() => {
-    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation' || task.category === 'Respond to a Situation') {
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Respond to a Situation') {
       return 3;
     }
     if (task.category === 'Summarize Spoken Text') return 12;
@@ -7498,8 +7498,8 @@ function TaskModal({
     setAudioFinished(false);
     
     let initialTime = 0;
-    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation' || task.category === 'Respond to a Situation') {
-      initialTime = 3; // Reset to 3s for better user experience
+    if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Respond to a Situation') {
+      initialTime = 3; // Reset to 3s for speaking tasks
     } else if (task.category === 'Summarize Spoken Text') {
       initialTime = 12;
     } else if (task.section === 'listening' && task.hasAudio) {
@@ -9819,12 +9819,12 @@ function TaskModal({
                         setPhase(initialPhase);
                         
                         let initialTime = 0;
-                        if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Write from Dictation') {
-                          initialTime = 1;
+                        if (task.category === 'Repeat Sentence' || task.category === 'Answer Short Question' || task.category === 'Respond to a Situation') {
+                          initialTime = 3;
                         } else if (task.category === 'Summarize Spoken Text') {
                           initialTime = 12;
                         } else if (task.section === 'listening' && task.hasAudio) {
-                          initialTime = 1;
+                          initialTime = 7; // Pearson PTE standard listening countdown: 7s
                         } else if (task.hasAudio) {
                           initialTime = 0;
                         } else if (task.prepTime === 0 || task.section === 'reading') {
@@ -9849,6 +9849,9 @@ function TaskModal({
                         setIsPreparingAudio(false);
                         setHasAudioError(false);
                         beepPlayedRef.current = false;
+                        if (task.hasAudio) {
+                          preFetchAudio(task);
+                        }
                       }}
                       className="flex-1 py-4 bg-app-primary text-app-bg rounded-2xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all"
                     >
