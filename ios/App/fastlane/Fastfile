@@ -135,6 +135,36 @@ platform :ios do
     UI.message("Preparing App Store submission for version #{app_version} (build: #{build_number || 'UI attached'})...")
     UI.message("Note: submit_for_review is set to FALSE per user instruction.")
 
+    # Ensure App Store Review Detail exists on Apple's servers so deliver does not crash with No data
+    begin
+      app = Spaceship::ConnectAPI::App.find("com.pteninja.app")
+      if app
+        target_version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+        if target_version
+          begin
+            rd = target_version.fetch_app_store_review_detail
+          rescue => e
+            rd = nil
+          end
+
+          if rd.nil?
+            UI.message("Initializing missing App Store Review Details for version #{app_version}...")
+            target_version.create_app_store_review_detail(attributes: {
+              contactFirstName: "Sahil",
+              contactLastName: "Arora",
+              contactEmail: "support@pteninja.com",
+              contactPhone: "+61400000000",
+              demoAccountRequired: false,
+              notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app."
+            })
+            UI.success("App Store Review Details successfully initialized.")
+          end
+        end
+      end
+    rescue => e
+      UI.message("Notice during review detail initialization: #{e.message}")
+    end
+
     deliver_config = {
       api_key: api_key,
       app_identifier: "com.pteninja.app",
