@@ -81,6 +81,7 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
     public void purchase(final PluginCall call) {
         final String productId = call.getString("productId");
         final String basePlanId = call.getString("basePlanId");
+        final String offerId = call.getString("offerId");
 
         if (productId == null || productId.trim().isEmpty()) {
             call.reject("productId is required");
@@ -114,16 +115,35 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                     return;
                 }
 
-                // Select matching basePlanId if provided, otherwise default to first available
-                String offerToken = offers.get(0).getOfferToken();
-                if (basePlanId != null && !basePlanId.trim().isEmpty()) {
-                    for (ProductDetails.SubscriptionOfferDetails offer : offers) {
-                        if (basePlanId.trim().equalsIgnoreCase(offer.getBasePlanId())) {
-                            offerToken = offer.getOfferToken();
+                // Match offer: prefer matching offerId, then any promo offer under matching basePlanId, then base plan offer
+                ProductDetails.SubscriptionOfferDetails selectedOffer = null;
+                ProductDetails.SubscriptionOfferDetails basePlanOffer = null;
+
+                for (ProductDetails.SubscriptionOfferDetails offer : offers) {
+                    boolean baseMatches = (basePlanId == null || basePlanId.trim().isEmpty() || basePlanId.trim().equalsIgnoreCase(offer.getBasePlanId()));
+                    if (!baseMatches) continue;
+
+                    if (offerId != null && !offerId.trim().isEmpty()) {
+                        if (offerId.trim().equalsIgnoreCase(offer.getOfferId())) {
+                            selectedOffer = offer;
                             break;
+                        }
+                    } else {
+                        if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
+                            selectedOffer = offer;
+                            break;
+                        } else if (basePlanOffer == null) {
+                            basePlanOffer = offer;
                         }
                     }
                 }
+
+                if (selectedOffer == null) {
+                    selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
+                }
+
+                String offerToken = selectedOffer.getOfferToken();
+                Log.d(TAG, "Initiating purchase for product: " + productId + ", basePlan: " + selectedOffer.getBasePlanId() + ", offerId: " + selectedOffer.getOfferId());
 
                 List<BillingFlowParams.ProductDetailsParams> detailsParamsList = new ArrayList<>();
                 detailsParamsList.add(
@@ -196,21 +216,46 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
 
                     List<ProductDetails.SubscriptionOfferDetails> offers = details.getSubscriptionOfferDetails();
                     if (offers != null && !offers.isEmpty()) {
-                        ProductDetails.SubscriptionOfferDetails firstOffer = offers.get(0);
-                        item.put("basePlanId", firstOffer.getBasePlanId());
-                        item.put("offerToken", firstOffer.getOfferToken());
+                        ProductDetails.SubscriptionOfferDetails promoOffer = null;
+                        ProductDetails.SubscriptionOfferDetails baseOffer = null;
 
-                        List<ProductDetails.PricingPhase> phases = firstOffer.getPricingPhases().getPricingPhaseList();
+                        for (ProductDetails.SubscriptionOfferDetails offer : offers) {
+                            if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
+                                if (promoOffer == null) {
+                                    promoOffer = offer;
+                                }
+                            } else if (baseOffer == null) {
+                                baseOffer = offer;
+                            }
+                        }
+
+                        // Prioritize promotional/discount offer if present, otherwise use base plan offer
+                        ProductDetails.SubscriptionOfferDetails chosenOffer = promoOffer != null ? promoOffer : (baseOffer != null ? baseOffer : offers.get(0));
+
+                        item.put("basePlanId", chosenOffer.getBasePlanId());
+                        item.put("offerToken", chosenOffer.getOfferToken());
+                        if (chosenOffer.getOfferId() != null) {
+                            item.put("offerId", chosenOffer.getOfferId());
+                        }
+
+                        List<ProductDetails.PricingPhase> phases = chosenOffer.getPricingPhases().getPricingPhaseList();
                         if (!phases.isEmpty()) {
                             ProductDetails.PricingPhase currentPhase = phases.get(0);
                             item.put("formattedPrice", currentPhase.getFormattedPrice());
                             item.put("priceAmountMicros", currentPhase.getPriceAmountMicros());
                             item.put("priceCurrencyCode", currentPhase.getPriceCurrencyCode());
                             item.put("billingPeriod", currentPhase.getBillingPeriod());
+
                             if (phases.size() > 1) {
                                 ProductDetails.PricingPhase recurringPhase = phases.get(phases.size() - 1);
                                 item.put("recurringFormattedPrice", recurringPhase.getFormattedPrice());
                                 item.put("hasOffer", true);
+                            } else if (promoOffer != null && baseOffer != null) {
+                                List<ProductDetails.PricingPhase> basePhases = baseOffer.getPricingPhases().getPricingPhaseList();
+                                if (!basePhases.isEmpty()) {
+                                    item.put("recurringFormattedPrice", basePhases.get(0).getFormattedPrice());
+                                    item.put("hasOffer", true);
+                                }
                             }
                         }
                     }
