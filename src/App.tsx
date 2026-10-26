@@ -80,6 +80,7 @@ import { purchaseAppleSubscription, restoreApplePurchases, queryAppleProducts, p
 import { adMobService } from './services/adMobService';
 import { SupportBot } from './components/SupportBot';
 import { DiwaliBanner } from './components/DiwaliBanner';
+import { calculatePlanPricing } from './lib/planPricing';
 import { 
   auth, 
   db, 
@@ -2541,7 +2542,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [pendingPeriodEnd, setPendingPeriodEnd] = useState<number | null>(null);
 
   // Native store prices (queried directly from Apple StoreKit 2 or Google Play Billing)
-  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string; offerId?: string }>>({});
+  const [nativeStorePrices, setNativeStorePrices] = useState<Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; recurringFormattedPrice?: string; offerId?: string; offers?: any[] }>>({});
   const [isLoadingStorePrices, setIsLoadingStorePrices] = useState(isNativeMobile());
 
   useEffect(() => {
@@ -2571,7 +2572,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         } else if (isAndroid()) {
           const playProds = await queryPlayProducts();
           if (!isCancelled && playProds && playProds.length > 0) {
-            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string; offerId?: string }> = {};
+            const priceMap: Record<string, { formattedPrice: string; price?: number; recurringFormattedPrice?: string; offerId?: string; offers?: any[] }> = {};
             playProds.forEach(p => {
               for (const [planId, cfg] of Object.entries(PLAY_SUBSCRIPTION_MAP)) {
                 if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
@@ -2579,7 +2580,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     formattedPrice: p.formattedPrice,
                     price: p.priceAmountMicros ? p.priceAmountMicros / 1000000 : undefined,
                     recurringFormattedPrice: p.recurringFormattedPrice,
-                    offerId: p.offerId
+                    offerId: p.offerId,
+                    offers: p.offers,
                   };
                 }
               }
@@ -2631,10 +2633,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       setAppliedPromo(res.promo);
       if (res.promo.isReferral) {
         toast.success(`🎉 Referral code applied! You'll receive +7 Days Free Access & 10 Extra AI Credits from ${res.promo.referrerName || 'your friend'} upon subscribing!`);
-      } else if (isNativeMobile()) {
-        toast.info(`Promo code ${res.promo.code} recognized! Store discounts can be redeemed directly via ${isIOS() ? 'App Store' : 'Google Play'}.`);
       } else {
-        toast.success(`Promo code ${res.promo.code} applied! ${res.promo.discountPercent}% off.`);
+        toast.success(`🪔 Promo code ${res.promo.code} applied! ${res.promo.discountPercent}% discount active on all plans.`);
       }
     } else {
       toast.error(res.error || 'Invalid referral or promo code');
@@ -2784,10 +2784,36 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         return;
       }
 
-      // On native Android mobile app, trigger Google Play In-App Billing directly
+      // On native Android mobile app, trigger Google Play checkout directly
       if (isNativeMobile() && isAndroid()) {
         try {
-          const purchaseResult = await purchasePlaySubscription(plan.id, nativeStorePrices[plan.id]?.offerId);
+          const planStoreData = nativeStorePrices[plan.id];
+          const hasPromo = !!appliedPromo;
+          const promoCode = appliedPromo?.code;
+
+          // If user applied a promo, search if available offers contains a matching promo offer
+          let targetOfferId = planStoreData?.offerId;
+          if (hasPromo && planStoreData?.offers && Array.isArray(planStoreData.offers)) {
+            const promoMatch = planStoreData.offers.find((off: any) => {
+              const offId = (off.offerId || '').toLowerCase();
+              const tags = (off.tags || []).map((t: string) => (t || '').toLowerCase());
+              const codeLower = (promoCode || '').toLowerCase();
+              return (
+                offId.includes(codeLower) ||
+                offId.includes('diwali') ||
+                tags.some((t: string) => t.includes(codeLower) || t.includes('diwali') || t.includes('promo'))
+              );
+            });
+            if (promoMatch && promoMatch.offerId) {
+              targetOfferId = promoMatch.offerId;
+            }
+          }
+
+          const purchaseResult = await purchasePlaySubscription(plan.id, {
+            offerId: targetOfferId,
+            promoCode: promoCode,
+            hasPromo: hasPromo,
+          });
 
           if (purchaseResult.canceled) {
             setIsProcessing(false);
@@ -3169,8 +3195,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           ) : !selectedPlan ? (
             <>
-              {/* Diwali Festive 20% Voucher Card - only shown on web if user does not already have an active Annual plan */}
-              {!isAnnualUser && !isNativeMobile() && (
+              {/* Diwali Festive 20% Voucher Card - shown if user does not already have an active Annual plan */}
+              {!isAnnualUser && (
                 <DiwaliBanner
                   variant="card"
                   className="w-full mb-3"
@@ -3180,23 +3206,25 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     const res = await PromoService.validateDetailed('DIWALI20', user?.uid);
                     if (res.promo) {
                       setAppliedPromo(res.promo);
-                      toast.success('🪔 Diwali additional 20% discount voucher applied!', { id: 'diwali-promo-toast' });
+                      toast.success('🪔 Diwali 20% discount voucher applied!', { id: 'diwali-promo-toast' });
                     }
                   }}
                 />
               )}
 
-              {/* On native mobile, display official store assurance banner */}
+              {/* Layman, friendly store assurance banner */}
               {isNativeMobile() && (
-                <div className="w-full mb-3 p-3.5 rounded-2xl bg-app-primary/10 border border-app-primary/20 flex items-center justify-between gap-3 text-left">
+                <div className="w-full mb-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-3 text-left">
                   <div className="flex items-center gap-2.5">
                     <ShieldCheck className="text-emerald-400 shrink-0" size={20} />
                     <div>
                       <p className="text-xs font-bold text-app-text">
-                        {isIOS() ? 'Official Apple App Store Subscriptions' : 'Official Google Play In-App Billing'}
+                        {isIOS() ? 'Apple App Store Secure Checkout' : 'Google Play Secure Checkout'}
                       </p>
                       <p className="text-[11px] text-app-text-muted">
-                        Live verified prices directly from your {isIOS() ? 'Apple ID' : 'Google Play account'}. Cancel or restore anytime.
+                        {isIOS() 
+                          ? 'Billed safely through your Apple ID. Cancel easily anytime in Apple Settings.' 
+                          : 'Billed safely through your Google Play account. Cancel easily anytime with 1 tap in Google Play.'}
                       </p>
                     </div>
                   </div>
@@ -3234,6 +3262,21 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                   );
                   const isUpgrade = isPremiumUser && !isCurrentPlan && currentPlanIndex !== -1 && planIdx > currentPlanIndex;
                   const isChangePlan = isPremiumUser && !isCurrentPlan && !isUpgrade;
+
+                  // Clean, rounded pricing calculations that properly support mobile native prices and Diwali discounts
+                  const planPricing = (() => {
+                    const storeData = isNativeMobile() ? nativeStorePrices[plan.id] : undefined;
+                    return calculatePlanPricing({
+                      planId: plan.id,
+                      interval: plan.interval,
+                      basePrice: CurrencyService.convert(plan.price),
+                      originalPrice: CurrencyService.convert(plan.originalPrice),
+                      nativePrice: storeData?.price,
+                      formattedNativePrice: storeData?.formattedPrice,
+                      currencySymbol: CurrencyService.getCurrentCurrency().symbol || '$',
+                      discountPercent: appliedPromo?.discountPercent,
+                    });
+                  })();
 
                   return (
                     <div 
@@ -3277,56 +3320,41 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                       
                       <h3 className="text-lg font-bold text-app-text">{plan.name}</h3>
                       
-                      <div className="flex flex-col items-center">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-center text-center w-full px-1">
+                        {planPricing.hasPromoDiscount && (
+                          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 mb-2 shadow-sm animate-pulse">
+                            <Sparkles size={11} className="text-emerald-400" />
+                            <span>{planPricing.discountPercent}% Diwali Discount Applied</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-baseline justify-center gap-2 flex-wrap">
                           <span className="text-sm text-app-text-muted/40 line-through font-medium">
-                            {isNativeMobile() && nativeStorePrices[plan.id]?.price ? (
-                              (() => {
-                                const np = nativeStorePrices[plan.id];
-                                const sym = np.formattedPrice.replace(/[0-9.,\s]/g, '') || '$';
-                                const orig = Math.round(np.price! * (plan.originalPrice / plan.price));
-                                return `${sym}${orig}`;
-                              })()
-                            ) : (
-                              formatPrice(plan.originalPrice)
-                            )}
+                            {planPricing.sym}{planPricing.strikeThroughNum.toLocaleString()}
                           </span>
-                          <div className="flex flex-col items-center">
-                            {isNativeMobile() ? (
-                              <>
-                                {nativeStorePrices[plan.id]?.recurringFormattedPrice && (
-                                  <span className="text-xs text-app-text-muted/40 line-through font-medium">
-                                    {nativeStorePrices[plan.id].recurringFormattedPrice}
-                                  </span>
-                                )}
-                                <span className="text-2xl sm:text-3xl font-bold text-app-accent">
-                                  {nativeStorePrices[plan.id]?.formattedPrice || (isLoadingStorePrices ? '...' : formatPrice(plan.price))}
-                                </span>
-                              </>
-                            ) : appliedPromo ? (
-                              <>
-                                <span className="text-xs text-app-text-muted/40 line-through">{formatPrice(plan.price)}</span>
-                                <span className="text-3xl font-bold text-app-accent">{formatPrice(PromoService.calculateDiscount(plan.price, appliedPromo.discountPercent))}</span>
-                              </>
-                            ) : (
-                              <span className="text-3xl font-bold text-app-accent">{formatPrice(plan.price)}</span>
-                            )}
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-2xl sm:text-3xl font-extrabold text-app-accent tracking-tight">
+                              {isLoadingStorePrices ? '...' : planPricing.primaryDisplay}
+                            </span>
+                            <span className="text-xs sm:text-sm font-semibold text-app-text-muted">
+                              {planPricing.cadenceSubtext}
+                            </span>
                           </div>
                         </div>
-                        <span className="text-xs text-app-text-muted/50">/{plan.interval}</span>
+
+                        {/* Layman, crystal-clear breakdown in brackets */}
+                        <p className="text-[11px] sm:text-xs text-app-text-muted/80 font-medium mt-1 leading-snug text-center max-w-[220px]">
+                          {planPricing.bracketBreakdown}
+                        </p>
+
                         {appliedPromo?.isReferral && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md mt-1 border border-amber-500/20">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md mt-1.5 border border-amber-500/20">
                             <Sparkles size={10} /> +7 Days Free Bonus Added
                           </span>
                         )}
-                        {isNativeMobile() && nativeStorePrices[plan.id]?.introductoryPrice && (
+                        {isNativeMobile() && nativeStorePrices[plan.id]?.introductoryPrice && !planPricing.hasPromoDiscount && (
                           <span className="text-[10px] font-bold text-emerald-400 mt-1">
                             Intro Offer: {nativeStorePrices[plan.id].introductoryPrice}
-                          </span>
-                        )}
-                        {isNativeMobile() && nativeStorePrices[plan.id]?.recurringFormattedPrice && (
-                          <span className="text-[10px] text-app-text-muted/70 mt-0.5">
-                            then {nativeStorePrices[plan.id].recurringFormattedPrice}/{plan.interval}
                           </span>
                         )}
                       </div>
@@ -3422,7 +3450,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                         value={promoInput}
                         onChange={(e) => setPromoInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-                        placeholder={isNativeMobile() ? "Referral code (e.g. ALICE-9X2K)" : "Referral or Promo Code"}
+                        placeholder="Promo or referral code (e.g. DIWALI20)"
                         className="w-full bg-transparent border-none focus:ring-0 text-app-text placeholder:text-app-text-muted/40 text-sm font-medium outline-none"
                       />
                     </div>
@@ -3434,9 +3462,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     </button>
                   </div>
                   <p className="text-[11px] text-app-text-muted/60 text-center">
-                    {isNativeMobile() 
-                      ? "Have a friend's referral code? Apply it to get +7 days free and 10 extra AI credits!" 
-                      : "Only one referral or promo code can be applied at a time."}
+                    Enter code <span className="font-bold text-amber-500">DIWALI20</span> for 20% off, or a friend's referral code for +7 days free and 10 extra AI credits.
                   </p>
                 </div>
               )}

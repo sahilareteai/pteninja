@@ -1,6 +1,16 @@
 import { registerPlugin } from '@capacitor/core';
 import { isNativeMobile, isAndroid } from './mobile';
 
+export interface PlayBillingOffer {
+  basePlanId?: string;
+  offerId?: string;
+  offerToken: string;
+  tags?: string[];
+  formattedPrice?: string;
+  priceAmountMicros?: number;
+  billingPeriod?: string;
+}
+
 export interface PlayBillingProduct {
   productId: string;
   title: string;
@@ -14,6 +24,7 @@ export interface PlayBillingProduct {
   billingPeriod?: string;
   recurringFormattedPrice?: string;
   hasOffer?: boolean;
+  offers?: PlayBillingOffer[];
 }
 
 export interface PurchaseResult {
@@ -27,8 +38,16 @@ export interface PurchaseResult {
   isAcknowledged?: boolean;
 }
 
+export interface PlayBillingPurchaseOptions {
+  productId: string;
+  basePlanId?: string;
+  offerId?: string;
+  promoCode?: string;
+  hasPromo?: boolean;
+}
+
 export interface PlayBillingPluginInterface {
-  purchase(options: { productId: string; basePlanId?: string; offerId?: string }): Promise<PurchaseResult>;
+  purchase(options: PlayBillingPurchaseOptions): Promise<PurchaseResult>;
   queryProductDetails(options: { productIds: string[] }): Promise<{ products: PlayBillingProduct[] }>;
   restorePurchases(): Promise<{ purchases: PurchaseResult[] }>;
 }
@@ -57,12 +76,19 @@ export const PLAY_SUBSCRIPTION_MAP: Record<string, { productId: string; basePlan
   },
 };
 
+export type PurchaseSubscriptionOptions = 
+  | string 
+  | { offerId?: string; promoCode?: string; hasPromo?: boolean };
+
 /**
- * Initiates Google Play in-app purchase for the specified plan ID, optionally targeting a specific offer.
+ * Initiates Google Play checkout for the specified plan ID, optionally targeting a promo or specific offer.
  */
-export async function purchasePlaySubscription(planId: string, offerId?: string): Promise<PurchaseResult> {
+export async function purchasePlaySubscription(
+  planId: string, 
+  options?: PurchaseSubscriptionOptions
+): Promise<PurchaseResult> {
   if (!isNativeMobile() || !isAndroid()) {
-    throw new Error('Google Play In-App Billing is only available on native Android devices.');
+    throw new Error('Google Play purchases are only available on Android devices.');
   }
 
   const normalizedPlanId = planId.toLowerCase().trim();
@@ -71,10 +97,16 @@ export async function purchasePlaySubscription(planId: string, offerId?: string)
     throw new Error(`No Google Play product mapped for plan: ${planId}`);
   }
 
+  const offerId = typeof options === 'string' ? options : options?.offerId;
+  const promoCode = typeof options === 'object' ? options?.promoCode : undefined;
+  const hasPromo = typeof options === 'object' ? options?.hasPromo : Boolean(offerId);
+
   return await NativePlayBilling.purchase({
     productId: config.productId,
     basePlanId: config.basePlanId,
     offerId: offerId,
+    promoCode: promoCode,
+    hasPromo: hasPromo,
   });
 }
 

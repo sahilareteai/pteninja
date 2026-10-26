@@ -82,6 +82,9 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
         final String productId = call.getString("productId");
         final String basePlanId = call.getString("basePlanId");
         final String offerId = call.getString("offerId");
+        final String promoCode = call.getString("promoCode");
+        final Boolean hasPromoBool = call.getBoolean("hasPromo", false);
+        final boolean hasPromo = Boolean.TRUE.equals(hasPromoBool) || (promoCode != null && !promoCode.trim().isEmpty());
 
         if (productId == null || productId.trim().isEmpty()) {
             call.reject("productId is required");
@@ -115,35 +118,89 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                     return;
                 }
 
-                // Match offer: prefer matching offerId, then any promo offer under matching basePlanId, then base plan offer
                 ProductDetails.SubscriptionOfferDetails selectedOffer = null;
                 ProductDetails.SubscriptionOfferDetails basePlanOffer = null;
+                ProductDetails.SubscriptionOfferDetails matchingPromoOffer = null;
+                ProductDetails.SubscriptionOfferDetails cheapestOffer = null;
+                long lowestPriceMicros = Long.MAX_VALUE;
 
                 for (ProductDetails.SubscriptionOfferDetails offer : offers) {
                     boolean baseMatches = (basePlanId == null || basePlanId.trim().isEmpty() || basePlanId.trim().equalsIgnoreCase(offer.getBasePlanId()));
                     if (!baseMatches) continue;
 
-                    if (offerId != null && !offerId.trim().isEmpty()) {
-                        if (offerId.trim().equalsIgnoreCase(offer.getOfferId())) {
-                            selectedOffer = offer;
-                            break;
+                    List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
+                    if (!phases.isEmpty()) {
+                        long priceMicros = phases.get(0).getPriceAmountMicros();
+                        if (priceMicros < lowestPriceMicros) {
+                            lowestPriceMicros = priceMicros;
+                            cheapestOffer = offer;
                         }
-                    } else {
-                        if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
-                            selectedOffer = offer;
-                            break;
-                        } else if (basePlanOffer == null) {
+                    }
+
+                    // Track standard base plan offer (no promotional offerId)
+                    if (offer.getOfferId() == null || offer.getOfferId().trim().isEmpty()) {
+                        if (basePlanOffer == null) {
                             basePlanOffer = offer;
                         }
                     }
+
+                    // Check if offerId, promoCode, or offer tags match Diwali / promo
+                    boolean matchesOfferId = (offerId != null && !offerId.trim().isEmpty() && offer.getOfferId() != null
+                            && (offer.getOfferId().equalsIgnoreCase(offerId) || offer.getOfferId().toLowerCase().contains(offerId.toLowerCase())));
+
+                    boolean matchesPromoCode = (promoCode != null && !promoCode.trim().isEmpty() && offer.getOfferId() != null
+                            && (offer.getOfferId().equalsIgnoreCase(promoCode) || offer.getOfferId().toLowerCase().contains(promoCode.toLowerCase())));
+
+                    boolean matchesTags = false;
+                    List<String> tags = offer.getOfferTags();
+                    if (tags != null) {
+                        for (String tag : tags) {
+                            if (tag == null) continue;
+                            String t = tag.trim().toLowerCase();
+                            if (offerId != null && tag.equalsIgnoreCase(offerId)) matchesTags = true;
+                            if (promoCode != null && tag.equalsIgnoreCase(promoCode)) matchesTags = true;
+                            if (hasPromo && (t.contains("diwali") || t.contains("diwali20") || t.contains("promo") || t.contains("discount") || t.contains("sale"))) {
+                                matchesTags = true;
+                            }
+                        }
+                    }
+
+                    if (offer.getOfferId() != null) {
+                        String offIdLower = offer.getOfferId().toLowerCase();
+                        if (hasPromo && (offIdLower.contains("diwali") || offIdLower.contains("diwali20") || offIdLower.contains("promo") || offIdLower.contains("discount") || offIdLower.contains("sale"))) {
+                            matchesTags = true;
+                        }
+                    }
+
+                    if (matchesOfferId || matchesPromoCode || matchesTags) {
+                        matchingPromoOffer = offer;
+                    }
                 }
 
-                if (selectedOffer == null) {
-                    selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
+                if (hasPromo) {
+                    // With a promo active (e.g. Diwali 20%), prioritize matching promo offer, then cheapest available offer (e.g. ₹600 vs ₹750)
+                    if (matchingPromoOffer != null) {
+                        selectedOffer = matchingPromoOffer;
+                    } else if (cheapestOffer != null) {
+                        selectedOffer = cheapestOffer;
+                    } else {
+                        selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
+                    }
+                } else {
+                    // No promo active: prefer standard base plan offer unless a specific offerId was explicitly requested
+                    if (offerId != null && matchingPromoOffer != null) {
+                        selectedOffer = matchingPromoOffer;
+                    } else {
+                        selectedOffer = basePlanOffer != null ? basePlanOffer : (cheapestOffer != null ? cheapestOffer : offers.get(0));
+                    }
                 }
 
                 String offerToken = selectedOffer.getOfferToken();
-                Log.d(TAG, "Initiating purchase for product: " + productId + ", basePlan: " + selectedOffer.getBasePlanId() + ", offerId: " + selectedOffer.getOfferId());
+                Log.d(TAG, "Initiating purchase for product: " + productId 
+                        + ", basePlan: " + selectedOffer.getBasePlanId() 
+                        + ", offerId: " + selectedOffer.getOfferId() 
+                        + ", hasPromo: " + hasPromo
+                        + ", token: " + offerToken);
 
                 List<BillingFlowParams.ProductDetailsParams> detailsParamsList = new ArrayList<>();
                 detailsParamsList.add(
@@ -218,8 +275,29 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                     if (offers != null && !offers.isEmpty()) {
                         ProductDetails.SubscriptionOfferDetails promoOffer = null;
                         ProductDetails.SubscriptionOfferDetails baseOffer = null;
+                        JSArray offersArray = new JSArray();
 
                         for (ProductDetails.SubscriptionOfferDetails offer : offers) {
+                            JSObject offObj = new JSObject();
+                            offObj.put("basePlanId", offer.getBasePlanId());
+                            offObj.put("offerId", offer.getOfferId());
+                            offObj.put("offerToken", offer.getOfferToken());
+
+                            JSArray tagsArr = new JSArray();
+                            if (offer.getOfferTags() != null) {
+                                for (String t : offer.getOfferTags()) tagsArr.put(t);
+                            }
+                            offObj.put("tags", tagsArr);
+
+                            List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
+                            if (!phases.isEmpty()) {
+                                ProductDetails.PricingPhase ph = phases.get(0);
+                                offObj.put("formattedPrice", ph.getFormattedPrice());
+                                offObj.put("priceAmountMicros", ph.getPriceAmountMicros());
+                                offObj.put("billingPeriod", ph.getBillingPeriod());
+                            }
+                            offersArray.put(offObj);
+
                             if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
                                 if (promoOffer == null) {
                                     promoOffer = offer;
@@ -228,6 +306,8 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                                 baseOffer = offer;
                             }
                         }
+
+                        item.put("offers", offersArray);
 
                         // Prioritize promotional/discount offer if present, otherwise use base plan offer
                         ProductDetails.SubscriptionOfferDetails chosenOffer = promoOffer != null ? promoOffer : (baseOffer != null ? baseOffer : offers.get(0));
