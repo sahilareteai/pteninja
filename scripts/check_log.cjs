@@ -15,9 +15,9 @@ try {
     console.log(`- ${r.name} (#${r.id}) Status: ${r.status}, Conclusion: ${r.conclusion}`);
   }
 
-  const currentRun = runs[0];
-  console.log(`\nInspecting ${currentRun.name} (#${currentRun.id}): Status: ${currentRun.status}`);
-  const jobsJson = execSync(`curl.exe -s -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/sahilareteai/pteninja/actions/runs/${currentRun.id}/jobs"`).toString();
+  const targetRun = runs.find(r => r.id === 40303767527) || runs[0];
+  console.log(`\nInspecting ${targetRun.name} (#${targetRun.id}): Status: ${targetRun.status}, Conclusion: ${targetRun.conclusion}`);
+  const jobsJson = execSync(`curl.exe -s -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/sahilareteai/pteninja/actions/runs/${targetRun.id}/jobs"`).toString();
   const jobs = JSON.parse(jobsJson).jobs;
   for (const j of jobs) {
     console.log(`Job: ${j.name} (Status: ${j.status})`);
