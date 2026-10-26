@@ -1436,22 +1436,31 @@ function AppContent() {
     });
   }, []);
 
-  // Screen categories where bottom banner ads are enabled (practice question banks)
-  // Excluded: 'dashboard' (Home), 'mock-tests', 'roadmap', and utility/account screens
-  const BANNER_PRACTICE_TABS = new Set(['speaking', 'writing', 'reading', 'listening', 'vocabulary']);
+  // Screen categories where bottom banner ads are enabled.
+  // Excluded: 'dashboard' (Home screen / Dojo), onboarding / first screen, and active task/test sessions
+  // Included: other navigation screens: question banks, mock-tests list, vocabulary, roadmap, faq
+  const BANNER_NAVIGATION_TABS = new Set([
+    'speaking',
+    'writing',
+    'reading',
+    'listening',
+    'vocabulary',
+    'mock-tests',
+    'roadmap',
+    'faq',
+  ]);
 
   useEffect(() => {
     if (!isNativeMobile()) return;
 
-    if (isProSubscriber) {
+    if (isProSubscriber || !user) {
       adMobService.hideBanner();
       return;
     }
 
     // Do NOT show banner on home screen (dashboard), during mock tests, during active tasks,
-    // or on full-page utility screens (roadmap, profile, settings, faq, terms, privacy).
-    // Only display on designated question practice tabs.
-    const isEligibleTab = BANNER_PRACTICE_TABS.has(activeTab);
+    // or on onboarding / first screen. Only display on other navigation screens.
+    const isEligibleTab = BANNER_NAVIGATION_TABS.has(activeTab);
     const isInSession = !!(activeMockTest || selectedTask);
 
     if (isEligibleTab && !isInSession) {
@@ -1459,7 +1468,7 @@ function AppContent() {
     } else {
       adMobService.hideBanner();
     }
-  }, [isProSubscriber, activeTab, activeMockTest, selectedTask]);
+  }, [isProSubscriber, user, activeTab, activeMockTest, selectedTask]);
 
   useEffect(() => {
     if (isAccessRestricted && !loading && !pendingGuestWriteRef.current) {
@@ -5286,6 +5295,13 @@ function MockTestSession({
     // parent's handleMockTestFinish no longer closes the session on its own — the
     // user dismisses the scorecard themselves via the "Back to Dojo" button.
     setFinalResult(result);
+
+    // Trigger interstitial ad right after AI scoring is received (subject to 2-min frequency cooldown)
+    if (isNativeMobile()) {
+      setTimeout(() => {
+        adMobService.showInterstitial(false);
+      }, 1200);
+    }
   };
 
   if (finalResult) {
@@ -5331,10 +5347,7 @@ function MockTestSession({
           </div>
 
           <button 
-            onClick={() => {
-              adMobService.showInterstitial(false);
-              onClose();
-            }}
+            onClick={onClose}
             className="w-full py-5 bg-app-primary text-app-bg rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20"
           >
             Back to Dojo
@@ -8306,6 +8319,12 @@ function TaskModal({
       } else {
         onFinish(finalScore, finalInput || userInput);
         setPhase('feedback');
+        // Trigger interstitial ad right after AI scoring is received (subject to 2-min frequency cooldown)
+        if (isNativeMobile()) {
+          setTimeout(() => {
+            adMobService.showInterstitial(false);
+          }, 1200);
+        }
       }
     } catch (error: any) {
       console.error("Analysis failed:", error);
@@ -8410,12 +8429,7 @@ function TaskModal({
             <div className="w-px h-6 bg-app-primary/20 mx-2" />
             {!isMockTest && (
               <button 
-                onClick={() => {
-                  if (phase === 'feedback') {
-                    adMobService.showInterstitial(false);
-                  }
-                  onClose();
-                }} 
+                onClick={onClose} 
                 className="p-2 hover:bg-app-bg rounded-full transition-colors text-app-text-muted"
                 aria-label="Close task modal"
               >
@@ -9683,10 +9697,8 @@ function TaskModal({
                       if (isMockTest) {
                         onFinish(feedback.overall);
                       } else if (onNext) {
-                        adMobService.showInterstitial(false);
                         onNext();
                       } else {
-                        adMobService.showInterstitial(false);
                         onClose();
                       }
                     }}
