@@ -16,7 +16,8 @@
     "cap:sync:ios": "cap sync ios",
     "open:ios": "cap open ios",
     "migrate:db": "node scripts/migrate.mjs",
-    "migrate:auth": "node scripts/migrate-auth.mjs"
+    "migrate:auth": "node scripts/migrate-auth.mjs",
+    "postinstall": "node scripts/patch-apple-auth.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.2.1",

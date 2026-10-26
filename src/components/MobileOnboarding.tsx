@@ -114,7 +114,11 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     }
   };
 
+  const isSubmittingRef = useRef(false);
+
   const handleGoogleClick = async () => {
+    if (isSigningIn || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     try {
       setIsSigningIn(true);
       setSigningInProvider('google');
@@ -122,11 +126,15 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 1000);
     }
   };
 
   const handleAppleClick = async () => {
-    if (!onAppleLogin) return;
+    if (!onAppleLogin || isSigningIn || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     try {
       setIsSigningIn(true);
       setSigningInProvider('apple');
@@ -134,6 +142,9 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 1000);
     }
   };
 
@@ -598,10 +609,6 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             <button
               type="button"
               onClick={handleAppleClick}
-              onTouchEnd={(e) => {
-                e.stopPropagation();
-                handleAppleClick();
-              }}
               disabled={isSigningIn}
               className="w-full py-3.5 px-4 rounded-2xl bg-white text-black font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-white/5 active:scale-[0.98] transition-all disabled:opacity-70 cursor-pointer"
             >
@@ -620,10 +627,6 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           <button
             type="button"
             onClick={handleGoogleClick}
-            onTouchEnd={(e) => {
-              e.stopPropagation();
-              handleGoogleClick();
-            }}
             disabled={isSigningIn}
             className={`w-full py-3.5 px-4 rounded-2xl ${
               isIOS() 
@@ -661,10 +664,6 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             <button
               type="button"
               onClick={() => onEmailLogin('register')}
-              onTouchEnd={(e) => {
-                e.stopPropagation();
-                onEmailLogin('register');
-              }}
               className="py-3 px-3 rounded-2xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer"
             >
               <Mail size={15} className="text-[#66FCF1]" />
@@ -674,10 +673,6 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             <button
               type="button"
               onClick={onGuestAccess}
-              onTouchEnd={(e) => {
-                e.stopPropagation();
-                onGuestAccess();
-              }}
               className="py-3 px-3 rounded-2xl bg-gradient-to-r from-[#45A29E]/20 to-[#66FCF1]/20 hover:from-[#45A29E]/30 hover:to-[#66FCF1]/30 border border-[#45A29E]/40 text-[#66FCF1] font-bold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer"
             >
               <Sparkles size={14} className="text-yellow-400" />
@@ -690,10 +685,6 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
             <button
               type="button"
               onClick={() => onEmailLogin('signin')}
-              onTouchEnd={(e) => {
-                e.stopPropagation();
-                onEmailLogin('signin');
-              }}
               className="text-xs text-white/60 hover:text-white transition-colors cursor-pointer"
             >
               Already have an account? <span className="font-bold text-[#66FCF1] underline underline-offset-2">Sign In</span>
