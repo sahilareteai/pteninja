@@ -149,13 +149,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => clearTimeout(safetyTimer);
   }, []);
 
-  // Safety watchdog: Under NO circumstance allow isAuthenticating to freeze the UI for > 40s
+  // Safety watchdog: Under NO circumstance allow isAuthenticating to freeze the UI for > 12s
   useEffect(() => {
     if (!isAuthenticating) return;
     const watchdog = setTimeout(() => {
-      console.warn('[AuthWatchdog] isAuthenticating remained true for 40s. Auto-releasing lock.');
+      console.warn('[AuthWatchdog] isAuthenticating remained true for 12s. Auto-releasing lock.');
       setIsAuthenticating(false);
-    }, 40000);
+    }, 12000);
     return () => clearTimeout(watchdog);
   }, [isAuthenticating]);
 
@@ -178,7 +178,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (firebaseUser) {
         setIsEmailVerified(firebaseUser.emailVerified);
-        setLoading(true);
+        setUser(currentUser => {
+          if (!currentUser) {
+            setLoading(true);
+          }
+          return currentUser;
+        });
 
         // Failsafe: Never leave user in loading or authenticating state for more than 4s if Firestore snapshot is slow
         snapshotFallbackTimer = setTimeout(() => {
@@ -562,11 +567,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         // Safety timeout race: Never allow native Apple sheet or bridge to freeze indefinitely on mobile
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
+          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 18000)
         );
 
         const res = await Promise.race([
-          FirebaseAuthentication.signInWithApple(),
+          FirebaseAuthentication.signInWithApple({ skipNativeAuth: true } as any),
           appleTimeoutPromise
         ]);
 
@@ -581,7 +586,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         // Safety timeout race on JS Firebase Auth sign in
         const fbTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Firebase authentication timed out.')), 12000)
+          setTimeout(() => reject(new Error('Firebase authentication timed out.')), 8000)
         );
 
         let userCred: any;
@@ -617,8 +622,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           });
         }
 
-        setShowAuthModal(false);
         setIsAuthenticating(false);
+        setShowAuthModal(false);
         return;
       }
 
@@ -1266,6 +1271,22 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                       : "Connecting to the Ninja network...")}
                 </p>
               </div>
+
+              {/* Instant dismiss/cancel button so user is NEVER stuck */}
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 2.5 }}
+                type="button"
+                onClick={() => {
+                  setIsAuthenticating(false);
+                  setIsSyncingSubscription(false);
+                  setShowAuthModal(false);
+                }}
+                className="mt-2 px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white/70 hover:text-white transition-all cursor-pointer border border-white/10"
+              >
+                Cancel
+              </motion.button>
             </div>
           </motion.div>
         )}

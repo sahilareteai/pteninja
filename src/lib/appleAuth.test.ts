@@ -160,4 +160,13 @@ describe('Apple Authentication Helper Unit Tests', () => {
       expect(user.displayName).toBe('tarun.ninja');
     });
   });
+
+  describe('Version & Build Metadata', () => {
+    it('provides valid version and build number for TestFlight verification', async () => {
+      const { APP_VERSION, APP_BUILD } = await import('../version');
+      expect(APP_VERSION).toBeDefined();
+      expect(typeof APP_VERSION).toBe('string');
+      expect(APP_BUILD).toBeGreaterThanOrEqual(28);
+    });
+  });
 });

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { isIOS } from '../lib/mobile';
+import { APP_VERSION, APP_BUILD } from '../version';
 
 interface MobileOnboardingProps {
   onGoogleLogin: () => void;
@@ -692,9 +693,12 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
           </div>
         </div>
 
-        {/* Small Trust Badge Footnote */}
+        {/* Small Trust Badge Footnote & Version Identifier */}
         <p className="text-[10px] text-center text-white/40 pt-3">
           By continuing, you agree to PTE Ninja&apos;s Terms of Service &amp; Privacy Policy.
+        </p>
+        <p className="text-[9px] text-center text-white/30 pt-1 font-mono tracking-wider">
+          v{APP_VERSION} (Build {APP_BUILD})
         </p>
       </div>
     </div>
