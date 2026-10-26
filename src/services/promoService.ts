@@ -34,17 +34,27 @@ export function generateUserReferralCode(displayName?: string | null, uid?: stri
 }
 
 export class PromoService {
-  private static promoCodes: Record<string, PromoCode> = {};
+  private static promoCodes: Record<string, PromoCode> = {
+    'DIWALI20': { code: 'DIWALI20', discountPercent: 20, description: 'Diwali Festive Additional 20% Discount', isActive: true },
+    'NINJA10': { code: 'NINJA10', discountPercent: 10, description: 'Secret Ninja 10% Discount', isActive: true },
+    'NINJA-PTE-SPECIAL-10': { code: 'NINJA-PTE-SPECIAL-10', discountPercent: 10, description: 'Additional 10% off special discount', isActive: true },
+    'NINJA-PTE-SPECIAL-25': { code: 'NINJA-PTE-SPECIAL-25', discountPercent: 25, description: 'Additional 25% off special discount', isActive: true },
+    'NINJA-PTE-SPECIAL-50': { code: 'NINJA-PTE-SPECIAL-50', discountPercent: 50, description: 'Additional 50% off special discount', isActive: true },
+    'WELCOME': { code: 'WELCOME', discountPercent: 15, description: 'Welcome Bonus 15% Off', isActive: true },
+  };
   private static isInitialized = false;
 
   static async initialize() {
     if (this.isInitialized) return;
+    this.isInitialized = true;
     
     try {
       const querySnapshot = await getDocs(collection(db, 'promoCodes'));
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as PromoCode;
-        this.promoCodes[data.code.toUpperCase()] = data;
+        if (data && data.code) {
+          this.promoCodes[data.code.toUpperCase()] = data;
+        }
       });
       if (!this.promoCodes['NINJA10']) {
         this.promoCodes['NINJA10'] = { code: 'NINJA10', discountPercent: 10, description: 'Secret Ninja 10% Discount', isActive: true };
@@ -52,18 +62,8 @@ export class PromoService {
       if (!this.promoCodes['DIWALI20']) {
         this.promoCodes['DIWALI20'] = { code: 'DIWALI20', discountPercent: 20, description: 'Diwali Festive Additional 20% Discount', isActive: true };
       }
-      this.isInitialized = true;
     } catch (error) {
-      console.error('Failed to initialize promo codes from Firestore:', error);
-      // Fallback to hardcoded codes if Firestore fails
-      this.promoCodes = {
-        'DIWALI20': { code: 'DIWALI20', discountPercent: 20, description: 'Diwali Festive Additional 20% Discount', isActive: true },
-        'NINJA10': { code: 'NINJA10', discountPercent: 10, description: 'Secret Ninja 10% Discount', isActive: true },
-        'NINJA-PTE-SPECIAL-10': { code: 'NINJA-PTE-SPECIAL-10', discountPercent: 10, description: 'Additional 10% off special discount', isActive: true },
-        'NINJA-PTE-SPECIAL-25': { code: 'NINJA-PTE-SPECIAL-25', discountPercent: 25, description: 'Additional 25% off special discount', isActive: true },
-        'NINJA-PTE-SPECIAL-50': { code: 'NINJA-PTE-SPECIAL-50', discountPercent: 50, description: 'Additional 50% off special discount', isActive: true },
-        'WELCOME': { code: 'WELCOME', discountPercent: 15, description: 'Welcome Bonus 15% Off', isActive: true },
-      };
+      console.warn('Firestore promoCodes sync skipped or deferred:', error);
     }
   }
 
@@ -80,16 +80,21 @@ export class PromoService {
       return { promo: null, error: 'Please enter a referral or promo code.' };
     }
 
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
     const normalizedCode = code.trim().toUpperCase();
 
-    // 1. Check system promo codes
+    // 1. Check pre-populated system promo codes immediately (guaranteed offline & in guest mode)
     const systemPromo = this.promoCodes[normalizedCode];
     if (systemPromo && systemPromo.isActive) {
       return { promo: systemPromo };
+    }
+
+    // If not found in memory and not yet initialized, load from Firestore and re-check
+    if (!this.isInitialized) {
+      await this.initialize();
+      const loadedPromo = this.promoCodes[normalizedCode];
+      if (loadedPromo && loadedPromo.isActive) {
+        return { promo: loadedPromo };
+      }
     }
 
     // 2. Query user referral codes in Firestore

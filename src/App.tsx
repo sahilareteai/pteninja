@@ -2734,7 +2734,9 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   };
 
   const handleSelectPlan = async (plan: any) => {
-    if (!user?.email && !emailInput) {
+    // On web checkout (Stripe/Razorpay), receipt email is needed.
+    // On native mobile (Apple StoreKit 2 & Google Play), native device accounts handle billing directly.
+    if (!isNativeMobile() && !user?.email && !emailInput) {
       setShowEmailPrompt(true);
       setSelectedPlan(plan);
       return;

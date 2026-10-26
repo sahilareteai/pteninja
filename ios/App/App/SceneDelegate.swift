@@ -1,6 +1,10 @@
 import UIKit
 import Capacitor
 
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
+
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
@@ -15,6 +19,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let url = URLContexts.first?.url else { return }
+        #if canImport(GoogleSignIn)
+        if GIDSignIn.sharedInstance.handle(url) {
+            return
+        }
+        #endif
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

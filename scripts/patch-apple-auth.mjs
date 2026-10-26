@@ -97,7 +97,13 @@ if (googleFile) {
             }
             return
         }
-        let config = GIDConfiguration(clientID: clientId, serverClientID: clientId)
+        var serverClientId: String? = nil
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
+           let sId = dict["SERVER_CLIENT_ID"] as? String, !sId.isEmpty {
+            serverClientId = sId
+        }
+        let config = GIDConfiguration(clientID: clientId, serverClientID: serverClientId)
         GIDSignIn.sharedInstance.configuration = config
         guard let controller = self.pluginImplementation.getPlugin().bridge?.viewController else {
             if isLink == true {
