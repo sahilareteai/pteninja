@@ -21,7 +21,7 @@ on:
 jobs:
   prepare-submission:
     name: Upload Metadata & Screenshots to App Store Connect
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:

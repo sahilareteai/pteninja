@@ -76,7 +76,7 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                         "success": true,
                         "orderId": String(transaction.id),
                         "originalTransactionId": String(transaction.originalID),
-                        "purchaseToken": transaction.jwsRepresentation,
+                        "purchaseToken": verification.jwsRepresentation,
                         "productId": transaction.productID,
                         "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
                     ]
@@ -153,7 +153,7 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                         var item: [String: Any] = [
                             "orderId": String(transaction.id),
                             "originalTransactionId": String(transaction.originalID),
-                            "purchaseToken": transaction.jwsRepresentation,
+                            "purchaseToken": result.jwsRepresentation,
                             "productId": transaction.productID,
                             "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
                         ]
