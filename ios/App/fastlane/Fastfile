@@ -146,6 +146,7 @@ platform :ios do
       force: true,
       skip_screenshots: false,
       skip_metadata: false,
+      skip_review_information: true,
       metadata_path: "./fastlane/metadata",
       screenshots_path: "./fastlane/screenshots",
       overwrite_screenshots: true,
