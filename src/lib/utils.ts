@@ -104,6 +104,15 @@ export function formatAuthError(error: any): string {
   }
 
   if (
+    rawMessage.toLowerCase().includes('timed out') ||
+    rawMessage.toLowerCase().includes('timeout') ||
+    code.includes('timeout')
+  ) {
+    return "Authentication timed out. Please check your internet connection and try again.";
+  }
+
+  if (
+    rawMessage.toLowerCase().includes('google sign-in sdk is not included') ||
     rawMessage.toLowerCase().includes('google sign in is not enabled') ||
     rawMessage.toLowerCase().includes('googleservice-info')
   ) {

@@ -54,6 +54,24 @@ describe('iOS Authentication & Error Handling Unit Tests', () => {
       expect(formatted).not.toContain('system settings');
       expect(formatted).not.toContain('Firebase');
     });
+
+    it('translates timeout errors into friendly connection guidance without technical jargon', () => {
+      const err = new Error('Firebase authentication timed out.');
+      const formatted = formatAuthError(err);
+      expect(formatted).toBe(
+        'Authentication timed out. Please check your internet connection and try again.'
+      );
+      expect(formatted).not.toContain('Firebase');
+      expect(formatted).not.toContain('system');
+    });
+
+    it('translates missing Google Sign-In SDK error into user-friendly guidance', () => {
+      const err = new Error('The Google Sign-In SDK is not included in this build. Add the required CocoaPods subspec or Swift package trait.');
+      const formatted = formatAuthError(err);
+      expect(formatted).toBe(
+        'Google Sign-In is being finalized for iOS. Please sign in with Email or continue with Instant Guest.'
+      );
+    });
   });
 
   describe('Mobile Platform Detection', () => {

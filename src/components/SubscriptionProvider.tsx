@@ -149,13 +149,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => clearTimeout(safetyTimer);
   }, []);
 
-  // Safety watchdog: Under NO circumstance allow isAuthenticating to freeze the UI for > 12s
+  // Safety watchdog: Under NO circumstance allow isAuthenticating to freeze the UI for > 40s
   useEffect(() => {
     if (!isAuthenticating) return;
     const watchdog = setTimeout(() => {
-      console.warn('[AuthWatchdog] isAuthenticating remained true for 12s. Auto-releasing lock.');
+      console.warn('[AuthWatchdog] isAuthenticating remained true for 40s. Auto-releasing lock.');
       setIsAuthenticating(false);
-    }, 12000);
+    }, 40000);
     return () => clearTimeout(watchdog);
   }, [isAuthenticating]);
 
@@ -491,26 +491,43 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       if (isNativeMobile()) {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        
+        // Safety timeout race: Never allow native Google prompt or bridge to freeze indefinitely
+        const googleTimeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Google Sign-In timed out. Please try again.')), 25000)
+        );
+
         let res;
         try {
-          res = await FirebaseAuthentication.signInWithGoogle();
+          res = await Promise.race([
+            FirebaseAuthentication.signInWithGoogle(),
+            googleTimeoutPromise
+          ]);
         } catch (cmErr: any) {
-          console.warn('[GoogleAuth] CredentialManager attempt failed, trying GoogleSignIn fallback:', cmErr);
-          res = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+          console.warn('[GoogleAuth] Primary attempt failed, trying fallback:', cmErr);
+          res = await Promise.race([
+            FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false }),
+            googleTimeoutPromise
+          ]);
         }
 
-        let googleIdToken = res.credential?.idToken;
+        let googleIdToken = res?.credential?.idToken;
         if (!googleIdToken) {
-          const idTokenRes = await FirebaseAuthentication.getIdToken();
-          googleIdToken = idTokenRes.token;
+          try {
+            const idTokenRes = await FirebaseAuthentication.getIdToken();
+            googleIdToken = idTokenRes?.token;
+          } catch (tokErr) {
+            console.warn('[GoogleAuth] getIdToken fallback:', tokErr);
+          }
         }
 
         if (googleIdToken) {
-          const credential = GoogleAuthProvider.credential(googleIdToken, res.credential?.accessToken);
+          const credential = GoogleAuthProvider.credential(googleIdToken, res?.credential?.accessToken);
           if (auth.currentUser && auth.currentUser.isAnonymous) {
             try {
               await linkWithCredential(auth.currentUser, credential);
             } catch (linkErr: any) {
+              console.log('[GoogleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
               await signInWithCredential(auth, credential);
             }
           } else {
@@ -532,9 +549,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setIsAuthenticating(false);
         return;
       }
-      if (isIOS() && (errMsg.toLowerCase().includes('not enabled') || errMsg.toLowerCase().includes('googleservice-info') || errMsg.toLowerCase().includes('configuration'))) {
+      if (isIOS() && (errMsg.toLowerCase().includes('not enabled') || errMsg.toLowerCase().includes('googleservice-info') || errMsg.toLowerCase().includes('configuration') || errMsg.toLowerCase().includes('not included') || errMsg.toLowerCase().includes('client id not configured'))) {
         setIsAuthenticating(false);
-        setAuthError("Google Sign-In is being finalized for iOS. Please sign in with Email or continue with Instant Guest Access.");
+        setAuthError("Google Sign-In is being finalized for iOS. Please sign in with Apple or Email.");
         return;
       }
       if (!isNativeMobile() && (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request')) {
@@ -565,9 +582,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (isNativeMobile()) {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
 
-        // Safety timeout race: Never allow native Apple sheet or bridge to freeze indefinitely on mobile
+        // Allow ample time for user biometric Face ID / Passcode prompt
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 18000)
+          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
         );
 
         const res = await Promise.race([
@@ -584,29 +601,18 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           rawNonce
         });
 
-        // Safety timeout race on JS Firebase Auth sign in
-        const fbTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Firebase authentication timed out.')), 8000)
-        );
-
         let userCred: any;
         if (auth.currentUser && auth.currentUser.isAnonymous) {
           try {
-            userCred = await Promise.race([
-              linkWithCredential(auth.currentUser, credential),
-              fbTimeoutPromise
-            ]);
-          } catch {
-            userCred = await Promise.race([
-              signInWithCredential(auth, credential),
-              fbTimeoutPromise
-            ]);
+            // Attempt to link anonymous guest session with Apple credentials
+            userCred = await linkWithCredential(auth.currentUser, credential);
+          } catch (linkErr: any) {
+            console.log('[AppleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
+            // If already linked or credential in use, sign in directly with credential
+            userCred = await signInWithCredential(auth, credential);
           }
         } else {
-          userCred = await Promise.race([
-            signInWithCredential(auth, credential),
-            fbTimeoutPromise
-          ]);
+          userCred = await signInWithCredential(auth, credential);
         }
 
         const firebaseUser = userCred?.user || auth.currentUser;

@@ -3330,7 +3330,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
 
                         <div className="flex items-baseline justify-center gap-2 flex-wrap">
                           <span className="text-sm text-app-text-muted/40 line-through font-medium">
-                            {planPricing.sym}{planPricing.strikeThroughNum.toLocaleString()}
+                            {planPricing.symbol}{planPricing.strikeThroughNum.toLocaleString()}
                           </span>
                           <div className="flex items-baseline gap-1">
                             <span className="text-2xl sm:text-3xl font-extrabold text-app-accent tracking-tight">
