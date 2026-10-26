@@ -1,3 +1,5 @@
+import UIKit
+import Capacitor
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 #endif
