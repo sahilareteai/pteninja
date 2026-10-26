@@ -64,7 +64,8 @@ class AdMobService {
   private hasFallbackRewardedLoaded = false;
 
   // Interstitial frequency cap: minimum 2 minutes (120,000ms) between impressions
-  private lastInterstitialTime = 0;
+  // Initialized to Date.now() so no interstitial ad ever interrupts the user upon app start
+  private lastInterstitialTime = Date.now();
   private readonly INTERSTITIAL_MIN_INTERVAL_MS = 120_000;
 
   /**
@@ -114,25 +115,10 @@ class AdMobService {
         this.notifyBannerListeners(this.bannerHeight || 50);
       });
 
-      // Banner failure listener: automatically fallback to official Google test banner
-      // when live ad unit returns "No Fill" (error 1), which is standard for unreleased TestFlight builds
+      // Banner failure listener: mark fallback without forcibly popping up an ad
       AdMob.addListener(BannerAdPluginEvents.FailedToLoad, async (err) => {
-        console.warn('AdMob Banner live fill failed (common in TestFlight/unreleased builds):', err);
-        if (!this.hasFallbackBannerLoaded) {
-          this.hasFallbackBannerLoaded = true;
-          try {
-            console.log('🔄 Serving AdMob test banner so ad space is populated during development/TestFlight...');
-            await AdMob.showBanner({
-              adId: ADMOB_TEST_IDS.banner,
-              adSize: BannerAdSize.ADAPTIVE_BANNER,
-              position: BannerAdPosition.BOTTOM_CENTER,
-              margin: 0,
-              isTesting: true,
-            });
-          } catch (fallbackErr) {
-            console.warn('AdMob test banner fallback error:', fallbackErr);
-          }
-        }
+        console.warn('AdMob Banner live fill failed (common in unreleased builds):', err);
+        this.hasFallbackBannerLoaded = true;
       });
 
       // Interstitial listeners

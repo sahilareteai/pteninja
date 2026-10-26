@@ -593,7 +593,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             <p className="text-[10px] font-bold text-app-primary uppercase tracking-[0.3em] mb-3">Complete Overview</p>
             <h2 className="text-3xl md:text-5xl font-black text-app-text tracking-tight mb-4">PTE Academic Test Structure</h2>
             <p className="text-app-text-muted text-base max-w-2xl mx-auto">
-              Understand the 3 official test sections evaluated in the Pearson Test of English Academic.
+              Understand the 3 official test sections evaluated in the PTE Academic examination.
             </p>
           </motion.div>
 
@@ -648,7 +648,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             {[
               {
                 q: "What is PTE Academic and who accepts it?",
-                a: "PTE Academic (Pearson Test of English) is a computer-based English language proficiency exam accepted by thousands of universities, colleges, and government agencies worldwide for study, work, and visa applications (including Australia, UK, Canada, and New Zealand)."
+                a: "PTE Academic is a computer-based English language proficiency exam accepted by thousands of universities, colleges, and government agencies worldwide for study, work, and visa applications (including Australia, UK, Canada, and New Zealand)."
               },
               {
                 q: "How does PTE Ninja's AI scoring engine work?",
