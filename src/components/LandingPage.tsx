@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, X, Sun, Moon, Star, ArrowRight, ArrowUpRight, Download, Mic, PenTool, Target, ShieldCheck, CheckCircle, Clock, Zap, MessageSquare, Award, PlayCircle, Quote, Smartphone, Sparkles } from 'lucide-react';
+import { Shield, X, Sun, Moon, Star, ArrowRight, ArrowUpRight, Download, Mic, PenTool, Target, ShieldCheck, CheckCircle, Clock, Zap, MessageSquare, Award, PlayCircle, Quote } from 'lucide-react';
 import { Logo } from './Logo';
 import { PrivacyPolicy } from './PrivacyPolicy';
 import { TermsOfService } from './TermsOfService';
@@ -288,74 +288,67 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             variants={itemVariant}
             className="pt-6 max-w-4xl mx-auto w-full text-left"
           >
-            <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-50/70 via-white/95 to-teal-50/60 dark:from-emerald-950/30 dark:via-app-surface/90 dark:to-teal-950/20 backdrop-blur-2xl p-6 sm:p-7 shadow-xl shadow-emerald-950/5 dark:shadow-[0_20px_50px_rgba(0,0,0,0.4),0_0_30px_rgba(16,185,129,0.12)] hover:border-emerald-400/60 transition-all duration-300 group">
-              {/* Subtle ambient lighting */}
-              <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
-              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative overflow-hidden rounded-3xl border border-app-border dark:border-white/10 bg-app-surface/70 dark:bg-app-surface/90 backdrop-blur-2xl p-6 sm:p-8 shadow-xl hover:border-app-primary/30 transition-all duration-300 group">
+              {/* Subtle ambient lighting matching site theme */}
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-app-primary/10 rounded-full blur-3xl pointer-events-none group-hover:bg-app-primary/15 transition-all duration-500" />
 
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                {/* Left side: Icon + Title + Feature Highlights */}
+                {/* Left side: App Logo + Title + Feature Highlights */}
                 <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
-                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 dark:bg-gradient-to-br dark:from-emerald-500/20 dark:via-black dark:to-emerald-900/40 border border-emerald-500/30 dark:border-emerald-500/40 flex items-center justify-center shadow-sm dark:shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-0.5">
-                    <Smartphone className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-600 dark:text-emerald-400" />
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                    </span>
+                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-black dark:bg-neutral-900 border border-black/10 dark:border-white/10 flex items-center justify-center shadow-md mt-0.5">
+                    <GooglePlayIcon className="w-6 h-6 sm:w-7 sm:h-7" />
                   </div>
 
                   <div className="space-y-1.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/30 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider">
-                        <Sparkles size={11} className="text-emerald-600 dark:text-emerald-400 fill-current" />
-                        Official Android App
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                        PTE Ninja for Android
                       </span>
-                      <span className="text-[11px] font-bold text-app-text-muted flex items-center gap-1">
-                        <Star size={12} className="text-amber-500 fill-amber-400" />
-                        <span className="text-app-text font-black">4.9</span> • 100% Free
+                      <span className="text-xs text-app-text-muted">
+                        • Free on Google Play
                       </span>
                     </div>
 
-                    <h3 className="text-xl sm:text-2xl font-black text-app-text tracking-tight">
+                    <h3 className="text-xl sm:text-2xl font-bold text-app-text tracking-tight">
                       Take PTE Ninja Everywhere
                     </h3>
                     <p className="text-xs sm:text-sm text-app-text-muted leading-relaxed max-w-xl">
                       Practice speaking with real-time AI mic feedback, complete full scored mock tests, and track your target 79+ score right from your Android device.
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-app-text-muted/80">
-                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
-                        <CheckCircle size={12} /> Instant AI scoring
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1.5 text-xs text-app-text-muted">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle size={13} className="text-emerald-500 dark:text-emerald-400" /> Instant AI scoring
                       </span>
-                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
-                        <CheckCircle size={12} /> Full question bank
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle size={13} className="text-emerald-500 dark:text-emerald-400" /> Full question bank
                       </span>
-                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
-                        <CheckCircle size={12} /> Auto cloud sync
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle size={13} className="text-emerald-500 dark:text-emerald-400" /> Auto cloud sync
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Right side: World-Class Official Google Play Store Button */}
-                <div className="w-full md:w-auto shrink-0 flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2 pt-2 md:pt-0 border-t border-emerald-500/20 md:border-0">
+                <div className="w-full md:w-auto shrink-0 flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2 pt-2 md:pt-0 border-t border-app-border dark:border-white/10 md:border-0">
                   <a
                     href={GOOGLE_PLAY_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group/btn flex items-center justify-center gap-3.5 px-6 py-3.5 bg-slate-950 hover:bg-black text-white border border-slate-800 dark:border-white/20 hover:border-emerald-400 rounded-2xl shadow-xl hover:shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
+                    className="group/btn flex items-center justify-center gap-3 px-6 py-3.5 bg-black hover:bg-neutral-900 text-white border border-white/15 hover:border-white/30 rounded-2xl shadow-xl transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
                   >
-                    <GooglePlayIcon className="w-8 h-8 shrink-0 transition-transform group-hover/btn:scale-110" />
+                    <GooglePlayIcon className="w-7 h-7 shrink-0 transition-transform group-hover/btn:scale-105" />
                     <div className="text-left leading-tight">
-                      <span className="block text-[9px] uppercase tracking-[0.2em] font-extrabold text-gray-400">GET IT ON</span>
-                      <span className="block text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-1.5">
+                      <span className="block text-[9px] uppercase tracking-wider font-semibold text-neutral-400">GET IT ON</span>
+                      <span className="block text-base font-bold text-white tracking-tight flex items-center gap-1">
                         Google Play
-                        <ArrowUpRight size={16} className="text-emerald-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
+                        <ArrowUpRight size={15} className="text-neutral-400 group-hover/btn:text-white transition-colors" />
                       </span>
                     </div>
                   </a>
-                  <span className="text-[10px] text-center md:text-right text-app-text-muted/70 font-semibold">
-                    Compatible with Android 8.0+
+                  <span className="text-[10px] text-center md:text-right text-app-text-muted font-medium">
+                    Android 8.0 and up
                   </span>
                 </div>
               </div>
