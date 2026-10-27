@@ -272,6 +272,30 @@ if (fs.existsSync(statusBarPluginFile)) {
 const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
 if (fs.existsSync(splashFile)) {
   let content = fs.readFileSync(splashFile, 'utf8');
+  const settingsTargetPattern = /private func splashScreenSettings\(from call: CAPPluginCall\) -> SplashScreenSettings \{[\s\S]*?\n    \}/;
+  const patchedSettingsImplementation = `private func splashScreenSettings(from call: CAPPluginCall) -> SplashScreenSettings {
+        var settings = SplashScreenSettings()
+        guard let options = call.options else { return settings }
+
+        if let showDuration = (options["showDuration"] as? NSNumber)?.intValue ?? (options["showDuration"] as? Int) {
+            settings.showDuration = showDuration
+        }
+        if let fadeInDuration = (options["fadeInDuration"] as? NSNumber)?.intValue ?? (options["fadeInDuration"] as? Int) {
+            settings.fadeInDuration = fadeInDuration
+        }
+        if let fadeOutDuration = (options["fadeOutDuration"] as? NSNumber)?.intValue ?? (options["fadeOutDuration"] as? Int) {
+            settings.fadeOutDuration = fadeOutDuration
+        }
+        if let autoHide = (options["autoHide"] as? NSNumber)?.boolValue ?? (options["autoHide"] as? Bool) {
+            settings.autoHide = autoHide
+        }
+        return settings
+    }`;
+
+  if (settingsTargetPattern.test(content)) {
+    content = content.replace(settingsTargetPattern, patchedSettingsImplementation);
+  }
+
   const splashTargetPattern = /private func splashScreenConfig\(\) -> SplashScreenConfig \{[\s\S]*?\n    \}/;
   const patchedSplashImplementation = `private func splashScreenConfig() -> SplashScreenConfig {
         var config = SplashScreenConfig()
