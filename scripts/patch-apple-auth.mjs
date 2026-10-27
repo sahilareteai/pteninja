@@ -74,11 +74,13 @@ if (appleFile) {
 
   if (targetPattern.test(content)) {
     content = content.replace(targetPattern, patchedImplementation);
-    fs.writeFileSync(appleFile, content, 'utf8');
-    console.log('✅ Successfully patched AppleAuthProviderHandler.swift with safe Capacitor rejection guards.');
-  } else {
-    console.log('ℹ️ AppleAuthProviderHandler.swift already patched or target pattern not found.');
   }
+  content = content.replace(
+    'return (self.pluginImplementation.getPlugin().bridge?.webView?.window)!',
+    'return (self.pluginImplementation.getPlugin().webView?.window ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow }))!'
+  );
+  fs.writeFileSync(appleFile, content, 'utf8');
+  console.log('✅ Successfully patched AppleAuthProviderHandler.swift with safe Capacitor rejection guards and direct webView.');
 }
 
 // 2. Patch GoogleAuthProviderHandler.swift to avoid silent hangs if options or controller are missing
@@ -105,7 +107,7 @@ if (googleFile) {
         }
         let config = GIDConfiguration(clientID: clientId, serverClientID: serverClientId)
         GIDSignIn.sharedInstance.configuration = config
-        guard let controller = self.pluginImplementation.getPlugin().bridge?.viewController else {
+        guard let controller = self.pluginImplementation.getPlugin().viewController else {
             if isLink == true {
                 self.pluginImplementation.handleFailedLink(message: "Unable to present Google Sign-In view controller.", error: nil)
             } else {
@@ -113,7 +115,7 @@ if (googleFile) {
             }
             return
         }
-        let scopes = call.getArray("scopes", String.self) ?? []
+        let scopes = (call.options["scopes"] as? [String]) ?? []
 
         DispatchQueue.main.async {
             GIDSignIn.sharedInstance.signIn(withPresenting: controller, hint: nil, additionalScopes: scopes) { [unowned self] result, error in
@@ -152,11 +154,11 @@ if (googleFile) {
 
   if (googlePattern.test(gContent)) {
     gContent = gContent.replace(googlePattern, patchedGoogleFlow);
-    fs.writeFileSync(googleFile, gContent, 'utf8');
-    console.log('✅ Successfully patched GoogleAuthProviderHandler.swift to eliminate silent hangs.');
-  } else {
-    console.log('ℹ️ GoogleAuthProviderHandler.swift already patched or target pattern not found.');
   }
+  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  gContent = gContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
+  fs.writeFileSync(googleFile, gContent, 'utf8');
+  console.log('✅ Successfully patched GoogleAuthProviderHandler.swift to eliminate silent hangs and use direct viewController.');
 }
 
 // 3. Patch @capacitor-firebase/authentication Package.swift for Swift 5.9 / Xcode 16.x compatibility
@@ -685,6 +687,81 @@ if (fs.existsSync(nativeAdExecFile)) {
   fs.writeFileSync(nativeAdExecFile, execContent, 'utf8');
   console.log('✅ Successfully patched @capacitor-community/admob NativeAdExecutor.swift plugin?.bridge?.webView -> plugin?.webView');
 }
+
+// 8. Patch @capacitor-firebase/authentication for Swift 6 / Xcode 16.2 SPM compatibility
+const gameCenterFile = findPluginFile('ios/Plugin/handlers/GameCenterAuthProviderHandler.swift');
+if (gameCenterFile) {
+  let gcContent = fs.readFileSync(gameCenterFile, 'utf8');
+  gcContent = gcContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  fs.writeFileSync(gameCenterFile, gcContent, 'utf8');
+  console.log('✅ Successfully patched GameCenterAuthProviderHandler.swift direct viewController.');
+}
+
+const facebookFile = findPluginFile('ios/Plugin/handlers/FacebookAuthProviderHandler.swift');
+if (facebookFile) {
+  let fbContent = fs.readFileSync(facebookFile, 'utf8');
+  fbContent = fbContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  fbContent = fbContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
+  fs.writeFileSync(facebookFile, fbContent, 'utf8');
+  console.log('✅ Successfully patched FacebookAuthProviderHandler.swift direct viewController and options.');
+}
+
+const oauthFile = findPluginFile('ios/Plugin/handlers/OAuthProviderHandler.swift');
+if (oauthFile) {
+  let oContent = fs.readFileSync(oauthFile, 'utf8');
+  oContent = oContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
+  oContent = oContent.replaceAll('call.getArray("customParameters", JSObject.self) ?? []', '(call.options["customParameters"] as? [JSObject]) ?? []');
+  fs.writeFileSync(oauthFile, oContent, 'utf8');
+  console.log('✅ Successfully patched OAuthProviderHandler.swift direct options arrays.');
+}
+
+const firebaseAuthPluginFile = path.resolve(__dirname, '../node_modules/@capacitor-firebase/authentication/ios/Plugin/FirebaseAuthenticationPlugin.swift');
+if (fs.existsSync(firebaseAuthPluginFile)) {
+  let fapContent = fs.readFileSync(firebaseAuthPluginFile, 'utf8');
+  fapContent = fapContent.replace(
+    'if let providers = getConfig().getArray("providers") as? [String] {',
+    'if let providers = getConfig().getConfigJSON()["providers"] as? [String] {'
+  );
+  const fbCallExtension = `
+extension CAPPluginCall {
+    public func getString(_ key: String, _ defaultValue: String? = nil) -> String? {
+        return (options[key] as? String) ?? defaultValue
+    }
+    public func getBool(_ key: String, _ defaultValue: Bool? = nil) -> Bool? {
+        let val = (options[key] as? NSNumber)?.boolValue ?? (options[key] as? Bool)
+        return val ?? defaultValue
+    }
+    public func getInt(_ key: String, _ defaultValue: Int? = nil) -> Int? {
+        let val = (options[key] as? NSNumber)?.intValue ?? (options[key] as? Int)
+        return val ?? defaultValue
+    }
+    public func getFloat(_ key: String, _ defaultValue: Float? = nil) -> Float? {
+        let val = (options[key] as? NSNumber)?.floatValue ?? (options[key] as? Float)
+        return val ?? defaultValue
+    }
+    public func getObject(_ key: String) -> [String: Any]? {
+        return options[key] as? [String: Any]
+    }
+    public func getArray(_ key: String) -> [Any]? {
+        return options[key] as? [Any]
+    }
+    public func getArray<T>(_ key: String, _ ofType: T.Type) -> [T]? {
+        return (options[key] as? [Any])?.compactMap { $0 as? T }
+    }
+    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: [String: Any]? = nil) {
+        self.resolve(["error": message])
+    }
+}
+`;
+  if (!fapContent.includes('extension CAPPluginCall')) {
+    fapContent += fbCallExtension;
+  } else {
+    fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, fbCallExtension);
+  }
+  fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with CAPPluginCall extensions and direct JSON config.');
+}
+
 
 
 
