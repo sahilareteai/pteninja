@@ -266,40 +266,180 @@ if (fs.existsSync(statusBarPluginFile)) {
   if (targetPattern.test(sContent)) {
     sContent = sContent.replace(targetPattern, patchedImplementation);
   }
+  sContent = sContent.replace(
+    'statusBar = StatusBar(bridge: bridge, config: statusBarConfig())',
+    'statusBar = StatusBar(bridge: bridge, config: statusBarConfig(), webView: self.webView)'
+  );
   sContent = sContent.replace(/\nextension PluginConfig \{[\s\S]*?\n\}\n?/, '');
   fs.writeFileSync(statusBarPluginFile, sContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getConfigValue calls.');
+  console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getConfigValue calls and webView passing.');
 }
 
 const statusBarFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift');
 if (fs.existsSync(statusBarFile)) {
-  let sbContent = fs.readFileSync(statusBarFile, 'utf8');
-  if (!sbContent.includes('import WebKit')) {
-    sbContent = 'import WebKit\n' + sbContent;
-  }
-  if (!sbContent.includes('import UIKit')) {
-    sbContent = 'import UIKit\n' + sbContent;
-  }
+  const fullStatusBarSwift = `import WebKit
+import UIKit
+import Foundation
+import Capacitor
 
-  const getStatusBarPattern = /private func getStatusBarFrame\(\) -> CGRect \{[\s\S]*?\n    \}/;
-  const patchedGetStatusBar = `private func getStatusBarFrame() -> CGRect {
-        if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-            return windowScene.statusBarManager?.statusBarFrame ?? .zero
+public class StatusBar {
+
+    private var bridge: CAPBridgeProtocol
+    private weak var webView: WKWebView?
+    private var isOverlayingWebview = true
+    private var backgroundColor = UIColor.black
+    private var backgroundView: UIView?
+    private var observers: [NSObjectProtocol] = []
+
+    private var currentWebView: WKWebView? {
+        if let webView = self.webView {
+            return webView
         }
-        return .zero
-    }`;
-  if (getStatusBarPattern.test(sbContent)) {
-    sbContent = sbContent.replace(getStatusBarPattern, patchedGetStatusBar);
-  }
+        let scenes = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+        for scene in scenes {
+            for window in scene.windows {
+                if let wv = findWebView(in: window) {
+                    return wv
+                }
+            }
+        }
+        return nil
+    }
 
-  const resizePattern = /private func resizeWebView\(\) \{[\s\S]*?\n    \}/;
-  const patchedResize = `private func resizeWebView() {
+    private func findWebView(in view: UIView) -> WKWebView? {
+        if let wv = view as? WKWebView { return wv }
+        for subview in view.subviews {
+            if let found = findWebView(in: subview) { return found }
+        }
+        return nil
+    }
+
+    init(bridge: CAPBridgeProtocol, config: StatusBarConfig, webView: WKWebView? = nil) {
+        self.bridge = bridge
+        self.webView = webView
+        setupObservers(with: config)
+    }
+
+    deinit {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    private func setupObservers(with config: StatusBarConfig) {
+        observers.append(NotificationCenter.default.addObserver(forName: .capacitorViewDidAppear, object: .none, queue: .none) { [weak self] _ in
+            self?.handleViewDidAppear(config: config)
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: .capacitorStatusBarTapped, object: .none, queue: .none) { [weak self] _ in
+            self?.bridge.triggerJSEvent(eventName: "statusTap", target: "window")
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: .capacitorViewWillTransition, object: .none, queue: .none) { [weak self] _ in
+            self?.handleViewWillTransition()
+        })
+    }
+
+    private func handleViewDidAppear(config: StatusBarConfig) {
+        setStyle(config.style)
+        setBackgroundColor(config.backgroundColor)
+        setOverlaysWebView(config.overlaysWebView)
+    }
+
+    private func handleViewWillTransition() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.resizeStatusBarBackgroundView()
+            self?.resizeWebView()
+        }
+    }
+
+    func setStyle(_ style: UIStatusBarStyle) {
+        bridge.statusBarStyle = style
+    }
+
+    func setBackgroundColor(_ color: UIColor) {
+        backgroundColor = color
+        backgroundView?.backgroundColor = color
+    }
+
+    func setAnimation(_ animation: String) {
+        if animation == "SLIDE" {
+            bridge.statusBarAnimation = .slide
+        } else if animation == "NONE" {
+            bridge.statusBarAnimation = .none
+        } else {
+            bridge.statusBarAnimation = .fade
+        }
+    }
+
+    func hide(animation: String) {
+        setAnimation(animation)
+        if bridge.statusBarVisible {
+            bridge.statusBarVisible = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.resizeWebView()
+                self?.backgroundView?.removeFromSuperview()
+                self?.backgroundView?.isHidden = true
+            }
+        }
+    }
+
+    func show(animation: String) {
+        setAnimation(animation)
+        if !bridge.statusBarVisible {
+            bridge.statusBarVisible = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+                resizeWebView()
+                if !isOverlayingWebview {
+                    resizeStatusBarBackgroundView()
+                    if let bg = backgroundView {
+                        (currentWebView?.superview ?? currentWebView)?.addSubview(bg)
+                    }
+                }
+                backgroundView?.isHidden = false
+            }
+        }
+    }
+
+    func getInfo() -> StatusBarInfo {
+        let style: String
+        switch bridge.statusBarStyle {
+        case .default:
+            style = "DEFAULT"
+        case .lightContent:
+            style = "DARK"
+        case .darkContent:
+            style = "LIGHT"
+        @unknown default:
+            style = "DEFAULT"
+        }
+
+        return StatusBarInfo(
+            overlays: isOverlayingWebview,
+            visible: bridge.statusBarVisible,
+            style: style,
+            color: UIColor.capacitor.hex(fromColor: backgroundColor),
+            height: getStatusBarFrame().size.height
+        )
+    }
+
+    func setOverlaysWebView(_ overlay: Bool) {
+        if overlay == isOverlayingWebview { return }
+        isOverlayingWebview = overlay
+        if overlay {
+            backgroundView?.removeFromSuperview()
+        } else {
+            initializeBackgroundViewIfNeeded()
+            if let bg = backgroundView {
+                (currentWebView?.superview ?? currentWebView)?.addSubview(bg)
+            }
+        }
+        resizeWebView()
+    }
+
+    private func resizeWebView() {
         let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
         let bounds: CGRect? = windowScene?.windows.first(where: { $0.isKeyWindow })?.bounds ?? windowScene?.windows.first?.bounds
 
         guard
             let bounds = bounds,
-            let webView = bridge.webView
+            let webView = currentWebView
         else { return }
         webView.frame = bounds
         let statusBarHeight = getStatusBarFrame().size.height
@@ -317,13 +457,31 @@ if (fs.existsSync(statusBarFile)) {
         }
         webViewFrame.size.height -= webViewFrame.origin.y
         webView.frame = webViewFrame
-    }`;
-  if (resizePattern.test(sbContent)) {
-    sbContent = sbContent.replace(resizePattern, patchedResize);
-  }
+    }
 
-  fs.writeFileSync(statusBarFile, sbContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor/status-bar StatusBar.swift with robust UIApplication frame resolution.');
+    private func resizeStatusBarBackgroundView() {
+        backgroundView?.frame = getStatusBarFrame()
+    }
+
+    private func getStatusBarFrame() -> CGRect {
+        if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            return windowScene.statusBarManager?.statusBarFrame ?? .zero
+        }
+        return .zero
+    }
+
+    private func initializeBackgroundViewIfNeeded() {
+        if backgroundView == nil {
+            backgroundView = UIView(frame: getStatusBarFrame())
+            backgroundView!.backgroundColor = backgroundColor
+            backgroundView!.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
+            backgroundView!.isHidden = !bridge.statusBarVisible
+        }
+    }
+}
+`;
+  fs.writeFileSync(statusBarFile, fullStatusBarSwift, 'utf8');
+  console.log('✅ Successfully wrote clean, self-contained StatusBar.swift.');
 }
 
 // 5. Patch @capacitor/splash-screen
