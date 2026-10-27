@@ -159,32 +159,43 @@ if (googleFile) {
   }
 }
 
-// 3. Patch @capacitor-firebase/authentication Package.swift for SPM Google trait compatibility
+// 3. Patch @capacitor-firebase/authentication Package.swift for Swift 5.9 / Xcode 16.x compatibility
 const packageSwiftFile = path.resolve(__dirname, '../node_modules/@capacitor-firebase/authentication/Package.swift');
 if (fs.existsSync(packageSwiftFile)) {
-  let pkgContent = fs.readFileSync(packageSwiftFile, 'utf8');
-  let changed = false;
+  const cleanPackageSwift = `// swift-tools-version: 5.9
+import PackageDescription
 
-  if (pkgContent.includes('.product(name: "GoogleSignIn", package: "GoogleSignIn-iOS",\n                         condition: .when(traits: ["Google"]))')) {
-    pkgContent = pkgContent.replace(
-      '.product(name: "GoogleSignIn", package: "GoogleSignIn-iOS",\n                         condition: .when(traits: ["Google"]))',
-      '.product(name: "GoogleSignIn", package: "GoogleSignIn-iOS")'
-    );
-    changed = true;
-  }
-
-  if (pkgContent.includes('.define("RGCFA_INCLUDE_GOOGLE", .when(traits: ["Google"]))')) {
-    pkgContent = pkgContent.replace(
-      '.define("RGCFA_INCLUDE_GOOGLE", .when(traits: ["Google"]))',
-      '.define("RGCFA_INCLUDE_GOOGLE")'
-    );
-    changed = true;
-  }
-
-  if (changed) {
-    fs.writeFileSync(packageSwiftFile, pkgContent, 'utf8');
-    console.log('✅ Successfully patched @capacitor-firebase/authentication Package.swift to enable GoogleSignIn across all Swift versions.');
-  } else {
-    console.log('ℹ️ @capacitor-firebase/authentication Package.swift already contains unconditional GoogleSignIn definitions.');
-  }
+let package = Package(
+    name: "CapacitorFirebaseAuthentication",
+    platforms: [.iOS(.v15)],
+    products: [
+        .library(
+            name: "CapacitorFirebaseAuthentication",
+            targets: ["FirebaseAuthenticationPlugin"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0"),
+        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", .upToNextMajor(from: "12.7.0")),
+        .package(url: "https://github.com/google/GoogleSignIn-iOS", from: "9.0.0")
+    ],
+    targets: [
+        .target(
+            name: "FirebaseAuthenticationPlugin",
+            dependencies: [
+                .product(name: "Capacitor", package: "capacitor-swift-pm"),
+                .product(name: "Cordova", package: "capacitor-swift-pm"),
+                .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
+                .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
+                .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS")
+            ],
+            path: "ios/Plugin",
+            swiftSettings: [
+                .define("RGCFA_INCLUDE_GOOGLE")
+            ])
+    ],
+    swiftLanguageVersions: [.v5]
+)
+`;
+  fs.writeFileSync(packageSwiftFile, cleanPackageSwift, 'utf8');
+  console.log('✅ Successfully patched @capacitor-firebase/authentication Package.swift with swift-tools-version: 5.9.');
 }

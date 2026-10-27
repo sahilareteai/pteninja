@@ -43,7 +43,9 @@ jobs:
           cache: 'npm'
 
       - name: 📦 Install NPM Dependencies
-        run: npm install
+        run: |
+          npm install
+          node scripts/patch-apple-auth.mjs
 
       - name: ⚡ Build Web Assets (Vite)
         run: npm run build
