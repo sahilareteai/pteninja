@@ -607,5 +607,17 @@ extension CapacitorExtensionTypeWrapper where T: UIColor {
   console.log('✅ Successfully wrote clean, self-contained SplashScreenPlugin.swift without bridge.webView.');
 }
 
+// 6. Patch @capacitor/app
+const appPluginFile = path.resolve(__dirname, '../node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift');
+if (fs.existsSync(appPluginFile)) {
+  let appContent = fs.readFileSync(appPluginFile, 'utf8');
+  appContent = appContent.replace(
+    'call.reject("Unable to get App Info")',
+    'call.resolve(["name": Bundle.main.bundleIdentifier ?? "", "id": Bundle.main.bundleIdentifier ?? "", "build": "1", "version": "1.0.0"])'
+  );
+  fs.writeFileSync(appPluginFile, appContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject.');
+}
+
 
 
