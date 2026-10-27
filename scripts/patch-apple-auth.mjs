@@ -274,23 +274,56 @@ if (fs.existsSync(statusBarPluginFile)) {
 const statusBarFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift');
 if (fs.existsSync(statusBarFile)) {
   let sbContent = fs.readFileSync(statusBarFile, 'utf8');
+  if (!sbContent.includes('import WebKit')) {
+    sbContent = 'import WebKit\n' + sbContent;
+  }
   if (!sbContent.includes('import UIKit')) {
     sbContent = 'import UIKit\n' + sbContent;
   }
-  sbContent = sbContent.replaceAll(
-    'let bounds: CGRect? = bridge.viewController?.view.window?.windowScene?.keyWindow?.bounds',
-    'let bounds: CGRect? = bridge.webView?.window?.windowScene?.keyWindow?.bounds ?? bridge.webView?.superview?.bounds'
-  );
-  sbContent = sbContent.replaceAll(
-    'bridge.viewController?.view.frame = bounds',
-    'bridge.webView?.superview?.frame = bounds'
-  );
-  sbContent = sbContent.replaceAll(
-    'return bridge.viewController?.view.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero',
-    'return bridge.webView?.window?.windowScene?.statusBarManager?.statusBarFrame ?? bridge.webView?.superview?.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero'
-  );
+
+  const getStatusBarPattern = /private func getStatusBarFrame\(\) -> CGRect \{[\s\S]*?\n    \}/;
+  const patchedGetStatusBar = `private func getStatusBarFrame() -> CGRect {
+        if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            return windowScene.statusBarManager?.statusBarFrame ?? .zero
+        }
+        return .zero
+    }`;
+  if (getStatusBarPattern.test(sbContent)) {
+    sbContent = sbContent.replace(getStatusBarPattern, patchedGetStatusBar);
+  }
+
+  const resizePattern = /private func resizeWebView\(\) \{[\s\S]*?\n    \}/;
+  const patchedResize = `private func resizeWebView() {
+        let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        let bounds: CGRect? = windowScene?.windows.first(where: { $0.isKeyWindow })?.bounds ?? windowScene?.windows.first?.bounds
+
+        guard
+            let bounds = bounds,
+            let webView = bridge.webView
+        else { return }
+        webView.frame = bounds
+        let statusBarHeight = getStatusBarFrame().size.height
+        var webViewFrame = webView.frame
+
+        if isOverlayingWebview {
+            let safeAreaTop = webView.safeAreaInsets.top
+            if statusBarHeight >= safeAreaTop && safeAreaTop > 0 {
+                webViewFrame.origin.y = safeAreaTop == 40 ? 20 : statusBarHeight - safeAreaTop
+            } else {
+                webViewFrame.origin.y = 0
+            }
+        } else {
+            webViewFrame.origin.y = statusBarHeight
+        }
+        webViewFrame.size.height -= webViewFrame.origin.y
+        webView.frame = webViewFrame
+    }`;
+  if (resizePattern.test(sbContent)) {
+    sbContent = sbContent.replace(resizePattern, patchedResize);
+  }
+
   fs.writeFileSync(statusBarFile, sbContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor/status-bar StatusBar.swift with webView-based frame resolution.');
+  console.log('✅ Successfully patched @capacitor/status-bar StatusBar.swift with robust UIApplication frame resolution.');
 }
 
 // 5. Patch @capacitor/splash-screen
