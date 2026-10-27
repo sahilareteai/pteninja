@@ -246,6 +246,9 @@ if (fs.existsSync(statusBarColorFile)) {
 const statusBarPluginFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift');
 if (fs.existsSync(statusBarPluginFile)) {
   let sContent = fs.readFileSync(statusBarPluginFile, 'utf8');
+  if (!sContent.includes('import UIKit')) {
+    sContent = 'import UIKit\n' + sContent;
+  }
   const targetPattern = /private func statusBarConfig\(\) -> StatusBarConfig \{[\s\S]*?\n    \}/;
   const patchedImplementation = `private func statusBarConfig() -> StatusBarConfig {
         var config = StatusBarConfig()
@@ -266,6 +269,28 @@ if (fs.existsSync(statusBarPluginFile)) {
   sContent = sContent.replace(/\nextension PluginConfig \{[\s\S]*?\n\}\n?/, '');
   fs.writeFileSync(statusBarPluginFile, sContent, 'utf8');
   console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getConfigValue calls.');
+}
+
+const statusBarFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift');
+if (fs.existsSync(statusBarFile)) {
+  let sbContent = fs.readFileSync(statusBarFile, 'utf8');
+  if (!sbContent.includes('import UIKit')) {
+    sbContent = 'import UIKit\n' + sbContent;
+  }
+  sbContent = sbContent.replaceAll(
+    'let bounds: CGRect? = bridge.viewController?.view.window?.windowScene?.keyWindow?.bounds',
+    'let bounds: CGRect? = bridge.webView?.window?.windowScene?.keyWindow?.bounds ?? bridge.webView?.superview?.bounds'
+  );
+  sbContent = sbContent.replaceAll(
+    'bridge.viewController?.view.frame = bounds',
+    'bridge.webView?.superview?.frame = bounds'
+  );
+  sbContent = sbContent.replaceAll(
+    'return bridge.viewController?.view.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero',
+    'return bridge.webView?.window?.windowScene?.statusBarManager?.statusBarFrame ?? bridge.webView?.superview?.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero'
+  );
+  fs.writeFileSync(statusBarFile, sbContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor/status-bar StatusBar.swift with webView-based frame resolution.');
 }
 
 // 5. Patch @capacitor/splash-screen
