@@ -95,9 +95,9 @@ const TRANSIENT_RETRY_BASE_MS = 1000;
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
 
 
-// TTS model. gemini-2.0-flash is the GA multimodal model with native audio output
-// support across both the Gemini Developer API and Vertex AI.
-const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.0-flash";
+// TTS model. gemini-3.8-flash-tts is the active production model supporting native
+// audio output across both the Gemini Developer API and Vertex AI (with role: 'user').
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts";
 
 interface ServerKeyState {
   client: GoogleGenAI;
@@ -4113,13 +4113,13 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
     }
 
     let response: any = null;
-    // 1. Primary try: gemini-2.0-flash (native GA audio modality)
-    // 2. Fallback: gemini-2.5-flash-preview-tts
+    // 1. Primary try: gemini-3.8-flash-tts with role: "user" for both Vertex AI and Gemini Developer API
+    // 2. Fallback: gemini-3.1-flash-tts-preview
     try {
       response = await serverCallGemini(
         {
           model: TTS_MODEL,
-          contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+          contents: [{ role: "user", parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
@@ -4127,14 +4127,14 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
         },
         serverTTSGeminiKeys,
         "ttsKeys",
-        "gemini-2.0-flash",
+        TTS_MODEL,
       );
     } catch (primaryErr: any) {
-      console.warn(`[TTS] Primary TTS call failed (${primaryErr.message}) — attempting fallback with gemini-2.5-flash-preview-tts.`);
+      console.warn(`[TTS] Primary TTS call failed (${primaryErr.message}) — attempting fallback with gemini-3.1-flash-tts-preview.`);
       response = await serverCallGemini(
         {
-          model: "gemini-2.5-flash-preview-tts",
-          contents: [{ parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ role: "user", parts: [{ text: `Say clearly and naturally: ${safeText}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
@@ -4142,7 +4142,7 @@ app.post("/api/generate-tts", geminiProxyLimiter, async (req, res) => {
         },
         serverTTSGeminiKeys,
         "ttsKeys",
-        "gemini-2.0-flash",
+        "gemini-3.8-flash-tts",
       );
     }
 

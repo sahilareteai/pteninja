@@ -8749,8 +8749,12 @@ function TaskModal({
                   {hasAudioError && (
                     <button 
                       onClick={() => {
+                        delete globalAudioCache[task.id];
+                        delete preFetchInFlight[task.id];
                         setHasAudioError(false);
                         setAudioRetryCount(prev => prev + 1);
+                        setPhase('audio');
+                        preFetchAudio(task);
                       }}
                       className="mt-4 px-6 py-2 bg-app-primary text-app-bg rounded-lg font-bold hover:bg-app-accent transition-all flex items-center gap-2"
                     >
@@ -8937,9 +8941,12 @@ function TaskModal({
                       {hasAudioError ? (
                         <button
                           onClick={() => {
+                            delete globalAudioCache[task.id];
+                            delete preFetchInFlight[task.id];
                             setHasAudioError(false);
                             setAudioRetryCount(c => c + 1);
                             setPhase('audio');
+                            preFetchAudio(task);
                           }}
                           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-semibold flex items-center gap-2 text-sm shadow transition-all shrink-0"
                           title="Retry audio"
