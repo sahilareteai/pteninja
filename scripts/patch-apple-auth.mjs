@@ -272,6 +272,25 @@ if (fs.existsSync(statusBarPluginFile)) {
 const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
 if (fs.existsSync(splashFile)) {
   let content = fs.readFileSync(splashFile, 'utf8');
+
+  if (!content.includes('import UIKit')) {
+    content = 'import UIKit\n' + content;
+  }
+
+  content = content.replace(
+    'if let view = bridge?.viewController?.view {',
+    'if let view = ((bridge as AnyObject).viewController as? UIViewController)?.view ?? webView?.superview {'
+  );
+
+  content = content.replaceAll(
+    'call.reject("Unable to show Splash Screen")',
+    '(call as AnyObject).reject?("Unable to show Splash Screen", nil, nil, nil)'
+  );
+  content = content.replaceAll(
+    'call.reject("Unable to hide Splash Screen")',
+    '(call as AnyObject).reject?("Unable to hide Splash Screen", nil, nil, nil)'
+  );
+
   const settingsTargetPattern = /private func splashScreenSettings\(from call: CAPPluginCall\) -> SplashScreenSettings \{[\s\S]*?\n    \}/;
   const patchedSettingsImplementation = `private func splashScreenSettings(from call: CAPPluginCall) -> SplashScreenSettings {
         var settings = SplashScreenSettings()
@@ -348,7 +367,7 @@ extension CapacitorExtensionTypeWrapper where T: UIColor {
 `;
   }
   fs.writeFileSync(splashFile, content, 'utf8');
-  console.log('✅ Successfully patched @capacitor/splash-screen with safe getConfigValue calls & color(fromHex:) extension.');
+  console.log('✅ Successfully patched @capacitor/splash-screen with safe getConfigValue calls, import UIKit, & color(fromHex:) extension.');
 }
 
 
