@@ -79,6 +79,14 @@ if (appleFile) {
     'return (self.pluginImplementation.getPlugin().bridge?.webView?.window)!',
     'return (self.pluginImplementation.getPlugin().webView?.window ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow }))!'
   );
+  content = content.replace(
+    'call.reject(self.pluginImplementation.getPlugin().errorDeviceUnsupported)',
+    'self.pluginImplementation.handleFailedSignIn(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)'
+  );
+  content = content.replace(
+    'call.reject(self.pluginImplementation.getPlugin().errorDeviceUnsupported)',
+    'self.pluginImplementation.handleFailedLink(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)'
+  );
   fs.writeFileSync(appleFile, content, 'utf8');
   console.log('✅ Successfully patched AppleAuthProviderHandler.swift with safe Capacitor rejection guards and direct webView.');
 }
