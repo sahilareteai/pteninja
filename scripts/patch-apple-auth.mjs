@@ -199,3 +199,47 @@ let package = Package(
   fs.writeFileSync(packageSwiftFile, cleanPackageSwift, 'utf8');
   console.log('✅ Successfully patched @capacitor-firebase/authentication Package.swift with swift-tools-version: 5.9.');
 }
+
+// 4. Patch @capacitor/status-bar UIColor.swift to guarantee color(fromHex: String) is defined
+const statusBarColorFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/UIColor.swift');
+if (fs.existsSync(statusBarColorFile)) {
+  let content = fs.readFileSync(statusBarColorFile, 'utf8');
+  if (!content.includes('static func color(fromHex: String)')) {
+    const methodDefinition = `    static func color(fromHex: String) -> UIColor? {
+        let hexString = fromHex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(
+            of: "#",
+            with: ""
+        )
+
+        var argb: UInt64 = 0
+        guard Scanner(string: hexString).scanHexInt64(&argb) else { return nil }
+
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+
+        if hexString.count == 6 {
+            red = CGFloat((argb & 0xFF0000) >> 16) / 255.0
+            green = CGFloat((argb & 0x00FF00) >> 8) / 255.0
+            blue = CGFloat(argb & 0x0000FF) / 255.0
+            alpha = 1.0
+        } else if hexString.count == 8 {
+            red = CGFloat((argb & 0xFF00_0000) >> 24) / 255.0
+            green = CGFloat((argb & 0x00FF0000) >> 16) / 255.0
+            blue = CGFloat((argb & 0x0000FF00) >> 8) / 255.0
+            alpha = CGFloat(argb & 0x000000FF) / 255.0
+        } else {
+            return nil
+        }
+
+        return UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
+`;
+    content = content.replace('public extension CapacitorExtensionTypeWrapper where T: UIColor {', 'import UIKit\n\npublic extension CapacitorExtensionTypeWrapper where T: UIColor {\n' + methodDefinition);
+    fs.writeFileSync(statusBarColorFile, content, 'utf8');
+    console.log('✅ Successfully patched @capacitor/status-bar with color(fromHex: String) extension.');
+  }
+}
+
