@@ -615,9 +615,36 @@ if (fs.existsSync(appPluginFile)) {
     'call.reject("Unable to get App Info")',
     'call.resolve(["name": Bundle.main.bundleIdentifier ?? "", "id": Bundle.main.bundleIdentifier ?? "", "build": "1", "version": "1.0.0"])'
   );
-  fs.writeFileSync(appPluginFile, appContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject.');
+  if (!appContent.includes('extension CAPPluginCall')) {
+    appContent += `
+extension CAPPluginCall {
+    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: PluginCallResultData? = nil) {
+        errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))
+    }
 }
+`;
+  }
+  fs.writeFileSync(appPluginFile, appContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject and CAPPluginCall extension.');
+}
+
+// 7. Patch @capacitor-community/admob to inject CAPPluginCall.reject extension
+const admobPluginFile = path.resolve(__dirname, '../node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/AdMobPlugin.swift');
+if (fs.existsSync(admobPluginFile)) {
+  let admobContent = fs.readFileSync(admobPluginFile, 'utf8');
+  if (!admobContent.includes('extension CAPPluginCall')) {
+    admobContent += `
+extension CAPPluginCall {
+    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: PluginCallResultData? = nil) {
+        errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))
+    }
+}
+`;
+    fs.writeFileSync(admobPluginFile, admobContent, 'utf8');
+    console.log('✅ Successfully patched @capacitor-community/admob with CAPPluginCall.reject extension.');
+  }
+}
+
 
 
 
