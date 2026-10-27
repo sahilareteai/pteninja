@@ -738,8 +738,18 @@ if (fs.existsSync(firebaseAuthPluginFile)) {
     'let port = (call.options["port"] as? Int) ?? 9099'
   );
   fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, '\n');
+  const fbCallExtension = `
+extension CAPPluginCall {
+    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: [String: Any]? = nil) {
+        self.resolve(["error": message])
+    }
+}
+`;
+  if (!fapContent.includes('extension CAPPluginCall')) {
+    fapContent += fbCallExtension;
+  }
   fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
-  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and preserved native JSObject getters.');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and public reject extension.');
 }
 
 
