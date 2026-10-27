@@ -733,9 +733,13 @@ if (fs.existsSync(firebaseAuthPluginFile)) {
     'if let providers = getConfig().getArray("providers") as? [String] {',
     'if let providers = getConfig().getConfigJSON()["providers"] as? [String] {'
   );
+  fapContent = fapContent.replace(
+    'let port = call.getInt("port") ?? 9099',
+    'let port = (call.options["port"] as? Int) ?? 9099'
+  );
   fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, '\n');
   fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
-  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config and preserved native JSObject getters.');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and preserved native JSObject getters.');
 }
 
 
