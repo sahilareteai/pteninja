@@ -37,25 +37,54 @@
     <!-- Canonical URL -->
     <link rel="canonical" href="https://pteninja.com/" />
 
-    <!-- Schema.org JSON-LD Structured Data for Google AdSense & Search Engines -->
+    <!-- Google Play App Indexing & Deep Link -->
+    <meta name="google-play-app" content="app-id=com.pteninja.android" />
+    <link rel="alternate" href="android-app://com.pteninja.android/https/pteninja.com" />
+
+    <!-- Schema.org JSON-LD Structured Data for Google Search & App Indexing -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "PTE Ninja",
-      "applicationCategory": "EducationalApplication",
-      "operatingSystem": "All",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "author": {
-        "@type": "Organization",
-        "name": "AI Geek Advisor Pvt. Ltd.",
-        "url": "https://www.aigeekadvisor.com/"
-      },
-      "description": "AI-powered PTE Academic preparation platform featuring real-time AI scoring for Speaking, Writing, Reading, and Listening."
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "@id": "https://pteninja.com/#web-app",
+          "name": "PTE Ninja",
+          "url": "https://pteninja.com/",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Web, Windows, macOS, Linux",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "author": {
+            "@type": "Organization",
+            "name": "AI Geek Advisor Pvt. Ltd.",
+            "url": "https://www.aigeekadvisor.com/"
+          },
+          "description": "AI-powered PTE Academic preparation platform featuring real-time AI scoring for Speaking, Writing, Reading, and Listening."
+        },
+        {
+          "@type": "MobileApplication",
+          "@id": "https://pteninja.com/#android-app",
+          "name": "PTE Ninja: PTE Academic Prep",
+          "operatingSystem": "Android 8.0 and up",
+          "applicationCategory": "EducationalApplication",
+          "installUrl": "https://play.google.com/store/apps/details?id=com.pteninja.android",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "author": {
+            "@type": "Organization",
+            "name": "AI Geek Advisor Pvt. Ltd.",
+            "url": "https://www.aigeekadvisor.com/"
+          },
+          "description": "Practice PTE Speaking with real-time AI mic feedback, scored mock tests, and full question bank on Android. Download free on Google Play."
+        }
+      ]
     }
     </script>
   </head>
