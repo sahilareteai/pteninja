@@ -1896,7 +1896,7 @@ function AppContent() {
   }
 
   if (!user) {
-    if (isNativeMobile() || (typeof window !== 'undefined' && window.innerWidth < 768 && !window.location.search.includes('fullweb'))) {
+    if (isNativeMobile()) {
       return (
         <MobileOnboarding 
           onGoogleLogin={googleLogin}

@@ -197,11 +197,13 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             href={GOOGLE_PLAY_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 hover:bg-black/70 dark:bg-black/50 dark:hover:bg-black/90 border border-emerald-500/30 hover:border-emerald-400 text-xs font-bold text-gray-200 hover:text-white transition-all shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:shadow-[0_0_18px_rgba(16,185,129,0.35)] group"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950 hover:bg-black text-white border border-slate-800 dark:border-emerald-500/40 text-xs font-bold transition-all shadow-sm hover:shadow-[0_0_16px_rgba(16,185,129,0.35)] hover:scale-105 active:scale-95 group"
             title="Download PTE Ninja on Google Play"
           >
             <GooglePlayIcon className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" />
-            <span className="hidden sm:inline text-[11px] font-extrabold text-emerald-400 tracking-tight">Google Play</span>
+            <span className="hidden sm:inline text-[11px] font-black tracking-tight text-white group-hover:text-emerald-300 transition-colors">
+              Google Play
+            </span>
           </a>
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -247,13 +249,13 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               href={GOOGLE_PLAY_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="group inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 hover:from-emerald-500/25 hover:via-teal-500/20 hover:to-emerald-500/25 border border-emerald-500/40 hover:border-emerald-400 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.25)] transition-all duration-300 transform-gpu hover:scale-105 active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/25 border border-emerald-500/40 hover:border-emerald-400 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.2)] transition-all duration-300 transform-gpu hover:scale-105 active:scale-95 cursor-pointer"
             >
               <GooglePlayIcon className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-6 group-hover:scale-110" />
               <span className="text-xs font-bold text-app-text flex items-center gap-1.5">
-                <span>Available on <strong className="text-emerald-400 font-extrabold">Google Play</strong></span>
-                <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-md border border-emerald-500/40 leading-none">FREE</span>
-                <ArrowUpRight size={13} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                <span>Available on <strong className="text-emerald-700 dark:text-emerald-400 font-extrabold">Google Play</strong></span>
+                <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[10px] font-black rounded-md border border-emerald-500/40 leading-none">FREE</span>
+                <ArrowUpRight size={13} className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </span>
             </a>
           </motion.div>
@@ -265,32 +267,17 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           <motion.p variants={itemVariant} className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
             Stop guessing your score. Get real-time AI feedback on your speaking, writing, reading, and listening. Practice with the most accurate PTE simulation available.
           </motion.p>
-          <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-5 pt-8">
+          <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
             <button 
               onClick={() => onLogin('register')}
-              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-4.5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-base sm:text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
             >
               Start Training Now
               <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
-            <a 
-              href={GOOGLE_PLAY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center justify-center gap-3.5 w-full sm:w-auto px-7 py-4 bg-black/80 hover:bg-black text-white font-bold rounded-2xl border border-white/20 hover:border-emerald-400/80 transition-all shadow-[0_4px_25px_rgba(0,0,0,0.5)] hover:shadow-[0_0_35px_rgba(16,185,129,0.35)] hover:scale-105 active:scale-98"
-            >
-              <GooglePlayIcon className="w-7 h-7 shrink-0 transition-transform group-hover:scale-110" />
-              <div className="text-left leading-tight">
-                <span className="block text-[10px] font-bold uppercase tracking-widest text-emerald-400">Download for Android</span>
-                <span className="block text-base font-black tracking-tight text-white flex items-center gap-1.5">
-                  Google Play
-                  <Download size={15} className="text-emerald-400 group-hover:translate-y-0.5 transition-transform" />
-                </span>
-              </div>
-            </a>
             <button 
               onClick={onGuest}
-              className="w-full sm:w-auto px-8 py-4.5 bg-app-surface/50 backdrop-blur-md border border-app-primary/30 text-app-primary font-bold text-base sm:text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
+              className="w-full sm:w-auto px-10 py-5 bg-app-surface/50 backdrop-blur-md border border-app-primary/30 text-app-primary font-bold text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
             >
               Try Guest Access for Free
             </button>
@@ -301,7 +288,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
             variants={itemVariant}
             className="pt-6 max-w-4xl mx-auto w-full text-left"
           >
-            <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/30 via-app-surface/90 to-teal-950/20 backdrop-blur-2xl p-6 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.4),0_0_30px_rgba(16,185,129,0.12)] hover:border-emerald-400/60 transition-all duration-300 group">
+            <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-50/70 via-white/95 to-teal-50/60 dark:from-emerald-950/30 dark:via-app-surface/90 dark:to-teal-950/20 backdrop-blur-2xl p-6 sm:p-7 shadow-xl shadow-emerald-950/5 dark:shadow-[0_20px_50px_rgba(0,0,0,0.4),0_0_30px_rgba(16,185,129,0.12)] hover:border-emerald-400/60 transition-all duration-300 group">
               {/* Subtle ambient lighting */}
               <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
               <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -309,22 +296,22 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 {/* Left side: Icon + Title + Feature Highlights */}
                 <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
-                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-black to-emerald-900/40 border border-emerald-500/40 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-0.5">
-                    <Smartphone className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400" />
+                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 dark:bg-gradient-to-br dark:from-emerald-500/20 dark:via-black dark:to-emerald-900/40 border border-emerald-500/30 dark:border-emerald-500/40 flex items-center justify-center shadow-sm dark:shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-0.5">
+                    <Smartphone className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-600 dark:text-emerald-400" />
                     <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                     </span>
                   </div>
 
                   <div className="space-y-1.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
-                        <Sparkles size={11} className="text-emerald-400 fill-emerald-400" />
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/30 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+                        <Sparkles size={11} className="text-emerald-600 dark:text-emerald-400 fill-current" />
                         Official Android App
                       </span>
                       <span className="text-[11px] font-bold text-app-text-muted flex items-center gap-1">
-                        <Star size={12} className="text-amber-400 fill-amber-400" />
+                        <Star size={12} className="text-amber-500 fill-amber-400" />
                         <span className="text-app-text font-black">4.9</span> • 100% Free
                       </span>
                     </div>
@@ -337,13 +324,13 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
                     </p>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-app-text-muted/80">
-                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
                         <CheckCircle size={12} /> Instant AI scoring
                       </span>
-                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
                         <CheckCircle size={12} /> Full question bank
                       </span>
-                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
                         <CheckCircle size={12} /> Auto cloud sync
                       </span>
                     </div>
@@ -356,7 +343,7 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
                     href={GOOGLE_PLAY_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group/btn flex items-center justify-center gap-3.5 px-6 py-3.5 bg-black hover:bg-neutral-900 border border-white/20 hover:border-emerald-400 rounded-2xl shadow-xl hover:shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
+                    className="group/btn flex items-center justify-center gap-3.5 px-6 py-3.5 bg-slate-950 hover:bg-black text-white border border-slate-800 dark:border-white/20 hover:border-emerald-400 rounded-2xl shadow-xl hover:shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <GooglePlayIcon className="w-8 h-8 shrink-0 transition-transform group-hover/btn:scale-110" />
                     <div className="text-left leading-tight">
