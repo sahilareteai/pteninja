@@ -2907,6 +2907,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             if (promoMatch && promoMatch.offerId) {
               targetOfferId = promoMatch.offerId;
             }
+          } else if (!targetOfferId && planStoreData?.offers && Array.isArray(planStoreData.offers)) {
+            // Automatically target any active discounted offer under this base plan
+            const activeOffer = planStoreData.offers.find((off: any) => off.offerId && off.offerId.trim().length > 0);
+            if (activeOffer && activeOffer.offerId) {
+              targetOfferId = activeOffer.offerId;
+            }
           }
 
           const purchaseResult = await purchasePlaySubscription(plan.id, {
@@ -2914,7 +2920,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             basePlanId: planStoreData?.basePlanId,
             offerId: targetOfferId,
             promoCode: promoCode,
-            hasPromo: hasPromo,
+            hasPromo: hasPromo || !!targetOfferId,
           });
 
           if (purchaseResult.canceled) {

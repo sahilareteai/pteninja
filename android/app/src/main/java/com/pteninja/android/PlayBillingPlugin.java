@@ -121,18 +121,21 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                 ProductDetails.SubscriptionOfferDetails selectedOffer = null;
                 ProductDetails.SubscriptionOfferDetails basePlanOffer = null;
                 ProductDetails.SubscriptionOfferDetails matchingPromoOffer = null;
+                ProductDetails.SubscriptionOfferDetails bestDiscountOffer = null;
                 ProductDetails.SubscriptionOfferDetails cheapestOffer = null;
-                long lowestPriceMicros = Long.MAX_VALUE;
+                long lowestDiscountPriceMicros = Long.MAX_VALUE;
+                long lowestOverallPriceMicros = Long.MAX_VALUE;
 
                 for (ProductDetails.SubscriptionOfferDetails offer : offers) {
                     boolean baseMatches = (basePlanId == null || basePlanId.trim().isEmpty() || basePlanId.trim().equalsIgnoreCase(offer.getBasePlanId()));
                     if (!baseMatches) continue;
 
                     List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
+                    long initialPriceMicros = Long.MAX_VALUE;
                     if (!phases.isEmpty()) {
-                        long priceMicros = phases.get(0).getPriceAmountMicros();
-                        if (priceMicros < lowestPriceMicros) {
-                            lowestPriceMicros = priceMicros;
+                        initialPriceMicros = phases.get(0).getPriceAmountMicros();
+                        if (initialPriceMicros < lowestOverallPriceMicros) {
+                            lowestOverallPriceMicros = initialPriceMicros;
                             cheapestOffer = offer;
                         }
                     }
@@ -142,9 +145,15 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                         if (basePlanOffer == null) {
                             basePlanOffer = offer;
                         }
+                    } else {
+                        // Track active discounted/promotional offer for this base plan
+                        if (initialPriceMicros < lowestDiscountPriceMicros) {
+                            lowestDiscountPriceMicros = initialPriceMicros;
+                            bestDiscountOffer = offer;
+                        }
                     }
 
-                    // Check if offerId, promoCode, or offer tags match Diwali / promo
+                    // Check if offerId, promoCode, or offer tags match specifically
                     boolean matchesOfferId = (offerId != null && !offerId.trim().isEmpty() && offer.getOfferId() != null
                             && (offer.getOfferId().equalsIgnoreCase(offerId) || offer.getOfferId().toLowerCase().contains(offerId.toLowerCase())));
 
@@ -159,7 +168,7 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                             String t = tag.trim().toLowerCase();
                             if (offerId != null && tag.equalsIgnoreCase(offerId)) matchesTags = true;
                             if (promoCode != null && tag.equalsIgnoreCase(promoCode)) matchesTags = true;
-                            if (hasPromo && (t.contains("diwali") || t.contains("diwali20") || t.contains("promo") || t.contains("discount") || t.contains("sale"))) {
+                            if (hasPromo && (t.contains("diwali") || t.contains("diwali20") || t.contains("promo") || t.contains("discount") || t.contains("sale") || t.contains("offer"))) {
                                 matchesTags = true;
                             }
                         }
@@ -167,7 +176,7 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
 
                     if (offer.getOfferId() != null) {
                         String offIdLower = offer.getOfferId().toLowerCase();
-                        if (hasPromo && (offIdLower.contains("diwali") || offIdLower.contains("diwali20") || offIdLower.contains("promo") || offIdLower.contains("discount") || offIdLower.contains("sale"))) {
+                        if (hasPromo && (offIdLower.contains("diwali") || offIdLower.contains("diwali20") || offIdLower.contains("promo") || offIdLower.contains("discount") || offIdLower.contains("sale") || offIdLower.contains("offer"))) {
                             matchesTags = true;
                         }
                     }
@@ -178,28 +187,17 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                 }
 
                 // Determine selected offer:
-                // Check if matchingPromoOffer is a valid, sensible discount (cheaper than base, but >= 30% of base)
-                boolean isPromoOfferSensible = false;
-                if (matchingPromoOffer != null && basePlanOffer != null) {
-                    long promoPrice = 0;
-                    long basePrice = 0;
-                    if (!matchingPromoOffer.getPricingPhases().getPricingPhaseList().isEmpty()) {
-                        promoPrice = matchingPromoOffer.getPricingPhases().getPricingPhaseList().get(0).getPriceAmountMicros();
-                    }
-                    if (!basePlanOffer.getPricingPhases().getPricingPhaseList().isEmpty()) {
-                        basePrice = basePlanOffer.getPricingPhases().getPricingPhaseList().get(0).getPriceAmountMicros();
-                    }
-                    // Sensible promo discount: cheaper than base plan, and not a distorted monthly fraction (< 30% of annual)
-                    if (promoPrice > 0 && basePrice > 0 && promoPrice < basePrice && promoPrice >= (basePrice * 0.3)) {
-                        isPromoOfferSensible = true;
-                    }
-                }
-
-                if (hasPromo && isPromoOfferSensible) {
+                // 1) If an explicit offer/promo matched, use it
+                // 2) Otherwise if an active discounted offer exists on Google Play for this base plan, use it!
+                // 3) Otherwise fall back to the standard base plan offer
+                if (matchingPromoOffer != null) {
                     selectedOffer = matchingPromoOffer;
+                } else if (bestDiscountOffer != null) {
+                    selectedOffer = bestDiscountOffer;
+                } else if (cheapestOffer != null && (basePlanOffer == null || cheapestOffer != basePlanOffer)) {
+                    selectedOffer = cheapestOffer;
                 } else {
-                    // Standard base plan offer (e.g. ₹750/wk, ₹1400/mo, ₹3350/quarter, ₹11700/yr)
-                    selectedOffer = basePlanOffer != null ? basePlanOffer : (cheapestOffer != null ? cheapestOffer : offers.get(0));
+                    selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
                 }
 
                 String offerToken = selectedOffer.getOfferToken();
@@ -316,34 +314,43 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
 
                         item.put("offers", offersArray);
 
-                        // ALWAYS prioritize the base plan offer (where offerId is null/empty) for canonical base pricing.
-                        // Base plan has the true standard pricing (e.g. ₹750/wk, ₹1400/mo, ₹3350/quarter, ₹11700/yr).
-                        ProductDetails.SubscriptionOfferDetails chosenOffer = baseOffer != null ? baseOffer : (promoOffer != null ? promoOffer : offers.get(0));
+                        // Canonical base offer details
+                        ProductDetails.SubscriptionOfferDetails basePlanDetails = baseOffer != null ? baseOffer : offers.get(0);
+                        item.put("basePlanId", basePlanDetails.getBasePlanId());
 
-                        item.put("basePlanId", chosenOffer.getBasePlanId());
-                        item.put("offerToken", chosenOffer.getOfferToken());
-                        if (chosenOffer.getOfferId() != null) {
-                            item.put("offerId", chosenOffer.getOfferId());
+                        // If an active discount offer exists on Play Console, expose its offerToken and offerId directly:
+                        if (promoOffer != null && promoOffer.getOfferId() != null && !promoOffer.getOfferId().trim().isEmpty()) {
+                            item.put("offerId", promoOffer.getOfferId());
+                            item.put("offerToken", promoOffer.getOfferToken());
+                            item.put("hasOffer", true);
+
+                            List<ProductDetails.PricingPhase> promoPhases = promoOffer.getPricingPhases().getPricingPhaseList();
+                            if (!promoPhases.isEmpty()) {
+                                item.put("introductoryPrice", promoPhases.get(0).getFormattedPrice());
+                                item.put("introductoryPriceAmountMicros", promoPhases.get(0).getPriceAmountMicros());
+                            }
+                        } else {
+                            item.put("offerToken", basePlanDetails.getOfferToken());
+                            if (basePlanDetails.getOfferId() != null) {
+                                item.put("offerId", basePlanDetails.getOfferId());
+                            }
                         }
 
-                        List<ProductDetails.PricingPhase> phases = chosenOffer.getPricingPhases().getPricingPhaseList();
-                        if (!phases.isEmpty()) {
-                            ProductDetails.PricingPhase currentPhase = phases.get(0);
+                        // Provide canonical base plan pricing for standard display
+                        List<ProductDetails.PricingPhase> basePhases = basePlanDetails.getPricingPhases().getPricingPhaseList();
+                        if (!basePhases.isEmpty()) {
+                            ProductDetails.PricingPhase currentPhase = basePhases.get(0);
                             item.put("formattedPrice", currentPhase.getFormattedPrice());
                             item.put("priceAmountMicros", currentPhase.getPriceAmountMicros());
                             item.put("priceCurrencyCode", currentPhase.getPriceCurrencyCode());
                             item.put("billingPeriod", currentPhase.getBillingPeriod());
 
-                            if (phases.size() > 1) {
-                                ProductDetails.PricingPhase recurringPhase = phases.get(phases.size() - 1);
+                            if (basePhases.size() > 1) {
+                                ProductDetails.PricingPhase recurringPhase = basePhases.get(basePhases.size() - 1);
                                 item.put("recurringFormattedPrice", recurringPhase.getFormattedPrice());
                                 item.put("hasOffer", true);
-                            } else if (promoOffer != null && baseOffer != null) {
-                                List<ProductDetails.PricingPhase> basePhases = baseOffer.getPricingPhases().getPricingPhaseList();
-                                if (!basePhases.isEmpty()) {
-                                    item.put("recurringFormattedPrice", basePhases.get(0).getFormattedPrice());
-                                    item.put("hasOffer", true);
-                                }
+                            } else {
+                                item.put("recurringFormattedPrice", currentPhase.getFormattedPrice());
                             }
                         }
                     }
