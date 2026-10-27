@@ -246,25 +246,65 @@ if (fs.existsSync(statusBarColorFile)) {
 const statusBarPluginFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift');
 if (fs.existsSync(statusBarPluginFile)) {
   let sContent = fs.readFileSync(statusBarPluginFile, 'utf8');
-  sContent = sContent.replaceAll('getConfig().getString("backgroundColor")', 'getConfig().getString("backgroundColor", nil as String?)');
-  sContent = sContent.replaceAll('getConfig().getString("backgroundColor", nil)', 'getConfig().getString("backgroundColor", nil as String?)');
-  sContent = sContent.replaceAll('getConfig().getString("style")', 'getConfig().getString("style", nil as String?)');
-  sContent = sContent.replaceAll('getConfig().getString("style", nil)', 'getConfig().getString("style", nil as String?)');
+  const targetPattern = /private func statusBarConfig\(\) -> StatusBarConfig \{[\s\S]*?\n    \}/;
+  const patchedImplementation = `private func statusBarConfig() -> StatusBarConfig {
+        var config = StatusBarConfig()
+        if let overlays = (getConfigValue("overlaysWebView") as? NSNumber)?.boolValue ?? (getConfigValue("overlaysWebView") as? Bool) {
+            config.overlaysWebView = overlays
+        }
+        if let colorConfig = getConfigValue("backgroundColor") as? String, let color = UIColor.capacitor.color(fromHex: colorConfig) {
+            config.backgroundColor = color
+        }
+        if let configStyle = getConfigValue("style") as? String {
+            config.style = style(fromString: configStyle)
+        }
+        return config
+    }`;
+  if (targetPattern.test(sContent)) {
+    sContent = sContent.replace(targetPattern, patchedImplementation);
+  }
   sContent = sContent.replace(/\nextension PluginConfig \{[\s\S]*?\n\}\n?/, '');
   fs.writeFileSync(statusBarPluginFile, sContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getString calls.');
+  console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getConfigValue calls.');
 }
 
 // 5. Patch @capacitor/splash-screen
 const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
 if (fs.existsSync(splashFile)) {
   let content = fs.readFileSync(splashFile, 'utf8');
-  content = content.replaceAll('getConfig().getString("backgroundColor")', 'getConfig().getString("backgroundColor", nil as String?)');
-  content = content.replaceAll('getConfig().getString("backgroundColor", nil)', 'getConfig().getString("backgroundColor", nil as String?)');
-  content = content.replaceAll('getConfig().getString("iosSpinnerStyle")', 'getConfig().getString("iosSpinnerStyle", nil as String?)');
-  content = content.replaceAll('getConfig().getString("iosSpinnerStyle", nil)', 'getConfig().getString("iosSpinnerStyle", nil as String?)');
-  content = content.replaceAll('getConfig().getString("spinnerColor")', 'getConfig().getString("spinnerColor", nil as String?)');
-  content = content.replaceAll('getConfig().getString("spinnerColor", nil)', 'getConfig().getString("spinnerColor", nil as String?)');
+  const splashTargetPattern = /private func splashScreenConfig\(\) -> SplashScreenConfig \{[\s\S]*?\n    \}/;
+  const patchedSplashImplementation = `private func splashScreenConfig() -> SplashScreenConfig {
+        var config = SplashScreenConfig()
+
+        if let backgroundColor = getConfigValue("backgroundColor") as? String {
+            config.backgroundColor = UIColor.capacitor.color(fromHex: backgroundColor)
+        }
+        if let spinnerStyle = getConfigValue("iosSpinnerStyle") as? String {
+            switch spinnerStyle.lowercased() {
+            case "small":
+                config.spinnerStyle = .medium
+            default:
+                config.spinnerStyle = .large
+            }
+        }
+        if let spinnerColor = getConfigValue("spinnerColor") as? String {
+            config.spinnerColor = UIColor.capacitor.color(fromHex: spinnerColor)
+        }
+        if let showSpinner = (getConfigValue("showSpinner") as? NSNumber)?.boolValue ?? (getConfigValue("showSpinner") as? Bool) {
+            config.showSpinner = showSpinner
+        }
+        if let launchShowDuration = (getConfigValue("launchShowDuration") as? NSNumber)?.intValue ?? (getConfigValue("launchShowDuration") as? Int) {
+            config.launchShowDuration = launchShowDuration
+        }
+        if let launchAutoHide = (getConfigValue("launchAutoHide") as? NSNumber)?.boolValue ?? (getConfigValue("launchAutoHide") as? Bool) {
+            config.launchAutoHide = launchAutoHide
+        }
+        return config
+    }`;
+
+  if (splashTargetPattern.test(content)) {
+    content = content.replace(splashTargetPattern, patchedSplashImplementation);
+  }
   content = content.replace(/\nextension PluginConfig \{[\s\S]*?\n\}\n?/, '');
   if (!content.includes('static func color(fromHex: String)')) {
     content += `
@@ -284,7 +324,7 @@ extension CapacitorExtensionTypeWrapper where T: UIColor {
 `;
   }
   fs.writeFileSync(splashFile, content, 'utf8');
-  console.log('✅ Successfully patched @capacitor/splash-screen with color(fromHex:) extension.');
+  console.log('✅ Successfully patched @capacitor/splash-screen with safe getConfigValue calls & color(fromHex:) extension.');
 }
 
 

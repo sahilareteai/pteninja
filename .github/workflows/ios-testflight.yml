@@ -52,7 +52,9 @@ jobs:
         run: npm run build
 
       - name: 📱 Sync Capacitor iOS Platform
-        run: npx cap sync ios
+        run: |
+          npx cap sync ios
+          node scripts/patch-apple-auth.mjs
 
       - name: 💎 Setup Ruby
         uses: ruby/setup-ruby@v1
