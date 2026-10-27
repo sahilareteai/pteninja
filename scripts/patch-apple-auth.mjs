@@ -725,44 +725,9 @@ if (fs.existsSync(firebaseAuthPluginFile)) {
     'if let providers = getConfig().getArray("providers") as? [String] {',
     'if let providers = getConfig().getConfigJSON()["providers"] as? [String] {'
   );
-  const fbCallExtension = `
-extension CAPPluginCall {
-    public func getString(_ key: String, _ defaultValue: String? = nil) -> String? {
-        return (options[key] as? String) ?? defaultValue
-    }
-    public func getBool(_ key: String, _ defaultValue: Bool? = nil) -> Bool? {
-        let val = (options[key] as? NSNumber)?.boolValue ?? (options[key] as? Bool)
-        return val ?? defaultValue
-    }
-    public func getInt(_ key: String, _ defaultValue: Int? = nil) -> Int? {
-        let val = (options[key] as? NSNumber)?.intValue ?? (options[key] as? Int)
-        return val ?? defaultValue
-    }
-    public func getFloat(_ key: String, _ defaultValue: Float? = nil) -> Float? {
-        let val = (options[key] as? NSNumber)?.floatValue ?? (options[key] as? Float)
-        return val ?? defaultValue
-    }
-    public func getObject(_ key: String) -> [String: Any]? {
-        return options[key] as? [String: Any]
-    }
-    public func getArray(_ key: String) -> [Any]? {
-        return options[key] as? [Any]
-    }
-    public func getArray<T>(_ key: String, _ ofType: T.Type) -> [T]? {
-        return (options[key] as? [Any])?.compactMap { $0 as? T }
-    }
-    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: [String: Any]? = nil) {
-        self.resolve(["error": message])
-    }
-}
-`;
-  if (!fapContent.includes('extension CAPPluginCall')) {
-    fapContent += fbCallExtension;
-  } else {
-    fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, fbCallExtension);
-  }
+  fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, '\n');
   fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
-  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with CAPPluginCall extensions and direct JSON config.');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config and preserved native JSObject getters.');
 }
 
 
