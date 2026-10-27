@@ -2891,10 +2891,36 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           const hasPromo = !!appliedPromo;
           const promoCode = appliedPromo?.code;
 
+          // Helper to ensure offer matches plan cadence (e.g. weekly plan must be P1W/7D, not P1M/monthly)
+          const isCadenceMatch = (off: any) => {
+            if (!off) return false;
+            const period = (off.billingPeriod || '').toUpperCase();
+            if (!period) return true;
+            if (plan.id === 'weekly') {
+              return (period.includes('1W') || period.includes('7D')) && !period.includes('M') && !period.includes('Y');
+            } else if (plan.id === 'quarterly') {
+              return period.includes('3M') || period.includes('90D');
+            } else if (plan.id === 'annual') {
+              return period.includes('1Y') || period.includes('12M') || period.includes('365D') || period.includes('Y');
+            } else if (plan.id === 'monthly') {
+              return (period.includes('1M') || period.includes('30D') || period === 'PM') && !period.includes('3M') && !period.includes('12M');
+            }
+            return true;
+          };
+
           // If user applied a promo, search if available offers contains a matching promo offer
           let targetOfferId = planStoreData?.offerId;
+          // Validate existing targetOfferId against plan cadence
+          if (targetOfferId && planStoreData?.offers && Array.isArray(planStoreData.offers)) {
+            const existingMatch = planStoreData.offers.find((off: any) => off.offerId === targetOfferId);
+            if (existingMatch && existingMatch.billingPeriod && !isCadenceMatch(existingMatch)) {
+              targetOfferId = undefined;
+            }
+          }
+
           if (hasPromo && planStoreData?.offers && Array.isArray(planStoreData.offers)) {
             const promoMatch = planStoreData.offers.find((off: any) => {
+              if (off.billingPeriod && !isCadenceMatch(off)) return false;
               const offId = (off.offerId || '').toLowerCase();
               const tags = (off.tags || []).map((t: string) => (t || '').toLowerCase());
               const codeLower = (promoCode || '').toLowerCase();
@@ -2908,8 +2934,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
               targetOfferId = promoMatch.offerId;
             }
           } else if (!targetOfferId && planStoreData?.offers && Array.isArray(planStoreData.offers)) {
-            // Automatically target any active discounted offer under this base plan
-            const activeOffer = planStoreData.offers.find((off: any) => off.offerId && off.offerId.trim().length > 0);
+            // Automatically target any active discounted offer under this base plan that matches cadence
+            const activeOffer = planStoreData.offers.find((off: any) => 
+              off.offerId && off.offerId.trim().length > 0 && (!off.billingPeriod || isCadenceMatch(off))
+            );
             if (activeOffer && activeOffer.offerId) {
               targetOfferId = activeOffer.offerId;
             }

@@ -77,6 +77,53 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
         });
     }
 
+    /**
+     * Checks if a billing period string matches the expected cadence for a given basePlanId or productId.
+     */
+    private boolean isCadenceCompatible(String billingPeriod, String basePlanId, String productId) {
+        if (billingPeriod == null || billingPeriod.trim().isEmpty()) {
+            return true;
+        }
+        String bp = billingPeriod.toUpperCase().trim();
+        String context = ((basePlanId != null ? basePlanId : "") + " " + (productId != null ? productId : "")).toLowerCase();
+
+        if (context.contains("week")) {
+            // Weekly subscription: billing period must be 1 week (e.g. P1W, P7D).
+            // Reject any offer configured with a 1-month (P1M), 3-month (P3M), or 1-year (P1Y) period.
+            return (bp.contains("W") || bp.contains("7D")) && !bp.contains("M") && !bp.contains("Y");
+        } else if (context.contains("quarter")) {
+            // Quarterly subscription: billing period must be 3 months (P3M, P90D).
+            return bp.contains("3M") || bp.contains("90D");
+        } else if (context.contains("annual") || context.contains("year")) {
+            // Annual subscription: billing period must be 1 year (P1Y, P12M, P365D).
+            return bp.contains("Y") || bp.contains("12M") || bp.contains("365D");
+        } else if (context.contains("month")) {
+            // Monthly subscription: billing period must be 1 month (P1M, P30D).
+            // Reject weekly, quarterly, or annual offers.
+            return (bp.contains("1M") || bp.contains("30D") || bp.equals("PM") || bp.equals("P1M"))
+                    && !bp.contains("3M") && !bp.contains("6M") && !bp.contains("12M") && !bp.contains("W") && !bp.contains("Y");
+        }
+        return true;
+    }
+
+    /**
+     * Verifies that all pricing phases of an offer are compatible with the product / base plan cadence.
+     */
+    private boolean isOfferCadenceCompatible(ProductDetails.SubscriptionOfferDetails offer, String basePlanId, String productId) {
+        if (offer == null) return false;
+        List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
+        if (phases == null || phases.isEmpty()) return true;
+        for (ProductDetails.PricingPhase ph : phases) {
+            String bp = ph.getBillingPeriod();
+            if (bp != null && !bp.trim().isEmpty()) {
+                if (!isCadenceCompatible(bp, basePlanId, productId)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     @PluginMethod
     public void purchase(final PluginCall call) {
         final String productId = call.getString("productId");
@@ -129,6 +176,13 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                 for (ProductDetails.SubscriptionOfferDetails offer : offers) {
                     boolean baseMatches = (basePlanId == null || basePlanId.trim().isEmpty() || basePlanId.trim().equalsIgnoreCase(offer.getBasePlanId()));
                     if (!baseMatches) continue;
+
+                    // Enforce strict cadence matching: prevent selecting an offer whose billing period
+                    // does not match the product/base plan cadence (e.g. 1-month offer for a weekly plan)
+                    if (!isOfferCadenceCompatible(offer, basePlanId, productId)) {
+                        Log.w(TAG, "Skipping offer " + offer.getOfferId() + " for " + productId + " due to cadence mismatch with " + basePlanId);
+                        continue;
+                    }
 
                     List<ProductDetails.PricingPhase> phases = offer.getPricingPhases().getPricingPhaseList();
                     long initialPriceMicros = Long.MAX_VALUE;
@@ -194,10 +248,21 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                     selectedOffer = matchingPromoOffer;
                 } else if (bestDiscountOffer != null) {
                     selectedOffer = bestDiscountOffer;
-                } else if (cheapestOffer != null && (basePlanOffer == null || cheapestOffer != basePlanOffer)) {
+                } else if (cheapestOffer != null) {
                     selectedOffer = cheapestOffer;
+                } else if (basePlanOffer != null) {
+                    selectedOffer = basePlanOffer;
                 } else {
-                    selectedOffer = basePlanOffer != null ? basePlanOffer : offers.get(0);
+                    // Fallback to first cadence-compatible offer, or offers.get(0)
+                    for (ProductDetails.SubscriptionOfferDetails o : offers) {
+                        if (isOfferCadenceCompatible(o, basePlanId, productId)) {
+                            selectedOffer = o;
+                            break;
+                        }
+                    }
+                    if (selectedOffer == null) {
+                        selectedOffer = offers.get(0);
+                    }
                 }
 
                 String offerToken = selectedOffer.getOfferToken();
@@ -303,22 +368,37 @@ public class PlayBillingPlugin extends Plugin implements PurchasesUpdatedListene
                             }
                             offersArray.put(offObj);
 
-                            if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
-                                if (promoOffer == null) {
-                                    promoOffer = offer;
+                            // Only consider cadence-compatible offers for canonical baseOffer and promoOffer
+                            // (e.g. prevent picking an offer with 1-month billing period for a weekly subscription)
+                            if (isOfferCadenceCompatible(offer, offer.getBasePlanId(), details.getProductId())) {
+                                if (offer.getOfferId() != null && !offer.getOfferId().trim().isEmpty()) {
+                                    if (promoOffer == null) {
+                                        promoOffer = offer;
+                                    }
+                                } else if (baseOffer == null) {
+                                    baseOffer = offer;
                                 }
-                            } else if (baseOffer == null) {
-                                baseOffer = offer;
                             }
                         }
 
                         item.put("offers", offersArray);
 
-                        // Canonical base offer details
-                        ProductDetails.SubscriptionOfferDetails basePlanDetails = baseOffer != null ? baseOffer : offers.get(0);
+                        // Canonical base offer details matching cadence
+                        ProductDetails.SubscriptionOfferDetails basePlanDetails = baseOffer;
+                        if (basePlanDetails == null) {
+                            for (ProductDetails.SubscriptionOfferDetails o : offers) {
+                                if (isOfferCadenceCompatible(o, o.getBasePlanId(), details.getProductId())) {
+                                    basePlanDetails = o;
+                                    break;
+                                }
+                            }
+                        }
+                        if (basePlanDetails == null) {
+                            basePlanDetails = offers.get(0);
+                        }
                         item.put("basePlanId", basePlanDetails.getBasePlanId());
 
-                        // If an active discount offer exists on Play Console, expose its offerToken and offerId directly:
+                        // If an active discount offer exists on Play Console matching cadence, expose its offerToken and offerId directly:
                         if (promoOffer != null && promoOffer.getOfferId() != null && !promoOffer.getOfferId().trim().isEmpty()) {
                             item.put("offerId", promoOffer.getOfferId());
                             item.put("offerToken", promoOffer.getOfferToken());
