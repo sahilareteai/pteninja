@@ -200,7 +200,7 @@ let package = Package(
   console.log('✅ Successfully patched @capacitor-firebase/authentication Package.swift with swift-tools-version: 5.9.');
 }
 
-// 4. Patch @capacitor/status-bar UIColor.swift to guarantee color(fromHex: String) is defined
+// 4. Patch @capacitor/status-bar
 const statusBarColorFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/UIColor.swift');
 if (fs.existsSync(statusBarColorFile)) {
   let content = fs.readFileSync(statusBarColorFile, 'utf8');
@@ -243,12 +243,27 @@ if (fs.existsSync(statusBarColorFile)) {
   }
 }
 
-// 5. Patch @capacitor/splash-screen SplashScreenPlugin.swift to guarantee color(fromHex: String) is defined
+const statusBarPluginFile = path.resolve(__dirname, '../node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift');
+if (fs.existsSync(statusBarPluginFile)) {
+  let sContent = fs.readFileSync(statusBarPluginFile, 'utf8');
+  sContent = sContent.replaceAll('getConfig().getString("backgroundColor")', 'getConfig().getString("backgroundColor", nil)');
+  sContent = sContent.replaceAll('getConfig().getString("style")', 'getConfig().getString("style", nil)');
+  if (!sContent.includes('extension PluginConfig')) {
+    sContent += `\nextension PluginConfig {\n    public func getString(_ configKey: String) -> String? {\n        return self.getString(configKey, nil)\n    }\n}\n`;
+  }
+  fs.writeFileSync(statusBarPluginFile, sContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor/status-bar StatusBarPlugin.swift with safe getString calls.');
+}
+
+// 5. Patch @capacitor/splash-screen
 const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
 if (fs.existsSync(splashFile)) {
   let content = fs.readFileSync(splashFile, 'utf8');
+  content = content.replaceAll('getConfig().getString("backgroundColor")', 'getConfig().getString("backgroundColor", nil)');
+  content = content.replaceAll('getConfig().getString("iosSpinnerStyle")', 'getConfig().getString("iosSpinnerStyle", nil)');
+  content = content.replaceAll('getConfig().getString("spinnerColor")', 'getConfig().getString("spinnerColor", nil)');
   if (!content.includes('static func color(fromHex: String)')) {
-    const splashColorExtension = `
+    content += `
 extension CapacitorExtensionTypeWrapper where T: UIColor {
     static func color(fromHex: String) -> UIColor? {
         let hexString = fromHex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
@@ -263,10 +278,12 @@ extension CapacitorExtensionTypeWrapper where T: UIColor {
     }
 }
 `;
-    content = content + splashColorExtension;
-    fs.writeFileSync(splashFile, content, 'utf8');
-    console.log('✅ Successfully patched @capacitor/splash-screen with color(fromHex: String) extension.');
   }
+  if (!content.includes('extension PluginConfig')) {
+    content += `\nextension PluginConfig {\n    public func getString(_ configKey: String) -> String? {\n        return self.getString(configKey, nil)\n    }\n}\n`;
+  }
+  fs.writeFileSync(splashFile, content, 'utf8');
+  console.log('✅ Successfully patched @capacitor/splash-screen with color(fromHex:) and safe getString calls.');
 }
 
 
