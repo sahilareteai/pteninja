@@ -605,8 +605,8 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
         )}
 
         <div className="space-y-2.5 max-w-sm mx-auto">
-          {/* Sign In with Apple (Required for iOS App Store & Instant Experience) */}
-          {(isIOS() || onAppleLogin) && (
+          {/* Sign In with Apple (Required for iOS App Store & Instant Experience, hidden on Android) */}
+          {isIOS() && onAppleLogin && (
             <button
               type="button"
               onClick={handleAppleClick}

@@ -1900,7 +1900,7 @@ function AppContent() {
       return (
         <MobileOnboarding 
           onGoogleLogin={googleLogin}
-          onAppleLogin={appleLogin}
+          onAppleLogin={isIOS() ? appleLogin : undefined}
           onEmailLogin={(mode) => login(mode || 'register')}
           onGuestAccess={quickGuestAccess}
           authError={authError}
