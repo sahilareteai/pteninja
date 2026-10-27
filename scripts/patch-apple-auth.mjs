@@ -284,11 +284,19 @@ if (fs.existsSync(splashFile)) {
 
   content = content.replaceAll(
     'call.reject("Unable to show Splash Screen")',
-    '(call as AnyObject).reject?("Unable to show Splash Screen", nil, nil, nil)'
+    'call.resolve()'
   );
   content = content.replaceAll(
     'call.reject("Unable to hide Splash Screen")',
-    '(call as AnyObject).reject?("Unable to hide Splash Screen", nil, nil, nil)'
+    'call.resolve()'
+  );
+  content = content.replaceAll(
+    '(call as AnyObject).reject?("Unable to show Splash Screen", nil, nil, nil)',
+    'call.resolve()'
+  );
+  content = content.replaceAll(
+    '(call as AnyObject).reject?("Unable to hide Splash Screen", nil, nil, nil)',
+    'call.resolve()'
   );
 
   const settingsTargetPattern = /private func splashScreenSettings\(from call: CAPPluginCall\) -> SplashScreenSettings \{[\s\S]*?\n    \}/;
