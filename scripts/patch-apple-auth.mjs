@@ -633,10 +633,11 @@ extension CAPPluginCall {
   console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject and CAPPluginCall extension.');
 }
 
-// 7. Patch @capacitor-community/admob to inject CAPPluginCall convenience methods
+// 7. Patch @capacitor-community/admob to inject CAPPluginCall convenience methods and direct webView access
 const admobPluginFile = path.resolve(__dirname, '../node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/AdMobPlugin.swift');
 if (fs.existsSync(admobPluginFile)) {
   let admobContent = fs.readFileSync(admobPluginFile, 'utf8');
+  admobContent = admobContent.replace('self.bridge?.webView?.setAllMediaPlaybackSuspended', 'self.webView?.setAllMediaPlaybackSuspended');
   const admobCallExtension = `
 extension CAPPluginCall {
     public func getString(_ key: String, _ defaultValue: String? = nil) -> String? {
@@ -674,7 +675,15 @@ extension CAPPluginCall {
     admobContent = admobContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, admobCallExtension);
   }
   fs.writeFileSync(admobPluginFile, admobContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor-community/admob with full CAPPluginCall convenience methods.');
+  console.log('✅ Successfully patched @capacitor-community/admob with full CAPPluginCall convenience methods and direct webView.');
+}
+
+const nativeAdExecFile = path.resolve(__dirname, '../node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/NativeAds/NativeAdExecutor.swift');
+if (fs.existsSync(nativeAdExecFile)) {
+  let execContent = fs.readFileSync(nativeAdExecFile, 'utf8');
+  execContent = execContent.replaceAll('plugin?.bridge?.webView', 'plugin?.webView');
+  fs.writeFileSync(nativeAdExecFile, execContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor-community/admob NativeAdExecutor.swift plugin?.bridge?.webView -> plugin?.webView');
 }
 
 
