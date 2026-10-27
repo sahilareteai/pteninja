@@ -487,40 +487,60 @@ public class StatusBar {
 // 5. Patch @capacitor/splash-screen
 const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
 if (fs.existsSync(splashFile)) {
-  let content = fs.readFileSync(splashFile, 'utf8');
+  const fullSplashPluginSwift = `import UIKit
+import Foundation
+import Capacitor
 
-  if (!content.includes('import UIKit')) {
-    content = 'import UIKit\n' + content;
-  }
+@objc(SplashScreenPlugin)
+public class SplashScreenPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "SplashScreenPlugin"
+    public let jsName = "SplashScreen"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "show", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "hide", returnType: CAPPluginReturnPromise)
+    ]
+    private var splashScreen: SplashScreen?
 
-  content = content.replace(
-    'if let view = bridge?.viewController?.view {',
-    'if let view = bridge?.webView?.superview ?? webView?.superview ?? webView {'
-  );
-  content = content.replace(
-    'if let view = ((bridge as AnyObject).viewController as? UIViewController)?.view ?? webView?.superview {',
-    'if let view = bridge?.webView?.superview ?? webView?.superview ?? webView {'
-  );
+    override public func load() {
+        let activeWindow = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })?
+            .windows.first(where: { $0.isKeyWindow })
+            ?? UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows.first
 
-  content = content.replaceAll(
-    'call.reject("Unable to show Splash Screen")',
-    'call.resolve()'
-  );
-  content = content.replaceAll(
-    'call.reject("Unable to hide Splash Screen")',
-    'call.resolve()'
-  );
-  content = content.replaceAll(
-    '(call as AnyObject).reject?("Unable to show Splash Screen", nil, nil, nil)',
-    'call.resolve()'
-  );
-  content = content.replaceAll(
-    '(call as AnyObject).reject?("Unable to hide Splash Screen", nil, nil, nil)',
-    'call.resolve()'
-  );
+        if let view = webView?.superview ?? webView ?? activeWindow {
+            splashScreen = SplashScreen(parentView: view, config: splashScreenConfig())
+            splashScreen?.showOnLaunch()
+        }
+    }
 
-  const settingsTargetPattern = /private func splashScreenSettings\(from call: CAPPluginCall\) -> SplashScreenSettings \{[\s\S]*?\n    \}/;
-  const patchedSettingsImplementation = `private func splashScreenSettings(from call: CAPPluginCall) -> SplashScreenSettings {
+    // Show the splash screen
+    @objc public func show(_ call: CAPPluginCall) {
+        if let splash = splashScreen {
+            let settings = splashScreenSettings(from: call)
+            splash.show(settings: settings,
+                        completion: {
+                            call.resolve()
+                        })
+        } else {
+            call.resolve()
+        }
+    }
+
+    // Hide the splash screen
+    @objc public func hide(_ call: CAPPluginCall) {
+        if let splash = splashScreen {
+            let settings = splashScreenSettings(from: call)
+            splash.hide(settings: settings)
+            call.resolve()
+        } else {
+            call.resolve()
+        }
+    }
+
+    private func splashScreenSettings(from call: CAPPluginCall) -> SplashScreenSettings {
         var settings = SplashScreenSettings()
         guard let options = call.options else { return settings }
 
@@ -537,14 +557,9 @@ if (fs.existsSync(splashFile)) {
             settings.autoHide = autoHide
         }
         return settings
-    }`;
+    }
 
-  if (settingsTargetPattern.test(content)) {
-    content = content.replace(settingsTargetPattern, patchedSettingsImplementation);
-  }
-
-  const splashTargetPattern = /private func splashScreenConfig\(\) -> SplashScreenConfig \{[\s\S]*?\n    \}/;
-  const patchedSplashImplementation = `private func splashScreenConfig() -> SplashScreenConfig {
+    private func splashScreenConfig() -> SplashScreenConfig {
         var config = SplashScreenConfig()
 
         if let backgroundColor = getConfigValue("backgroundColor") as? String {
@@ -571,14 +586,9 @@ if (fs.existsSync(splashFile)) {
             config.launchAutoHide = launchAutoHide
         }
         return config
-    }`;
+    }
+}
 
-  if (splashTargetPattern.test(content)) {
-    content = content.replace(splashTargetPattern, patchedSplashImplementation);
-  }
-  content = content.replace(/\nextension PluginConfig \{[\s\S]*?\n\}\n?/, '');
-  if (!content.includes('static func color(fromHex: String)')) {
-    content += `
 extension CapacitorExtensionTypeWrapper where T: UIColor {
     static func color(fromHex: String) -> UIColor? {
         let hexString = fromHex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
@@ -593,9 +603,9 @@ extension CapacitorExtensionTypeWrapper where T: UIColor {
     }
 }
 `;
-  }
-  fs.writeFileSync(splashFile, content, 'utf8');
-  console.log('✅ Successfully patched @capacitor/splash-screen with safe getConfigValue calls, import UIKit, & color(fromHex:) extension.');
+  fs.writeFileSync(splashFile, fullSplashPluginSwift, 'utf8');
+  console.log('✅ Successfully wrote clean, self-contained SplashScreenPlugin.swift without bridge.webView.');
 }
+
 
 
