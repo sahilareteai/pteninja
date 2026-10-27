@@ -19,13 +19,126 @@ function findPluginFile(subpath) {
   return null;
 }
 
-// 1. Patch AppleAuthProviderHandler.swift to guarantee Capacitor rejection on all guard failures
+// 1. Patch AppleAuthProviderHandler.swift with strong ASAuthorizationController reference, MainThread presentation, and UIWindowScene resolver
 const appleFile = findPluginFile('ios/Plugin/handlers/AppleAuthProviderHandler.swift');
 if (appleFile) {
-  let content = fs.readFileSync(appleFile, 'utf8');
-  const targetPattern = /func authorizationController\(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization\) \{[\s\S]*?func authorizationController\(controller: ASAuthorizationController, didCompleteWithError error: Error\) \{[\s\S]*?\n    \}/;
+  const fullAppleHandler = `import Foundation
+import Capacitor
+import FirebaseCore
+import FirebaseAuth
+import AuthenticationServices
+import CryptoKit
 
-  const patchedImplementation = `func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+class AppleAuthProviderHandler: NSObject {
+    var pluginImplementation: FirebaseAuthentication
+    fileprivate var currentNonce: String?
+    fileprivate var isLink: Bool?
+    fileprivate var activeAuthController: ASAuthorizationController?
+
+    init(_ pluginImplementation: FirebaseAuthentication) {
+        self.pluginImplementation = pluginImplementation
+    }
+
+    func signIn(call: CAPPluginCall) {
+        if #available(iOS 13, *) {
+            self.isLink = false
+            self.startSignInWithAppleFlow()
+        } else {
+            self.pluginImplementation.handleFailedSignIn(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)
+        }
+    }
+
+    func link(call: CAPPluginCall) {
+        if #available(iOS 13, *) {
+            self.isLink = true
+            self.startSignInWithAppleFlow()
+        } else {
+            self.pluginImplementation.handleFailedLink(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)
+        }
+    }
+}
+
+// Source: https://firebase.google.com/docs/auth/ios/apple
+@available(iOS 13.0, *)
+extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        if let window = self.pluginImplementation.getPlugin().webView?.window {
+            return window
+        }
+        if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+           let window = scene.windows.first(where: { $0.isKeyWindow }) {
+            return window
+        }
+        if let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) {
+            return window
+        }
+        return UIWindow()
+    }
+
+    // Adapted from https://auth0.com/docs/api-auth/tutorials/nonce#generate-a-cryptographically-random-nonce
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset: [Character] =
+            Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            let randoms: [UInt8] = (0 ..< 16).map { _ in
+                var random: UInt8 = 0
+                let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+                if errorCode != errSecSuccess {
+                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \\(errorCode)")
+                }
+                return random
+            }
+
+            randoms.forEach { random in
+                if remainingLength == 0 {
+                    return
+                }
+
+                if random < charset.count {
+                    result.append(charset[Int(random)])
+                    remainingLength -= 1
+                }
+            }
+        }
+
+        return result
+    }
+
+    @available(iOS 13, *)
+    func startSignInWithAppleFlow() {
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        let appleIDProvider = ASAuthorizationAppleIDProvider()
+        let request = appleIDProvider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+
+        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+        self.activeAuthController = authorizationController
+        authorizationController.delegate = self
+        authorizationController.presentationContextProvider = self
+        DispatchQueue.main.async {
+            authorizationController.performRequests()
+        }
+    }
+
+    @available(iOS 13, *)
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            return String(format: "%02x", $0)
+        }.joined()
+
+        return hashString
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        self.activeAuthController = nil
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
             self.pluginImplementation.handleFailedSignIn(message: "Invalid credential type received from Apple", error: nil)
             return
@@ -65,39 +178,54 @@ if (appleFile) {
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        self.activeAuthController = nil
         if self.isLink == true {
             self.pluginImplementation.handleFailedLink(message: nil, error: error)
         } else {
             self.pluginImplementation.handleFailedSignIn(message: nil, error: error)
         }
-    }`;
-
-  if (targetPattern.test(content)) {
-    content = content.replace(targetPattern, patchedImplementation);
-  }
-  content = content.replace(
-    'return (self.pluginImplementation.getPlugin().bridge?.webView?.window)!',
-    'return (self.pluginImplementation.getPlugin().webView?.window ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow }))!'
-  );
-  content = content.replace(
-    'call.reject(self.pluginImplementation.getPlugin().errorDeviceUnsupported)',
-    'self.pluginImplementation.handleFailedSignIn(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)'
-  );
-  content = content.replace(
-    'call.reject(self.pluginImplementation.getPlugin().errorDeviceUnsupported)',
-    'self.pluginImplementation.handleFailedLink(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)'
-  );
-  fs.writeFileSync(appleFile, content, 'utf8');
-  console.log('✅ Successfully patched AppleAuthProviderHandler.swift with safe Capacitor rejection guards and direct webView.');
+    }
+}
+`;
+  fs.writeFileSync(appleFile, fullAppleHandler, 'utf8');
+  console.log('✅ Successfully patched AppleAuthProviderHandler.swift with strong controller reference, UIWindowScene presentationAnchor, and MainThread dispatch.');
 }
 
-// 2. Patch GoogleAuthProviderHandler.swift to avoid silent hangs if options or controller are missing
+// 2. Patch GoogleAuthProviderHandler.swift with UIWindowScene rootViewController resolution and MainThread dispatch
 const googleFile = findPluginFile('ios/Plugin/handlers/GoogleAuthProviderHandler.swift');
 if (googleFile) {
-  let gContent = fs.readFileSync(googleFile, 'utf8');
-  const googlePattern = /private func startSignInWithGoogleFlow\(_ call: CAPPluginCall, isLink: Bool\) \{[\s\S]*?#else/;
+  const fullGoogleHandler = `import Foundation
+import Capacitor
+import FirebaseCore
+import FirebaseAuth
+#if RGCFA_INCLUDE_GOOGLE
+import GoogleSignIn
+#endif
 
-  const patchedGoogleFlow = `private func startSignInWithGoogleFlow(_ call: CAPPluginCall, isLink: Bool) {
+class GoogleAuthProviderHandler: NSObject {
+    let errorSdkNotIncluded = "The Google Sign-In SDK is not included in this build. Add the required CocoaPods subspec or Swift package trait."
+    var pluginImplementation: FirebaseAuthentication
+
+    init(_ pluginImplementation: FirebaseAuthentication) {
+        self.pluginImplementation = pluginImplementation
+        super.init()
+    }
+
+    func signIn(call: CAPPluginCall) {
+        startSignInWithGoogleFlow(call, isLink: false)
+    }
+
+    func link(call: CAPPluginCall) {
+        startSignInWithGoogleFlow(call, isLink: true)
+    }
+
+    func signOut() {
+        #if RGCFA_INCLUDE_GOOGLE
+        GIDSignIn.sharedInstance.signOut()
+        #endif
+    }
+
+    private func startSignInWithGoogleFlow(_ call: CAPPluginCall, isLink: Bool) {
         #if RGCFA_INCLUDE_GOOGLE
         guard let clientId = FirebaseApp.app()?.options.clientID else {
             if isLink == true {
@@ -115,7 +243,16 @@ if (googleFile) {
         }
         let config = GIDConfiguration(clientID: clientId, serverClientID: serverClientId)
         GIDSignIn.sharedInstance.configuration = config
-        guard let controller = self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+
+        var presentingVC: UIViewController? = self.pluginImplementation.getPlugin().webView?.window?.rootViewController
+        if presentingVC == nil {
+            let activeScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+            presentingVC = activeScene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        }
+        if presentingVC == nil {
+            presentingVC = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first(where: { $0.isKeyWindow })?.rootViewController
+        }
+        guard let controller = presentingVC else {
             if isLink == true {
                 self.pluginImplementation.handleFailedLink(message: "Unable to present Google Sign-In view controller.", error: nil)
             } else {
@@ -158,16 +295,18 @@ if (googleFile) {
                 }
             }
         }
-        #else`;
-
-  if (googlePattern.test(gContent)) {
-    gContent = gContent.replace(googlePattern, patchedGoogleFlow);
-  }
-  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
-  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
-  gContent = gContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
-  fs.writeFileSync(googleFile, gContent, 'utf8');
-  console.log('✅ Successfully patched GoogleAuthProviderHandler.swift to eliminate silent hangs and use rootViewController.');
+        #else
+        if isLink == true {
+            pluginImplementation.handleFailedLink(message: errorSdkNotIncluded, error: nil)
+        } else {
+            pluginImplementation.handleFailedSignIn(message: errorSdkNotIncluded, error: nil)
+        }
+        #endif
+    }
+}
+`;
+  fs.writeFileSync(googleFile, fullGoogleHandler, 'utf8');
+  console.log('✅ Successfully patched GoogleAuthProviderHandler.swift with full UIWindowScene view controller resolver and MainThread dispatch.');
 }
 
 // 3. Patch @capacitor-firebase/authentication Package.swift for Swift 5.9 / Xcode 16.x compatibility
@@ -737,11 +876,29 @@ if (fs.existsSync(firebaseAuthPluginFile)) {
     'let port = call.getInt("port") ?? 9099',
     'let port = (call.options["port"] as? Int) ?? 9099'
   );
+  if (!fapContent.includes('handleOpenUrlNotification')) {
+    fapContent = fapContent.replace(
+      'self.implementation = FirebaseAuthentication(plugin: self, config: firebaseAuthenticationConfig())',
+      'self.implementation = FirebaseAuthentication(plugin: self, config: firebaseAuthenticationConfig())\n        NotificationCenter.default.addObserver(self, selector: #selector(handleOpenUrlNotification(_:)), name: Notification.Name(rawValue: "capacitorOpenURL"), object: nil)'
+    );
+    fapContent = fapContent.replace(
+      'private func firebaseAuthenticationConfig()',
+      `@objc private func handleOpenUrlNotification(_ notification: Notification) {
+        guard let object = notification.object as? [String: Any],
+              let url = object["url"] as? URL else { return }
+        #if RGCFA_INCLUDE_GOOGLE
+        _ = GIDSignIn.sharedInstance.handle(url)
+        #endif
+    }
+
+    private func firebaseAuthenticationConfig()`
+    );
+  }
   fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, '\n');
   const fbCallExtension = `
 extension CAPPluginCall {
     public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: [String: Any]? = nil) {
-        self.resolve(["error": message])
+        self.resolve(["error": message, "code": code ?? "AUTH_FAILED"])
     }
 }
 `;
@@ -749,7 +906,7 @@ extension CAPPluginCall {
     fapContent += fbCallExtension;
   }
   fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
-  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and public reject extension.');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with URL handling, direct JSON config, safe options parsing, and public reject extension.');
 }
 
 

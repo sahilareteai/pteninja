@@ -494,10 +494,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         // Safety timeout race: Never allow native Google prompt or bridge to freeze indefinitely
         const googleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Google Sign-In timed out. Please try again.')), 25000)
+          setTimeout(() => reject(new Error('Google Sign-In timed out. Please try again.')), 15000)
         );
 
-        let res;
+        let res: any;
         try {
           res = await Promise.race([
             FirebaseAuthentication.signInWithGoogle(),
@@ -511,6 +511,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           ]);
         }
 
+        if (res && res.error) {
+          const err = new Error(res.error);
+          (err as any).code = res.code;
+          throw err;
+        }
+
         let googleIdToken = res?.credential?.idToken;
         if (!googleIdToken) {
           try {
@@ -521,18 +527,20 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
 
-        if (googleIdToken) {
-          const credential = GoogleAuthProvider.credential(googleIdToken, res?.credential?.accessToken);
-          if (auth.currentUser && auth.currentUser.isAnonymous) {
-            try {
-              await linkWithCredential(auth.currentUser, credential);
-            } catch (linkErr: any) {
-              console.log('[GoogleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
-              await signInWithCredential(auth, credential);
-            }
-          } else {
+        if (!googleIdToken) {
+          throw new Error('Google Sign-In did not return an identity token. Please try again.');
+        }
+
+        const credential = GoogleAuthProvider.credential(googleIdToken, res?.credential?.accessToken);
+        if (auth.currentUser && auth.currentUser.isAnonymous) {
+          try {
+            await linkWithCredential(auth.currentUser, credential);
+          } catch (linkErr: any) {
+            console.log('[GoogleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
             await signInWithCredential(auth, credential);
           }
+        } else {
+          await signInWithCredential(auth, credential);
         }
         setShowAuthModal(false);
         setIsAuthenticating(false);
@@ -545,13 +553,14 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch (error: any) {
       console.error('[GoogleAuth] Login failure:', error);
       const errMsg = error?.message || String(error || '');
-      if (errMsg.toLowerCase().includes('cancel') || error?.code === '16' || error?.code === '12501') {
+      if (
+        errMsg.toLowerCase().includes('cancel') ||
+        error?.code === '16' ||
+        error?.code === '12501' ||
+        error?.code === '-5' ||
+        error?.code === '1001'
+      ) {
         setIsAuthenticating(false);
-        return;
-      }
-      if (isIOS() && (errMsg.toLowerCase().includes('not enabled') || errMsg.toLowerCase().includes('googleservice-info') || errMsg.toLowerCase().includes('configuration') || errMsg.toLowerCase().includes('not included') || errMsg.toLowerCase().includes('client id not configured'))) {
-        setIsAuthenticating(false);
-        setAuthError("Google Sign-In is being finalized for iOS. Please sign in with Apple or Email.");
         return;
       }
       if (!isNativeMobile() && (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request')) {
@@ -584,13 +593,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
 
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
+          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 18000)
         );
 
-        const res = await Promise.race([
+        const res: any = await Promise.race([
           FirebaseAuthentication.signInWithApple({ skipNativeAuth: true } as any),
           appleTimeoutPromise
         ]);
+
+        if (res && res.error) {
+          const err = new Error(res.error);
+          (err as any).code = res.code;
+          throw err;
+        }
 
         const { idToken, rawNonce, displayName: appleDisplayName } = extractAppleCredentials(res);
         if (!idToken) {
