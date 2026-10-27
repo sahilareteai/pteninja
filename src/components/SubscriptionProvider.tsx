@@ -32,7 +32,7 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { generateUserReferralCode } from '../services/promoService';
-import { isNativeMobile, isIOS } from '../lib/mobile';
+import { isNativeMobile, isIOS, isAndroid } from '../lib/mobile';
 import { extractAppleCredentials, isAppleAuthCancellation, createInstantAppleUser } from '../lib/appleAuth';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
@@ -579,10 +579,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     localStorage.setItem('pte_session_id', newSessionId);
 
     try {
-      if (isNativeMobile()) {
+      if (isNativeMobile() && isIOS()) {
+        // --- iOS NATIVE SIGN IN WITH APPLE (Face ID / Touch ID / Passcode) ---
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
 
-        // Allow ample time for user biometric Face ID / Passcode prompt
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
         );
@@ -593,6 +593,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         ]);
 
         const { idToken, rawNonce, displayName: appleDisplayName } = extractAppleCredentials(res);
+        if (!idToken) {
+          throw new Error('Unable to obtain identity token from Apple. Please try again.');
+        }
 
         const { OAuthProvider } = await import('firebase/auth');
         const provider = new OAuthProvider('apple.com');
@@ -607,8 +610,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             // Attempt to link anonymous guest session with Apple credentials
             userCred = await linkWithCredential(auth.currentUser, credential);
           } catch (linkErr: any) {
-            console.log('[AppleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
-            // If already linked or credential in use, sign in directly with credential
+            console.log('[AppleAuth iOS] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
             userCred = await signInWithCredential(auth, credential);
           }
         } else {
@@ -618,13 +620,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const firebaseUser = userCred?.user || auth.currentUser;
         if (firebaseUser) {
           const instantUser = createInstantAppleUser(firebaseUser, newSessionId, appleDisplayName);
-          // Instantly set user profile so user enters the Dojo with ZERO delay!
           setUser(instantUser);
 
-          // Non-blocking firestore sync (creates doc if new user, or onSnapshot will sync existing)
           const userRef = doc(db, 'users', firebaseUser.uid);
           setDoc(userRef, instantUser, { merge: true }).catch((err) => {
-            console.warn('[AppleAuth] Firestore profile write deferred:', err);
+            console.warn('[AppleAuth iOS] Firestore profile write deferred:', err);
           });
         }
 
@@ -633,12 +633,86 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
 
-      // Web fallback
-      const { OAuthProvider } = await import('firebase/auth');
+      // --- ANDROID & WEB SIGN IN WITH APPLE (OAuth 2.0 Web Flow) ---
+      const { OAuthProvider, linkWithPopup } = await import('firebase/auth');
       const provider = new OAuthProvider('apple.com');
-      await signInWithPopup(auth, provider);
-      setShowAuthModal(false);
+      provider.addScope('email');
+      provider.addScope('name');
+
+      if (isNativeMobile() && isAndroid()) {
+        try {
+          const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+          const appleTimeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 45000)
+          );
+
+          // On Android, skipNativeAuth: false allows the Firebase Android SDK to manage the Chrome Custom Tab OAuth intent
+          const res = await Promise.race([
+            FirebaseAuthentication.signInWithApple({ skipNativeAuth: false } as any),
+            appleTimeoutPromise
+          ]);
+
+          const androidUser = res?.user || (auth.currentUser ? {
+            uid: auth.currentUser.uid,
+            email: auth.currentUser.email,
+            displayName: auth.currentUser.displayName,
+          } : null);
+
+          if (androidUser && androidUser.uid) {
+            const instantUser = createInstantAppleUser(
+              {
+                uid: androidUser.uid,
+                email: androidUser.email,
+                displayName: androidUser.displayName,
+                emailVerified: true
+              },
+              newSessionId,
+              androidUser.displayName || undefined
+            );
+            setUser(instantUser);
+            const userRef = doc(db, 'users', androidUser.uid);
+            setDoc(userRef, instantUser, { merge: true }).catch((err) => {
+              console.warn('[AppleAuth Android] Firestore profile write deferred:', err);
+            });
+
+            setIsAuthenticating(false);
+            setShowAuthModal(false);
+            return;
+          }
+        } catch (androidPluginErr: any) {
+          console.warn('[AppleAuth Android] Native plugin attempt error, attempting browser popup fallback:', androidPluginErr);
+          if (isAppleAuthCancellation(androidPluginErr)) {
+            setIsAuthenticating(false);
+            return;
+          }
+        }
+      }
+
+      // Web popup / redirect flow (and Android fallback)
+      let userCred: any;
+      if (auth.currentUser && auth.currentUser.isAnonymous) {
+        try {
+          userCred = await linkWithPopup(auth.currentUser, provider);
+        } catch (linkErr: any) {
+          console.log('[AppleAuth] Anonymous link deferred:', linkErr?.code);
+          userCred = await signInWithPopup(auth, provider);
+        }
+      } else {
+        userCred = await signInWithPopup(auth, provider);
+      }
+
+      const firebaseUser = userCred?.user || auth.currentUser;
+      if (firebaseUser) {
+        const instantUser = createInstantAppleUser(firebaseUser, newSessionId, firebaseUser.displayName || undefined);
+        setUser(instantUser);
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        setDoc(userRef, instantUser, { merge: true }).catch((err) => {
+          console.warn('[AppleAuth] Firestore profile write deferred:', err);
+        });
+      }
+
       setIsAuthenticating(false);
+      setShowAuthModal(false);
     } catch (error: any) {
       console.error('[AppleAuth] Login failure:', error);
       if (isAppleAuthCancellation(error)) {

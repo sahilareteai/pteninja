@@ -51,6 +51,21 @@ describe('Apple Authentication Helper Unit Tests', () => {
       expect(creds.displayName).toBe('Sensei Ninja');
     });
 
+    it('extracts user profile safely when idToken is absent in Android OAuth flow', () => {
+      const res = {
+        user: {
+          uid: 'apple_android_oauth_uid',
+          email: 'scholar@privaterelay.appleid.com',
+          displayName: 'Ninja Scholar',
+        },
+      };
+
+      const creds = extractAppleCredentials(res);
+      expect(creds.idToken).toBeUndefined();
+      expect(creds.user?.uid).toBe('apple_android_oauth_uid');
+      expect(creds.displayName).toBe('Ninja Scholar');
+    });
+
     it('throws a descriptive error when response is missing', () => {
       expect(() => extractAppleCredentials(null)).toThrow(
         'No authentication response received from Apple.'

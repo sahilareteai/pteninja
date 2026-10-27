@@ -2,10 +2,11 @@ import { UserData } from '../types';
 import { getLocalDateStr } from './utils';
 
 export interface ExtractedAppleCredentials {
-  idToken: string;
+  idToken?: string;
   rawNonce?: string;
   authorizationCode?: string;
   displayName?: string;
+  user?: any;
 }
 
 /**
@@ -17,33 +18,7 @@ export function extractAppleCredentials(res: any): ExtractedAppleCredentials {
     throw new Error('No authentication response received from Apple.');
   }
 
-  // 1. Extract idToken from credential or root level
-  const idToken =
-    res.credential?.idToken ||
-    res.idToken ||
-    res.credential?.token ||
-    res.token ||
-    (typeof res.credential === 'string' ? res.credential : undefined);
-
-  if (!idToken || typeof idToken !== 'string' || idToken.trim().length === 0) {
-    throw new Error('Unable to obtain identity token from Apple. Please try again.');
-  }
-
-  // 2. Extract rawNonce from credential or root level
-  const rawNonce =
-    res.credential?.nonce ||
-    res.nonce ||
-    res.credential?.rawNonce ||
-    res.rawNonce ||
-    undefined;
-
-  // 3. Extract authorizationCode if available
-  const authorizationCode =
-    res.credential?.authorizationCode ||
-    res.authorizationCode ||
-    undefined;
-
-  // 4. Extract displayName if available (Apple only provides this on the first sign-in)
+  // 1. Extract displayName if available (Apple only provides this on the first sign-in)
   let displayName: string | undefined = undefined;
   if (res.user?.displayName) {
     displayName = res.user.displayName;
@@ -53,11 +28,48 @@ export function extractAppleCredentials(res: any): ExtractedAppleCredentials {
     displayName = res.displayName;
   }
 
+  // 2. Extract idToken from credential or root level
+  const idToken =
+    res.credential?.idToken ||
+    res.idToken ||
+    res.credential?.token ||
+    res.token ||
+    (typeof res.credential === 'string' ? res.credential : undefined);
+
+  if (!idToken || typeof idToken !== 'string' || idToken.trim().length === 0) {
+    // If res contains an already authenticated user object (e.g. from Android native OAuth or web redirect)
+    if (res.user && typeof res.user === 'object' && (res.user.uid || res.user.email)) {
+      return {
+        idToken: undefined,
+        rawNonce: undefined,
+        authorizationCode: undefined,
+        displayName: typeof displayName === 'string' && displayName.trim().length > 0 ? displayName.trim() : undefined,
+        user: res.user,
+      };
+    }
+    throw new Error('Unable to obtain identity token from Apple. Please try again.');
+  }
+
+  // 3. Extract rawNonce from credential or root level
+  const rawNonce =
+    res.credential?.nonce ||
+    res.nonce ||
+    res.credential?.rawNonce ||
+    res.rawNonce ||
+    undefined;
+
+  // 4. Extract authorizationCode if available
+  const authorizationCode =
+    res.credential?.authorizationCode ||
+    res.authorizationCode ||
+    undefined;
+
   return {
     idToken: idToken.trim(),
     rawNonce: typeof rawNonce === 'string' ? rawNonce.trim() : undefined,
     authorizationCode: typeof authorizationCode === 'string' ? authorizationCode.trim() : undefined,
     displayName: typeof displayName === 'string' && displayName.trim().length > 0 ? displayName.trim() : undefined,
+    user: res.user || undefined,
   };
 }
 

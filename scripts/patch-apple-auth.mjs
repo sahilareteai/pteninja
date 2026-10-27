@@ -107,7 +107,7 @@ if (googleFile) {
         }
         let config = GIDConfiguration(clientID: clientId, serverClientID: serverClientId)
         GIDSignIn.sharedInstance.configuration = config
-        guard let controller = self.pluginImplementation.getPlugin().viewController else {
+        guard let controller = self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
             if isLink == true {
                 self.pluginImplementation.handleFailedLink(message: "Unable to present Google Sign-In view controller.", error: nil)
             } else {
@@ -155,10 +155,11 @@ if (googleFile) {
   if (googlePattern.test(gContent)) {
     gContent = gContent.replace(googlePattern, patchedGoogleFlow);
   }
-  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
+  gContent = gContent.replaceAll('self.pluginImplementation.getPlugin().viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
   gContent = gContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
   fs.writeFileSync(googleFile, gContent, 'utf8');
-  console.log('✅ Successfully patched GoogleAuthProviderHandler.swift to eliminate silent hangs and use direct viewController.');
+  console.log('✅ Successfully patched GoogleAuthProviderHandler.swift to eliminate silent hangs and use rootViewController.');
 }
 
 // 3. Patch @capacitor-firebase/authentication Package.swift for Swift 5.9 / Xcode 16.x compatibility
@@ -692,18 +693,20 @@ if (fs.existsSync(nativeAdExecFile)) {
 const gameCenterFile = findPluginFile('ios/Plugin/handlers/GameCenterAuthProviderHandler.swift');
 if (gameCenterFile) {
   let gcContent = fs.readFileSync(gameCenterFile, 'utf8');
-  gcContent = gcContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  gcContent = gcContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
+  gcContent = gcContent.replaceAll('self.pluginImplementation.getPlugin().viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
   fs.writeFileSync(gameCenterFile, gcContent, 'utf8');
-  console.log('✅ Successfully patched GameCenterAuthProviderHandler.swift direct viewController.');
+  console.log('✅ Successfully patched GameCenterAuthProviderHandler.swift rootViewController.');
 }
 
 const facebookFile = findPluginFile('ios/Plugin/handlers/FacebookAuthProviderHandler.swift');
 if (facebookFile) {
   let fbContent = fs.readFileSync(facebookFile, 'utf8');
-  fbContent = fbContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', 'self.pluginImplementation.getPlugin().viewController');
+  fbContent = fbContent.replaceAll('self.pluginImplementation.getPlugin().bridge?.viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
+  fbContent = fbContent.replaceAll('self.pluginImplementation.getPlugin().viewController', '(self.pluginImplementation.getPlugin().webView?.window?.rootViewController ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController)');
   fbContent = fbContent.replaceAll('call.getArray("scopes", String.self) ?? []', '(call.options["scopes"] as? [String]) ?? []');
   fs.writeFileSync(facebookFile, fbContent, 'utf8');
-  console.log('✅ Successfully patched FacebookAuthProviderHandler.swift direct viewController and options.');
+  console.log('✅ Successfully patched FacebookAuthProviderHandler.swift rootViewController and options.');
 }
 
 const oauthFile = findPluginFile('ios/Plugin/handlers/OAuthProviderHandler.swift');
