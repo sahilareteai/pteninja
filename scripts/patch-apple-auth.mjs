@@ -243,3 +243,30 @@ if (fs.existsSync(statusBarColorFile)) {
   }
 }
 
+// 5. Patch @capacitor/splash-screen SplashScreenPlugin.swift to guarantee color(fromHex: String) is defined
+const splashFile = path.resolve(__dirname, '../node_modules/@capacitor/splash-screen/ios/Sources/SplashScreenPlugin/SplashScreenPlugin.swift');
+if (fs.existsSync(splashFile)) {
+  let content = fs.readFileSync(splashFile, 'utf8');
+  if (!content.includes('static func color(fromHex: String)')) {
+    const splashColorExtension = `
+extension CapacitorExtensionTypeWrapper where T: UIColor {
+    static func color(fromHex: String) -> UIColor? {
+        let hexString = fromHex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        var argb: UInt64 = 0
+        guard Scanner(string: hexString).scanHexInt64(&argb) else { return nil }
+        if hexString.count == 6 {
+            return UIColor(red: CGFloat((argb & 0xFF0000) >> 16) / 255.0, green: CGFloat((argb & 0x00FF00) >> 8) / 255.0, blue: CGFloat(argb & 0x0000FF) / 255.0, alpha: 1.0)
+        } else if hexString.count == 8 {
+            return UIColor(red: CGFloat((argb & 0xFF00_0000) >> 24) / 255.0, green: CGFloat((argb & 0x00FF0000) >> 16) / 255.0, blue: CGFloat((argb & 0x0000FF00) >> 8) / 255.0, alpha: CGFloat(argb & 0x000000FF) / 255.0)
+        }
+        return nil
+    }
+}
+`;
+    content = content + splashColorExtension;
+    fs.writeFileSync(splashFile, content, 'utf8');
+    console.log('✅ Successfully patched @capacitor/splash-screen with color(fromHex: String) extension.');
+  }
+}
+
+
