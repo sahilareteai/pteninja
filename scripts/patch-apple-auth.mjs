@@ -633,26 +633,48 @@ extension CAPPluginCall {
   console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject and CAPPluginCall extension.');
 }
 
-// 7. Patch @capacitor-community/admob to inject CAPPluginCall.reject extension
+// 7. Patch @capacitor-community/admob to inject CAPPluginCall convenience methods
 const admobPluginFile = path.resolve(__dirname, '../node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/AdMobPlugin.swift');
 if (fs.existsSync(admobPluginFile)) {
   let admobContent = fs.readFileSync(admobPluginFile, 'utf8');
-  if (!admobContent.includes('extension CAPPluginCall')) {
-    admobContent += `
+  const admobCallExtension = `
 extension CAPPluginCall {
-    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: PluginCallResultData? = nil) {
+    public func getString(_ key: String, _ defaultValue: String? = nil) -> String? {
+        return (options[key] as? String) ?? defaultValue
+    }
+    public func getBool(_ key: String, _ defaultValue: Bool? = nil) -> Bool? {
+        let val = (options[key] as? NSNumber)?.boolValue ?? (options[key] as? Bool)
+        return val ?? defaultValue
+    }
+    public func getInt(_ key: String, _ defaultValue: Int? = nil) -> Int? {
+        let val = (options[key] as? NSNumber)?.intValue ?? (options[key] as? Int)
+        return val ?? defaultValue
+    }
+    public func getFloat(_ key: String, _ defaultValue: Float? = nil) -> Float? {
+        let val = (options[key] as? NSNumber)?.floatValue ?? (options[key] as? Float)
+        return val ?? defaultValue
+    }
+    public func getObject(_ key: String) -> [String: Any]? {
+        return options[key] as? [String: Any]
+    }
+    public func getArray(_ key: String) -> [Any]? {
+        return options[key] as? [Any]
+    }
+    public func getArray<T>(_ key: String, _ ofType: T.Type) -> [T]? {
+        return options[key] as? [T]
+    }
+    public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: [String: Any]? = nil) {
         self.resolve(["error": message])
     }
 }
 `;
+  if (!admobContent.includes('extension CAPPluginCall')) {
+    admobContent += admobCallExtension;
   } else {
-    admobContent = admobContent.replace(
-      'errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))',
-      'self.resolve(["error": message])'
-    );
+    admobContent = admobContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, admobCallExtension);
   }
   fs.writeFileSync(admobPluginFile, admobContent, 'utf8');
-  console.log('✅ Successfully patched @capacitor-community/admob with CAPPluginCall.reject extension.');
+  console.log('✅ Successfully patched @capacitor-community/admob with full CAPPluginCall convenience methods.');
 }
 
 
