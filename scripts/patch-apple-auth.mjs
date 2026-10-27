@@ -279,7 +279,11 @@ if (fs.existsSync(splashFile)) {
 
   content = content.replace(
     'if let view = bridge?.viewController?.view {',
-    'if let view = ((bridge as AnyObject).viewController as? UIViewController)?.view ?? webView?.superview {'
+    'if let view = bridge?.webView?.superview ?? webView?.superview ?? webView {'
+  );
+  content = content.replace(
+    'if let view = ((bridge as AnyObject).viewController as? UIViewController)?.view ?? webView?.superview {',
+    'if let view = bridge?.webView?.superview ?? webView?.superview ?? webView {'
   );
 
   content = content.replaceAll(
