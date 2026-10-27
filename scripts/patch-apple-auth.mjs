@@ -619,10 +619,15 @@ if (fs.existsSync(appPluginFile)) {
     appContent += `
 extension CAPPluginCall {
     public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: PluginCallResultData? = nil) {
-        errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))
+        self.resolve(["error": message])
     }
 }
 `;
+  } else {
+    appContent = appContent.replace(
+      'errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))',
+      'self.resolve(["error": message])'
+    );
   }
   fs.writeFileSync(appPluginFile, appContent, 'utf8');
   console.log('✅ Successfully patched @capacitor/app AppPlugin.swift getInfo call.reject and CAPPluginCall extension.');
@@ -636,14 +641,20 @@ if (fs.existsSync(admobPluginFile)) {
     admobContent += `
 extension CAPPluginCall {
     public func reject(_ message: String, _ code: String? = nil, _ error: Error? = nil, _ data: PluginCallResultData? = nil) {
-        errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))
+        self.resolve(["error": message])
     }
 }
 `;
-    fs.writeFileSync(admobPluginFile, admobContent, 'utf8');
-    console.log('✅ Successfully patched @capacitor-community/admob with CAPPluginCall.reject extension.');
+  } else {
+    admobContent = admobContent.replace(
+      'errorHandler(CAPPluginCallError(message: message, code: code, error: error, data: data))',
+      'self.resolve(["error": message])'
+    );
   }
+  fs.writeFileSync(admobPluginFile, admobContent, 'utf8');
+  console.log('✅ Successfully patched @capacitor-community/admob with CAPPluginCall.reject extension.');
 }
+
 
 
 
