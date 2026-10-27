@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, X, Sun, Moon, Star, ArrowRight, Mic, PenTool, Target, ShieldCheck, CheckCircle, Clock, Zap, MessageSquare, Award, PlayCircle, Quote } from 'lucide-react';
+import { Shield, X, Sun, Moon, Star, ArrowRight, ArrowUpRight, Download, Mic, PenTool, Target, ShieldCheck, CheckCircle, Clock, Zap, MessageSquare, Award, PlayCircle, Quote, Smartphone, Sparkles } from 'lucide-react';
 import { Logo } from './Logo';
 import { PrivacyPolicy } from './PrivacyPolicy';
 import { TermsOfService } from './TermsOfService';
@@ -8,6 +8,29 @@ import { POLICIES } from '../data/policies';
 import { ScrollNinja } from './ScrollNinja';
 import { DiwaliBanner } from './DiwaliBanner';
 import { isNativeMobile, isIOS } from '../lib/mobile';
+
+const GOOGLE_PLAY_URL = "https://play.google.com/store/apps/details?id=com.pteninja.android";
+
+const GooglePlayIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none">
+    <path
+      d="M3.609 1.814L13.793 12 3.61 22.186c-.36-.206-.61-.59-.61-1.054V2.868c0-.464.25-.848.61-1.054z"
+      fill="#00E676"
+    />
+    <path
+      d="M17.185 8.608L13.793 12l3.392 3.392 3.824-2.185c1.092-.624 1.092-1.636 0-2.26l-3.824-2.339z"
+      fill="#FFD600"
+    />
+    <path
+      d="M3.609 1.814L13.793 12 17.185 8.608 5.762 2.081c-.742-.424-1.57-.463-2.153-.267z"
+      fill="#00B0FF"
+    />
+    <path
+      d="M13.793 12L3.609 22.186c.583.196 1.411.157 2.153-.267l11.423-6.527L13.793 12z"
+      fill="#FF3D00"
+    />
+  </svg>
+);
 
 export function PolicyModal({ type, onClose }: { type: keyof typeof POLICIES, onClose: () => void }) {
   const policy = POLICIES[type];
@@ -169,7 +192,17 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
         className="relative z-20 flex items-center justify-between px-4 sm:px-8 py-6 max-w-7xl mx-auto transition-all duration-200"
       >
         <Logo showText={true} size={40} className="shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.3)]" />
-        <div className="flex items-center gap-2 sm:gap-6 bg-app-surface/50 backdrop-blur-md px-4 py-2 rounded-full border border-app-border">
+        <div className="flex items-center gap-2 sm:gap-4 bg-app-surface/50 backdrop-blur-md px-3 sm:px-4 py-2 rounded-full border border-app-border">
+          <a
+            href={GOOGLE_PLAY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 hover:bg-black/70 dark:bg-black/50 dark:hover:bg-black/90 border border-emerald-500/30 hover:border-emerald-400 text-xs font-bold text-gray-200 hover:text-white transition-all shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:shadow-[0_0_18px_rgba(16,185,129,0.35)] group"
+            title="Download PTE Ninja on Google Play"
+          >
+            <GooglePlayIcon className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" />
+            <span className="hidden sm:inline text-[11px] font-extrabold text-emerald-400 tracking-tight">Google Play</span>
+          </a>
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2 hover:bg-app-surface rounded-full transition-colors text-app-text-muted hover:text-app-primary"
@@ -198,17 +231,33 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           }}
           className="space-y-8"
         >
-          <motion.div 
-            variants={itemVariant} 
-            whileHover={{ scale: 1.04 }}
-            className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-app-surface/80 border border-app-primary/30 backdrop-blur-xl shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.15)] text-xs font-extrabold tracking-[0.2em] text-app-primary uppercase cursor-default transition-all duration-300"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-app-primary"></span>
-            </span>
-            <span>The Ultimate AI PTE Trainer</span>
+          <motion.div variants={itemVariant} className="flex flex-wrap items-center justify-center gap-3">
+            <div 
+              className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-app-surface/80 border border-app-primary/30 backdrop-blur-xl shadow-[0_0_20px_rgba(var(--app-primary-rgb),0.15)] text-xs font-extrabold tracking-[0.2em] text-app-primary uppercase cursor-default transition-all duration-300"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-app-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-app-primary"></span>
+              </span>
+              <span>The Ultimate AI PTE Trainer</span>
+            </div>
+
+            {/* World-Class Google Play Announcement Pill */}
+            <a
+              href={GOOGLE_PLAY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 hover:from-emerald-500/25 hover:via-teal-500/20 hover:to-emerald-500/25 border border-emerald-500/40 hover:border-emerald-400 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.25)] transition-all duration-300 transform-gpu hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <GooglePlayIcon className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-6 group-hover:scale-110" />
+              <span className="text-xs font-bold text-app-text flex items-center gap-1.5">
+                <span>Available on <strong className="text-emerald-400 font-extrabold">Google Play</strong></span>
+                <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-md border border-emerald-500/40 leading-none">FREE</span>
+                <ArrowUpRight size={13} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </span>
+            </a>
           </motion.div>
+
           <motion.h2 variants={itemVariant} className="text-6xl md:text-8xl font-black text-app-text tracking-tighter leading-[0.9]">
             MASTER THE PTE <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-app-primary to-app-accent">WITH AI PRECISION</span>
@@ -216,20 +265,114 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           <motion.p variants={itemVariant} className="text-xl text-app-text-muted max-w-2xl mx-auto leading-relaxed">
             Stop guessing your score. Get real-time AI feedback on your speaking, writing, reading, and listening. Practice with the most accurate PTE simulation available.
           </motion.p>
-          <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-8">
+          <motion.div variants={itemVariant} className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-5 pt-8">
             <button 
               onClick={() => onLogin('register')}
-              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-4.5 bg-gradient-to-r from-app-primary to-app-accent text-app-bg font-bold text-base sm:text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_40px_rgba(var(--app-primary-rgb),0.6)]"
             >
               Start Training Now
               <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
+            <a 
+              href={GOOGLE_PLAY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-3.5 w-full sm:w-auto px-7 py-4 bg-black/80 hover:bg-black text-white font-bold rounded-2xl border border-white/20 hover:border-emerald-400/80 transition-all shadow-[0_4px_25px_rgba(0,0,0,0.5)] hover:shadow-[0_0_35px_rgba(16,185,129,0.35)] hover:scale-105 active:scale-98"
+            >
+              <GooglePlayIcon className="w-7 h-7 shrink-0 transition-transform group-hover:scale-110" />
+              <div className="text-left leading-tight">
+                <span className="block text-[10px] font-bold uppercase tracking-widest text-emerald-400">Download for Android</span>
+                <span className="block text-base font-black tracking-tight text-white flex items-center gap-1.5">
+                  Google Play
+                  <Download size={15} className="text-emerald-400 group-hover:translate-y-0.5 transition-transform" />
+                </span>
+              </div>
+            </a>
             <button 
               onClick={onGuest}
-              className="w-full sm:w-auto px-10 py-5 bg-app-surface/50 backdrop-blur-md border border-app-primary/30 text-app-primary font-bold text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
+              className="w-full sm:w-auto px-8 py-4.5 bg-app-surface/50 backdrop-blur-md border border-app-primary/30 text-app-primary font-bold text-base sm:text-lg rounded-2xl hover:bg-app-primary/10 transition-all"
             >
               Try Guest Access for Free
             </button>
+          </motion.div>
+
+          {/* Classy Download Mobile App Card */}
+          <motion.div 
+            variants={itemVariant}
+            className="pt-6 max-w-4xl mx-auto w-full text-left"
+          >
+            <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/30 via-app-surface/90 to-teal-950/20 backdrop-blur-2xl p-6 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.4),0_0_30px_rgba(16,185,129,0.12)] hover:border-emerald-400/60 transition-all duration-300 group">
+              {/* Subtle ambient lighting */}
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
+              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                {/* Left side: Icon + Title + Feature Highlights */}
+                <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
+                  <div className="relative shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-black to-emerald-900/40 border border-emerald-500/40 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-0.5">
+                    <Smartphone className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400" />
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+                        <Sparkles size={11} className="text-emerald-400 fill-emerald-400" />
+                        Official Android App
+                      </span>
+                      <span className="text-[11px] font-bold text-app-text-muted flex items-center gap-1">
+                        <Star size={12} className="text-amber-400 fill-amber-400" />
+                        <span className="text-app-text font-black">4.9</span> • 100% Free
+                      </span>
+                    </div>
+
+                    <h3 className="text-xl sm:text-2xl font-black text-app-text tracking-tight">
+                      Take PTE Ninja Everywhere
+                    </h3>
+                    <p className="text-xs sm:text-sm text-app-text-muted leading-relaxed max-w-xl">
+                      Practice speaking with real-time AI mic feedback, complete full scored mock tests, and track your target 79+ score right from your Android device.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-app-text-muted/80">
+                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                        <CheckCircle size={12} /> Instant AI scoring
+                      </span>
+                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                        <CheckCircle size={12} /> Full question bank
+                      </span>
+                      <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
+                        <CheckCircle size={12} /> Auto cloud sync
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right side: World-Class Official Google Play Store Button */}
+                <div className="w-full md:w-auto shrink-0 flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2 pt-2 md:pt-0 border-t border-emerald-500/20 md:border-0">
+                  <a
+                    href={GOOGLE_PLAY_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group/btn flex items-center justify-center gap-3.5 px-6 py-3.5 bg-black hover:bg-neutral-900 border border-white/20 hover:border-emerald-400 rounded-2xl shadow-xl hover:shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <GooglePlayIcon className="w-8 h-8 shrink-0 transition-transform group-hover/btn:scale-110" />
+                    <div className="text-left leading-tight">
+                      <span className="block text-[9px] uppercase tracking-[0.2em] font-extrabold text-gray-400">GET IT ON</span>
+                      <span className="block text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-1.5">
+                        Google Play
+                        <ArrowUpRight size={16} className="text-emerald-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
+                      </span>
+                    </div>
+                  </a>
+                  <span className="text-[10px] text-center md:text-right text-app-text-muted/70 font-semibold">
+                    Compatible with Android 8.0+
+                  </span>
+                </div>
+              </div>
+            </div>
           </motion.div>
         </motion.div>
       </header>
@@ -701,14 +844,29 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
           <p className="text-xl text-app-text-muted mb-10 max-w-2xl mx-auto relative z-10">
             Join thousands of students who achieved their target scores with our AI-powered platform.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative z-10">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 relative z-10">
             <button 
               onClick={() => onLogin('register')}
-              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-12 py-5 bg-app-primary text-app-bg font-bold text-xl rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.4)]"
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-4.5 bg-app-primary text-app-bg font-bold text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(var(--app-primary-rgb),0.4)]"
             >
               Get Started Now
               <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
+            <a 
+              href={GOOGLE_PLAY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-3 w-full sm:w-auto px-7 py-4 bg-black/80 hover:bg-black text-white font-bold rounded-2xl border border-white/20 hover:border-emerald-400/80 transition-all shadow-xl hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:scale-105"
+            >
+              <GooglePlayIcon className="w-6 h-6 shrink-0 transition-transform group-hover:scale-110" />
+              <div className="text-left leading-tight">
+                <span className="block text-[9px] font-bold uppercase tracking-widest text-emerald-400">Android App</span>
+                <span className="block text-base font-black tracking-tight text-white flex items-center gap-1">
+                  Google Play
+                  <Download size={14} className="text-emerald-400 group-hover:translate-y-0.5 transition-transform" />
+                </span>
+              </div>
+            </a>
           </div>
         </motion.div>
       </section>
@@ -722,6 +880,18 @@ export function LandingPage({ onLogin, onGuest, authError, onClearError, isDarkM
               <p className="text-sm text-app-text-muted/60 leading-relaxed">
                 The ultimate AI-powered PTE training platform. Master your future with precision scoring and real-time feedback.
               </p>
+              <a
+                href={GOOGLE_PLAY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-3 px-4 py-2.5 rounded-xl bg-black/50 hover:bg-black border border-white/15 hover:border-emerald-400/50 transition-all shadow-md group"
+              >
+                <GooglePlayIcon className="w-5 h-5 shrink-0 transition-transform group-hover:scale-110" />
+                <div className="text-left leading-tight">
+                  <span className="block text-[9px] uppercase tracking-wider text-emerald-400 font-bold">Get it on</span>
+                  <span className="block text-xs font-black text-white">Google Play</span>
+                </div>
+              </a>
             </div>
             
             <div className="space-y-6">
