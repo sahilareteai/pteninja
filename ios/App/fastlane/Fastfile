@@ -47,12 +47,20 @@ platform :ios do
     # Automatically ensure an available distribution certificate slot
     begin
       certs = Spaceship::ConnectAPI::Certificate.all
-      dist_certs = certs.select { |c| c.certificate_type.to_s.upcase == "DISTRIBUTION" && c.id != "HHFVY63QS6" }
-      if dist_certs && dist_certs.count >= 2
-        sorted = dist_certs.sort_by { |c| c.expiration_date || "" }
+      all_dist_certs = certs.select { |c| c.certificate_type.to_s.upcase.include?("DISTRIBUTION") }
+      UI.message("Current distribution certificates found (#{all_dist_certs.count}): #{all_dist_certs.map { |c| "#{c.id} (#{c.certificate_type})" }.join(', ')}")
+
+      ephemeral_certs = all_dist_certs.reject { |c| c.id == "HHFVY63QS6" }
+
+      # Apple Developer accounts allow a maximum of 2 Distribution certificates.
+      # If 2 or more exist, revoke ephemeral CI certificates (protecting HHFVY63QS6) to free a slot for get_certificates
+      while all_dist_certs.count >= 2 && !ephemeral_certs.empty?
+        sorted = ephemeral_certs.sort_by { |c| c.expiration_date || "" }
         oldest = sorted.first
-        UI.message("Freeing certificate slot: revoking oldest distribution cert #{oldest.id} (expires #{oldest.expiration_date})")
+        UI.message("Freeing certificate slot: revoking ephemeral distribution cert #{oldest.id} (#{oldest.certificate_type}, expires #{oldest.expiration_date})")
         oldest.delete!
+        ephemeral_certs.delete(oldest)
+        all_dist_certs.delete(oldest)
       end
     rescue => e
       UI.message("Notice during certificate slot check: #{e.message}")
