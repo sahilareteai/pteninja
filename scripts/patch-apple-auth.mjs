@@ -150,13 +150,12 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         DispatchQueue.main.async {
             self.activeAuthController = nil
-            guard let call = self.savedCall ?? self.pluginImplementation.savedCall else {
+            guard let call = self.savedCall else {
                 CAPLog.print("[AppleAuth] No saved call to resolve!")
                 return
             }
             call.keepAlive = false
             self.savedCall = nil
-            self.pluginImplementation.savedCall = nil
 
             guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
                 call.resolve(["error": "Invalid credential type received from Apple", "code": "INVALID_CREDENTIAL"])
@@ -217,12 +216,11 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
             let codeStr = String(nsError.code)
             let message = error.localizedDescription
             CAPLog.print("[AppleAuth] Authorization failed with code: ", codeStr, ", error: ", message)
-            guard let call = self.savedCall ?? self.pluginImplementation.savedCall else {
+            guard let call = self.savedCall else {
                 return
             }
             call.keepAlive = false
             self.savedCall = nil
-            self.pluginImplementation.savedCall = nil
             call.resolve(["error": message, "code": codeStr])
         }
     }
