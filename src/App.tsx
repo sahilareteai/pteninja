@@ -2557,8 +2557,10 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           if (!isCancelled && appleProds && appleProds.length > 0) {
             const priceMap: Record<string, { formattedPrice: string; price?: number; introductoryPrice?: string; productId?: string }> = {};
             appleProds.forEach(p => {
+              const pId = p.productId.toLowerCase();
               for (const [planId, cfg] of Object.entries(APPLE_SUBSCRIPTION_MAP)) {
-                if (cfg.productId.toLowerCase() === p.productId.toLowerCase() && p.formattedPrice) {
+                const isMatch = cfg.productId.toLowerCase() === pId || cfg.candidateIds.some(cid => cid.toLowerCase() === pId);
+                if (isMatch && p.formattedPrice) {
                   priceMap[planId] = {
                     productId: p.productId,
                     formattedPrice: p.formattedPrice,
@@ -2845,7 +2847,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
       // On native iOS mobile app, trigger Apple StoreKit 2 In-App Purchase directly
       if (isNativeMobile() && isIOS()) {
         try {
-          const purchaseResult = await purchaseAppleSubscription(plan.id);
+          const verifiedProductId = nativeStorePrices[plan.id]?.productId;
+          const purchaseResult = await purchaseAppleSubscription(plan.id, verifiedProductId);
 
           if (purchaseResult.canceled) {
             setIsProcessing(false);
@@ -2876,7 +2879,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           }
         } catch (appleErr: any) {
           console.error("Apple StoreKit purchase error:", appleErr);
-          toast.error(appleErr?.message || "Apple purchase was not completed. Please try again.");
+          const rawMsg = appleErr?.message || "";
+          let userMsg = "Apple purchase was not completed. Please try again.";
+          if (rawMsg.includes("Product not found")) {
+            userMsg = "In-App Purchase product not found in App Store. Please ensure the subscription product ID is activated in App Store Connect.";
+          }
+          toast.error(userMsg, { duration: 6000 });
         } finally {
           setIsProcessing(false);
           if (isNativeMobile()) setSelectedPlan(null);

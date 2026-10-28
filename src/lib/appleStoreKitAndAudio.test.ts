@@ -18,11 +18,17 @@ describe('Apple StoreKit 2 & Audio Playback Unit Tests', () => {
   });
 
   describe('Apple StoreKit Plugin Bridge & Pricing Plans', () => {
-    it('defines valid App Store product IDs for all standard plans', () => {
+    it('defines valid App Store product IDs and candidate variations for all standard plans', () => {
       expect(APPLE_SUBSCRIPTION_MAP.weekly.productId).toBe('pte_ninja_weekly');
+      expect(APPLE_SUBSCRIPTION_MAP.weekly.candidateIds).toContain('pte_ninja_weekly');
+      expect(APPLE_SUBSCRIPTION_MAP.weekly.candidateIds).toContain('com.pteninja.app.weekly');
       expect(APPLE_SUBSCRIPTION_MAP.monthly.productId).toBe('pte_ninja_monthly');
+      expect(APPLE_SUBSCRIPTION_MAP.monthly.candidateIds).toContain('pte_ninja_monthly');
+      expect(APPLE_SUBSCRIPTION_MAP.monthly.candidateIds).toContain('com.pteninja.app.monthly');
       expect(APPLE_SUBSCRIPTION_MAP.quarterly.productId).toBe('pte_ninja_quarterly');
+      expect(APPLE_SUBSCRIPTION_MAP.quarterly.candidateIds).toContain('pte_ninja_quarterly');
       expect(APPLE_SUBSCRIPTION_MAP.annual.productId).toBe('pte_ninja_annual');
+      expect(APPLE_SUBSCRIPTION_MAP.annual.candidateIds).toContain('pte_ninja_annual');
     });
 
     it('falls back to window.Capacitor.Plugins.AppleStoreKit if directly exported on window', () => {

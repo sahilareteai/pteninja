@@ -44,46 +44,92 @@ export function getStoreKit(): AppleStoreKitPluginInterface {
   return NativeAppleStoreKit;
 }
 
+export interface ApplePlanConfig {
+  productId: string;
+  candidateIds: string[];
+}
+
 /**
  * Mapping between internal plan ID and Apple App Store subscription product IDs.
- * These match the Auto-Renewable Subscriptions configured in App Store Connect.
+ * Includes all standard bundle-prefixed and suffix variations for bulletproof matching.
  */
-export const APPLE_SUBSCRIPTION_MAP: Record<string, { productId: string }> = {
+export const APPLE_SUBSCRIPTION_MAP: Record<string, ApplePlanConfig> = {
   weekly: {
     productId: 'pte_ninja_weekly',
+    candidateIds: [
+      'pte_ninja_weekly',
+      'com.pteninja.app.weekly',
+      'com.pteninja.app.pte_ninja_weekly',
+      'com.pteninja.weekly',
+      'pteninja_weekly',
+      'weekly',
+    ],
   },
   monthly: {
     productId: 'pte_ninja_monthly',
+    candidateIds: [
+      'pte_ninja_monthly',
+      'com.pteninja.app.monthly',
+      'com.pteninja.app.pte_ninja_monthly',
+      'com.pteninja.monthly',
+      'pteninja_monthly',
+      'monthly',
+    ],
   },
   quarterly: {
     productId: 'pte_ninja_quarterly',
+    candidateIds: [
+      'pte_ninja_quarterly',
+      'com.pteninja.app.quarterly',
+      'com.pteninja.app.pte_ninja_quarterly',
+      'com.pteninja.quarterly',
+      'pteninja_quarterly',
+      'quarterly',
+    ],
   },
   annual: {
     productId: 'pte_ninja_annual',
+    candidateIds: [
+      'pte_ninja_annual',
+      'com.pteninja.app.annual',
+      'com.pteninja.app.pte_ninja_annual',
+      'com.pteninja.annual',
+      'pteninja_annual',
+      'annual',
+    ],
   },
 };
 
 /**
  * Initiates native Apple In-App Purchase (StoreKit 2) for the specified plan ID.
+ * If a verified product ID was resolved from Apple StoreKit during query, it is used directly.
  */
-export async function purchaseAppleSubscription(planId: string): Promise<ApplePurchaseResult> {
+export async function purchaseAppleSubscription(
+  planId: string,
+  verifiedProductId?: string
+): Promise<ApplePurchaseResult> {
   if (!isNativeMobile() || !isIOS()) {
     throw new Error('Apple In-App Purchase is only available on native iOS devices.');
   }
 
   const normalizedPlanId = planId.toLowerCase().trim();
   const config = APPLE_SUBSCRIPTION_MAP[normalizedPlanId];
-  if (!config) {
+  if (!config && !verifiedProductId) {
     throw new Error(`No Apple App Store product mapped for plan: ${planId}`);
   }
 
+  const targetProductId = verifiedProductId || config?.productId || planId;
+  const candidateIds = config?.candidateIds || [targetProductId];
+
   return await getStoreKit().purchase({
-    productId: config.productId,
-  });
+    productId: targetProductId,
+    candidateIds,
+  } as any);
 }
 
 /**
  * Queries localized product pricing from Apple App Store via StoreKit 2.
+ * Queries all plausible candidate product IDs across all configured tiers.
  */
 export async function queryAppleProducts(): Promise<AppleProduct[]> {
   if (!isNativeMobile() || !isIOS()) {
@@ -91,8 +137,12 @@ export async function queryAppleProducts(): Promise<AppleProduct[]> {
   }
 
   try {
-    const productIds = Object.values(APPLE_SUBSCRIPTION_MAP).map(item => item.productId);
-    const result = await getStoreKit().queryProductDetails({ productIds });
+    const productIds: string[] = [];
+    Object.values(APPLE_SUBSCRIPTION_MAP).forEach(item => {
+      productIds.push(...item.candidateIds);
+    });
+    const uniqueIds = Array.from(new Set(productIds));
+    const result = await getStoreKit().queryProductDetails({ productIds: uniqueIds });
     return result.products || [];
   } catch (err) {
     console.warn('Failed to query Apple App Store products:', err);

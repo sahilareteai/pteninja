@@ -1,0 +1,136 @@
+{
+  "identifier" : "E2B7A091",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21489123",
+      "localizations" : [
+        {
+          "description" : "PTE Ninja VIP Practice & Mock Tests",
+          "displayName" : "PTE Ninja VIP Subscriptions",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "PTE Ninja VIP Subscriptions",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "673891001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "7-day full access to all PTE practice question banks, AI scoring, and mock tests.",
+              "displayName" : "Weekly VIP Subscription",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "pte_ninja_weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Weekly VIP Access",
+          "subscriptionGroupID" : "21489123",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "673891002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "30-day unlimited access to all PTE question banks, AI scoring, and mock tests.",
+              "displayName" : "Monthly VIP Subscription",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "pte_ninja_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Monthly VIP Access",
+          "subscriptionGroupID" : "21489123",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "89.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "673891003",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "90-day comprehensive access with full mock test evaluations.",
+              "displayName" : "Quarterly VIP Subscription",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "pte_ninja_quarterly",
+          "recurringSubscriptionPeriod" : "P3M",
+          "referenceName" : "Quarterly VIP Access",
+          "subscriptionGroupID" : "21489123",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "199.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "673891004",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "365-day complete access to all AI scoring, questions, and masterclasses.",
+              "displayName" : "Annual VIP Subscription",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "pte_ninja_annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Annual VIP Access",
+          "subscriptionGroupID" : "21489123",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

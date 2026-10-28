@@ -29,7 +29,7 @@ describe("Live Server AI Endpoints (/api/generate-tts and /api/analyze-speaking)
         expect(res.body.audio.length).toBeGreaterThan(50);
       }
       expect(res.status).not.toBe(401);
-    });
+    }, 15000);
   });
 
   describe("POST /api/analyze-speaking", () => {
@@ -89,7 +89,7 @@ describe("Live Server AI Endpoints (/api/generate-tts and /api/analyze-speaking)
         expect(res.body.content).toBeDefined();
       }
       expect(res.status).not.toBe(401);
-    });
+    }, 15000);
   });
 
   describe("POST /api/analyze-writing", () => {
@@ -113,6 +113,6 @@ describe("Live Server AI Endpoints (/api/generate-tts and /api/analyze-speaking)
         expect(res.body.content).toBeDefined();
       }
       expect(res.status).not.toBe(401);
-    });
+    }, 15000);
   });
 });

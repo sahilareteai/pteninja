@@ -58,12 +58,35 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
         Task {
             do {
-                let products = try await Product.products(for: [productId])
-                guard let product = products.first else {
-                    call.reject("Product not found in App Store for ID: \(productId)")
+                // Generate all candidate product IDs (bundle prefixed, cadence suffix, and explicit candidateIds)
+                var candidateSet: Set<String> = [productId]
+                let clean = productId.replacingOccurrences(of: "pte_ninja_", with: "")
+                candidateSet.insert("com.pteninja.app.\(productId)")
+                candidateSet.insert("com.pteninja.app.\(clean)")
+                candidateSet.insert("com.pteninja.\(clean)")
+                candidateSet.insert("com.pteninja.\(productId)")
+                candidateSet.insert("pteninja_\(clean)")
+                candidateSet.insert("pte_\(clean)")
+                candidateSet.insert(clean)
+
+                if let extraCandidates = call.getArray("candidateIds") as? [String] {
+                    for extra in extraCandidates {
+                        let trimmed = extra.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            candidateSet.insert(trimmed)
+                        }
+                    }
+                }
+
+                CAPLog.print("AppleStoreKit: Querying StoreKit 2 for candidates: \(candidateSet)")
+                let products = try await Product.products(for: candidateSet)
+                guard let product = products.first(where: { $0.id == productId }) ?? products.first else {
+                    let sortedCandidates = candidateSet.sorted().joined(separator: ", ")
+                    call.reject("Product not found in App Store for ID: \(productId). Please verify the in-app purchase product ID and Paid Applications Agreement in App Store Connect. (Checked IDs: \(sortedCandidates))")
                     return
                 }
 
+                CAPLog.print("AppleStoreKit: Found product \(product.id) (\(product.displayName)). Proceeding to purchase...")
                 let result = try await product.purchase()
 
                 switch result {
@@ -109,7 +132,20 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
         Task {
             do {
-                let products = try await Product.products(for: Set(productIds))
+                var candidateSet: Set<String> = Set(productIds)
+                for id in productIds {
+                    let clean = id.replacingOccurrences(of: "pte_ninja_", with: "")
+                    candidateSet.insert("com.pteninja.app.\(id)")
+                    candidateSet.insert("com.pteninja.app.\(clean)")
+                    candidateSet.insert("com.pteninja.\(clean)")
+                    candidateSet.insert("com.pteninja.\(id)")
+                    candidateSet.insert("pteninja_\(clean)")
+                    candidateSet.insert("pte_\(clean)")
+                    candidateSet.insert(clean)
+                }
+
+                CAPLog.print("AppleStoreKit: Querying details for candidates: \(candidateSet)")
+                let products = try await Product.products(for: candidateSet)
                 var result: [[String: Any]] = []
 
                 for product in products {
