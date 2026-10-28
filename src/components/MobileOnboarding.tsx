@@ -127,9 +127,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);
-      setTimeout(() => {
-        isSubmittingRef.current = false;
-      }, 1000);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -143,9 +141,7 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);
-      setTimeout(() => {
-        isSubmittingRef.current = false;
-      }, 1000);
+      isSubmittingRef.current = false;
     }
   };
 

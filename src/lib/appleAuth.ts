@@ -85,6 +85,8 @@ export function isAppleAuthCancellation(error: any): boolean {
 
   return (
     code === '1001' ||
+    code === '-5' ||
+    code === 'auth_cancelled' ||
     code === 'auth/cancelled-popup-request' ||
     code === 'auth/popup-closed-by-user' ||
     message.includes('1001') ||
@@ -93,7 +95,8 @@ export function isAppleAuthCancellation(error: any): boolean {
     message.includes('cancelled') ||
     message.includes('popup-closed-by-user') ||
     message.includes('user cancelled') ||
-    message.includes('user canceled')
+    message.includes('user canceled') ||
+    message.includes('authorization error 1001')
   );
 }
 
