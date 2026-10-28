@@ -876,24 +876,6 @@ if (fs.existsSync(firebaseAuthPluginFile)) {
     'let port = call.getInt("port") ?? 9099',
     'let port = (call.options["port"] as? Int) ?? 9099'
   );
-  if (!fapContent.includes('handleOpenUrlNotification')) {
-    fapContent = fapContent.replace(
-      'self.implementation = FirebaseAuthentication(plugin: self, config: firebaseAuthenticationConfig())',
-      'self.implementation = FirebaseAuthentication(plugin: self, config: firebaseAuthenticationConfig())\n        NotificationCenter.default.addObserver(self, selector: #selector(handleOpenUrlNotification(_:)), name: Notification.Name(rawValue: "capacitorOpenURL"), object: nil)'
-    );
-    fapContent = fapContent.replace(
-      'private func firebaseAuthenticationConfig()',
-      `@objc private func handleOpenUrlNotification(_ notification: Notification) {
-        guard let object = notification.object as? [String: Any],
-              let url = object["url"] as? URL else { return }
-        #if RGCFA_INCLUDE_GOOGLE
-        _ = GIDSignIn.sharedInstance.handle(url)
-        #endif
-    }
-
-    private func firebaseAuthenticationConfig()`
-    );
-  }
   fapContent = fapContent.replace(/\nextension CAPPluginCall \{[\s\S]*?\n\}\n?/, '\n');
   const fbCallExtension = `
 extension CAPPluginCall {
@@ -906,7 +888,7 @@ extension CAPPluginCall {
     fapContent += fbCallExtension;
   }
   fs.writeFileSync(firebaseAuthPluginFile, fapContent, 'utf8');
-  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with URL handling, direct JSON config, safe options parsing, and public reject extension.');
+  console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and public reject extension.');
 }
 
 

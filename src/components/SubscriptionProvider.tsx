@@ -500,13 +500,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         let res: any;
         try {
           res = await Promise.race([
-            FirebaseAuthentication.signInWithGoogle(),
+            FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true } as any),
             googleTimeoutPromise
           ]);
         } catch (cmErr: any) {
           console.warn('[GoogleAuth] Primary attempt failed, trying fallback:', cmErr);
           res = await Promise.race([
-            FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false }),
+            FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false, skipNativeAuth: true } as any),
             googleTimeoutPromise
           ]);
         }
