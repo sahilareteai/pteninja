@@ -1,20 +1,27 @@
 import { auth } from '../firebase';
 import { API_BASE_URL, resolveApiUrl, isNativeMobile, isIOS } from '../lib/mobile';
 
-/** Returns the current user's Firebase ID token, ensuring an authentic session exists. */
+/** Returns the current user's Firebase ID token, ensuring an authentic session exists without hanging. */
 export async function getIdToken(forceRefresh = false): Promise<string | null> {
   try {
     if (!auth.currentUser) {
       try {
         const { signInAnonymously } = await import('firebase/auth');
-        await signInAnonymously(auth);
+        await Promise.race([
+          signInAnonymously(auth),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Auth bootstrap timeout')), 2500))
+        ]);
       } catch (anonErr) {
         console.warn('[geminiService] Anonymous session bootstrap deferred:', anonErr);
       }
     }
-    return (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
+    if (!auth.currentUser) return null;
+    return await Promise.race([
+      auth.currentUser.getIdToken(forceRefresh),
+      new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Get token timeout')), 2500))
+    ]);
   } catch (err) {
-    console.warn('[geminiService] Could not retrieve auth token:', err);
+    console.warn('[geminiService] Could not retrieve auth token in time:', err);
     return null;
   }
 }
@@ -43,7 +50,25 @@ async function proxyPost<T>(path: string, body: Record<string, unknown>, retryCo
     targetUrl = String(resolveApiUrl(path));
   }
 
-  const res = await fetch(targetUrl, { method: 'POST', headers, body: JSON.stringify(body) });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 22000); // 22s hard network timeout
+
+  let res: Response;
+  try {
+    res = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } catch (netErr: any) {
+    if (netErr.name === 'AbortError') {
+      throw new Error("Request timed out. Please check your internet connection and try again.");
+    }
+    throw netErr;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     // If token expired or session just linked, refresh token and retry once

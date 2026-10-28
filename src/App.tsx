@@ -5385,10 +5385,16 @@ function MockTestSession({
 
       try {
         if (task.section === 'speaking') {
-          const result = await analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]);
+          const result = await Promise.race([
+            analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+          ]);
           return (result as { overall?: number }).overall ?? 70;
         } else if (task.section === 'writing' || task.category === 'Summarize Spoken Text' || task.category === 'Write from Dictation') {
-          const result = await analyzeWriting(response, task.title);
+          const result = await Promise.race([
+            analyzeWriting(response, task.title),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+          ]);
           return result.overall ?? 70;
         } else {
           // Local scoring for objective tasks
@@ -7316,10 +7322,33 @@ const preFetchAudio = (task: PTETask): Promise<void> => {
       // 1. Check localStorage first – free (no API token)
       let base64 = lsGetAudio(task.id);
 
-      // 2. Fall back to Gemini TTS only if not cached
+      // 2. If pre-recorded audio URL exists, fetch it directly
+      if (!base64 && task.audio) {
+        try {
+          const audioRes = await fetch(task.audio);
+          if (audioRes.ok) {
+            const blob = await audioRes.blob();
+            const reader = new FileReader();
+            base64 = await new Promise<string>((resolve) => {
+              reader.onloadend = () => {
+                const b64 = reader.result as string;
+                resolve(b64.split(',')[1]);
+              };
+            });
+            if (base64) lsSetAudio(task.id, base64);
+          }
+        } catch (fetchErr) {
+          console.warn(`[Audio] Pre-fetch pre-recorded audio failed for task ${task.id}:`, fetchErr);
+        }
+      }
+
+      // 3. Fall back to Gemini TTS only if not cached
       if (!base64) {
         const audioContent = task.transcript || task.prompt || "";
-        base64 = await generateTTS(audioContent);
+        base64 = await Promise.race([
+          generateTTS(audioContent),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("TTS generation timeout")), 12000))
+        ]);
         if (base64) lsSetAudio(task.id, base64);
       }
 
@@ -7332,21 +7361,26 @@ const preFetchAudio = (task: PTETask): Promise<void> => {
             globalAudioCache[task.id] = { base64, buffer: audioBuffer };
             console.log(`[Audio] Global Cache: Pre-fetched and decoded task ${task.id}`);
           } catch (decodeErr) {
-            // The stored base64 is corrupt — evict it so future loads don't re-use it.
-            console.warn(`[Audio] Global Cache: Corrupt audio for task ${task.id}, evicting from localStorage`, decodeErr);
-            try { localStorage.removeItem(LS_AUDIO_PREFIX + task.id); } catch { /* ignore */ }
+            console.warn(`[Audio] Global Cache: Pre-fetch decode fallback for task ${task.id}`);
+            // Still keep base64 so HTML Audio can use it
+            globalAudioCache[task.id] = { base64, buffer: null as any };
           }
         }
       }
     } catch (err) {
-      console.error(`[Audio] Global Cache: Pre-fetch failed for task ${task.id}`, err);
+      console.warn(`[Audio] Global Cache: Pre-fetch failed for task ${task.id}`, err);
     } finally {
       delete preFetchInFlight[task.id];
     }
   })();
 
-  preFetchInFlight[task.id] = work;
-  return work;
+  const timeoutPromise = new Promise<void>(resolve => setTimeout(resolve, 8000));
+  const workWithTimeout = Promise.race([work, timeoutPromise]).finally(() => {
+    delete preFetchInFlight[task.id];
+  });
+
+  preFetchInFlight[task.id] = workWithTimeout;
+  return workWithTimeout;
 };
 
 function TaskModal({ 
@@ -7491,6 +7525,7 @@ function TaskModal({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(getAudioContext());
+  const playAudioRef = useRef<(() => void) | null>(null);
 
   // Speculative writing analysis: start a background Gemini call once the user
   // pauses typing for 5 s so that clicking "Submit" shows the result instantly.
@@ -7698,13 +7733,19 @@ function TaskModal({
           setIsAudioPlaying(false);
 
           // --- HIGH-PERFORMANCE AUDIOBUFFER LOGIC ---
-          if (globalAudioCache[task.id]) {
+          if (globalAudioCache[task.id] && globalAudioCache[task.id].buffer) {
             console.log(`[Audio] Using global cache for task ${task.id}`);
             const cached = globalAudioCache[task.id];
             
             const ctx = getAudioContext();
             if (!ctx) throw new Error("AudioContext not available");
-            await safeResumeAudioContext(ctx);
+            const isRunning = await safeResumeAudioContext(ctx);
+            if (!isRunning) {
+              console.warn("[Audio] WebKit autoplay policy requires user tap to resume AudioContext.");
+              setIsPreparingAudio(false);
+              setIsAudioPlaying(false);
+              return;
+            }
             
             const now = ctx.currentTime;
             let startTime = now;
@@ -7746,15 +7787,16 @@ function TaskModal({
           let audio = null;
           
           // If a background prefetch is already in-flight for this task, wait for it
-          // before starting a second concurrent TTS call — the prefetch may populate
-          // the cache and make the on-demand call unnecessary entirely.
+          // before starting a second concurrent TTS call
           if (preFetchInFlight[task.id]) {
             console.log("[Audio] Background prefetch in-flight, awaiting before on-demand generation...");
             setIsPreparingAudio(true);
-            await preFetchInFlight[task.id].catch(() => {});
+            await Promise.race([
+              preFetchInFlight[task.id],
+              new Promise(resolve => setTimeout(resolve, 5000))
+            ]).catch(() => {});
             if (isCancelled) return;
-            // If the prefetch succeeded the cache is now populated — re-enter from top.
-            if (globalAudioCache[task.id]) {
+            if (globalAudioCache[task.id]?.buffer) {
               return playAudio();
             }
           }
@@ -7770,21 +7812,23 @@ function TaskModal({
             console.warn("[Audio] Early AudioContext resume failed:", resumeErr);
           }
           
-          // Safety timeout to prevent stuck loading - increased to 35s to allow for 30s TTS timeout
+          // Safety timeout to prevent stuck loading - max 15s
           safetyTimeout = setTimeout(() => {
             if (!isCancelled) {
               console.warn("[Audio] Safety timeout reached, forcing isPreparingAudio = false");
               setIsPreparingAudio(false);
-              // Only set error if we don't have a fallback or if it's really stuck
-              if (!task.transcript && !task.prompt) {
+              const fallbackText = task.transcript || task.prompt || "";
+              if (fallbackText) {
+                speakFallback(fallbackText);
+              } else {
                 setHasAudioError(true);
               }
             }
-          }, 35000);
+          }, 15000);
 
-          let base64 = null;
+          let base64 = globalAudioCache[task.id]?.base64 || null;
           try {
-            if (task.audio) {
+            if (!base64 && task.audio) {
               try {
                 console.log("[Audio] Attempting to fetch pre-recorded audio:", task.audio);
                 const audioRes = await fetch(task.audio);
@@ -7802,40 +7846,40 @@ function TaskModal({
                 console.log("[Audio] Pre-recorded audio fetched successfully");
               } catch (fetchErr) {
                 console.warn("[Audio] Pre-recorded audio fetch failed (likely CORS), falling back to AI generation:", fetchErr);
-                // Fall through to generateTTS
               }
             }
             
             if (!base64) {
-              const timeoutPromise = new Promise<null>((_, reject) => 
-                setTimeout(() => reject(new Error("Audio preparation timed out after 30s")), 30000)
-              );
-
               console.log("[Audio] Starting on-demand audio generation...");
               const audioContent = task.transcript || task.prompt || "";
-              base64 = await Promise.race([generateTTS(audioContent), timeoutPromise]);
+              base64 = await Promise.race([
+                generateTTS(audioContent),
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Audio preparation timed out")), 14000))
+              ]);
             }
             
             if (base64) {
-              // Decode into AudioBuffer and play via AudioBufferSourceNode (most reliable on mobile)
               try {
                 const ctx = getAudioContext();
                 if (ctx) {
-                  await safeResumeAudioContext(ctx);
+                  const isRunning = await safeResumeAudioContext(ctx);
                   const arrayBuffer = base64ToArrayBuffer(base64);
                   const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
                   if (!isCancelled) {
-                    // Cache it globally for future use
                     globalAudioCache[task.id] = { base64, buffer: audioBuffer };
-                    console.log("[Audio] AudioBuffer decoded and cached, playing via AudioBufferSourceNode");
 
                     if (safetyTimeout) clearTimeout(safetyTimeout);
                     setIsPreparingAudio(false);
 
+                    if (!isRunning) {
+                      console.warn("[Audio] WebKit autoplay restriction: audio ready, waiting for user tap.");
+                      setIsAudioPlaying(false);
+                      return;
+                    }
+
                     const now = ctx.currentTime;
                     let startTime = now;
                     if (needsBeep && !beepPlayedRef.current) {
-                      console.log("[Audio] Scheduling beep and audio...");
                       const osc = ctx.createOscillator();
                       const gain = ctx.createGain();
                       osc.connect(gain);
@@ -7862,11 +7906,11 @@ function TaskModal({
                   return;
                 }
               } catch (decodeErr) {
-                console.error("[Audio] AudioBuffer decoding failed, falling back to HTML Audio", decodeErr);
+                console.warn("[Audio] AudioBuffer decoding fallback to HTML Audio", decodeErr);
               }
             }
           } catch (prepErr: any) {
-            console.warn("[Audio] Audio preparation failed or timed out, seamlessly falling back to native voice synthesis:", prepErr);
+            console.warn("[Audio] Audio preparation failed, falling back to native voice synthesis:", prepErr);
             base64 = null;
           } finally {
             if (safetyTimeout) clearTimeout(safetyTimeout);
@@ -7877,7 +7921,13 @@ function TaskModal({
 
           if (base64) {
             console.log("[Audio] Creating new Audio object from base64 (HTML Audio fallback)");
-            audio = new Audio(`data:audio/wav;base64,${base64}`);
+            try {
+              const arrayBuffer = base64ToArrayBuffer(base64);
+              const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+              audio = new Audio(URL.createObjectURL(blob));
+            } catch {
+              audio = new Audio(`data:audio/wav;base64,${base64}`);
+            }
             audio.load();
           } else {
             console.log("[Audio] No base64 audio, using browser TTS fallback");
@@ -7897,14 +7947,12 @@ function TaskModal({
           if (audio) {
             audioRef.current = audio;
             
-            // Wait for beep to finish before starting audio
             if (needsBeep && !beepPlayedRef.current) {
               await playBeep();
               beepPlayedRef.current = true;
             }
             
             if (isCancelled) return;
-            
             audio.onended = handleAudioEnd;
 
             audio.onerror = (e) => {
@@ -7931,20 +7979,26 @@ function TaskModal({
                 }
               }
             } catch (playErr: any) {
-              // Ignore AbortError which happens when pause() is called before play() promise resolves
               if (!isCancelled && playErr.name !== 'AbortError') {
-                console.error("[Audio] Audio play failed:", playErr);
+                console.warn("[Audio] Audio play failed or blocked by autoplay:", playErr);
                 setIsAudioPlaying(false);
                 setIsPreparingAudio(false);
-                setHasAudioError(true);
+                if (playErr.name !== 'NotAllowedError') {
+                  setHasAudioError(true);
+                }
               }
             }
           } else {
-            console.warn("[Audio] No audio object available, showing error state");
+            console.warn("[Audio] No audio object available, showing fallback");
             if (!isCancelled) {
-              setHasAudioError(true);
               setIsAudioPlaying(false);
               setIsPreparingAudio(false);
+              const fallbackText = task.transcript || task.prompt || "";
+              if (fallbackText) {
+                speakFallback(fallbackText);
+              } else {
+                setHasAudioError(true);
+              }
             }
           }
         } catch (err: any) {
@@ -7957,9 +8011,11 @@ function TaskModal({
         }
       };
 
+      playAudioRef.current = playAudio;
       playAudio();
 
       return () => {
+        playAudioRef.current = null;
         console.log(`[Audio] Cleaning up audio logic for task ${task.id}`);
         isCancelled = true;
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -8197,7 +8253,7 @@ function TaskModal({
                                      task.category === 'Write from Dictation' ||
                                      task.category === 'Respond to a Situation';
               
-              if (task.hasAudio && isListeningPrep && !audioRef.current && !audioFinished) {
+              if (task.hasAudio && isListeningPrep && !audioFinished) {
                 setPhase('audio');
                 return 0;
               }
@@ -8293,16 +8349,27 @@ function TaskModal({
         }
 
         setPhase('analyzing');
-        const base64 = await getAudioBase64();
+        let base64 = '';
+        try {
+          base64 = await Promise.race([
+            getAudioBase64(),
+            new Promise<string>((_, reject) => setTimeout(() => reject(new Error("Audio read timeout")), 3000))
+          ]);
+        } catch (readErr) {
+          console.warn("[Recording] Failed to read audio buffer:", readErr);
+        }
         if (!base64 || base64.length < 100) {
-           throw new Error("No audio detected");
+           throw new Error("No audio detected. Please ensure your microphone is enabled and speak clearly.");
         }
         const recordedMime = mediaRecorder?.mimeType || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm');
         setRecordings(prev => {
           const next = [...prev, { id: crypto.randomUUID(), base64, mimeType: recordedMime, attemptNum: prev.length + 1 }];
           return next.slice(-5); // Keep at most 5 recordings to limit memory usage
         });
-        result = await analyzeSpeaking(base64, task.category, recordedMime, task.correctAnswers?.[0]);
+        result = await Promise.race([
+          analyzeSpeaking(base64, task.category, recordedMime, task.correctAnswers?.[0]),
+          new Promise<any>((_, reject) => setTimeout(() => reject(new Error("AI scoring timed out")), 18000))
+        ]);
       } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
         if (isMockTest) {
           // For objective tasks in mock test, we can just pass the selected options/input
@@ -8477,15 +8544,40 @@ function TaskModal({
             onFinish(finalInput as any);
             return;
           }
+          setPhase('analyzing');
           // Use speculative result if the text hasn't changed since the background
           // call was fired (instant), await the in-flight request if it's still
           // running (partial speedup), or start a fresh call as a last resort.
           const spec = speculativeWritingRef.current;
-          if (spec && spec.text === finalInput) {
-            const speculativeResult = spec.result ?? await spec.promise;
-            result = speculativeResult ?? await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
-          } else {
-            result = await analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title);
+          try {
+            if (spec && spec.text === finalInput) {
+              const speculativeResult = spec.result ?? await Promise.race([
+                spec.promise,
+                new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Speculative evaluation timeout")), 6000))
+              ]).catch(() => null);
+              result = speculativeResult ?? await Promise.race([
+                analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title),
+                new Promise<any>((_, reject) => setTimeout(() => reject(new Error("AI scoring timed out")), 18000))
+              ]);
+            } else {
+              result = await Promise.race([
+                analyzeWriting(finalInput || "Re-ordered paragraphs submitted", task.title),
+                new Promise<any>((_, reject) => setTimeout(() => reject(new Error("AI scoring timed out")), 18000))
+              ]);
+            }
+          } catch (writeErr) {
+            console.warn("[Analysis] Writing analysis timed out or failed:", writeErr);
+            const wordCount = (finalInput || "").trim().split(/\s+/).filter(Boolean).length;
+            const estimatedScore = Math.min(85, Math.max(45, Math.round(wordCount * 1.2)));
+            result = {
+              overall: estimatedScore,
+              grammar: Math.min(80, estimatedScore),
+              vocabulary: Math.min(80, estimatedScore),
+              spelling: 75,
+              content: estimatedScore,
+              tips: ["AI evaluation took longer than expected. Practice score estimated based on response length and structure."],
+              mistakes: []
+            };
           }
         }
       }
@@ -8673,7 +8765,7 @@ function TaskModal({
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-mono font-bold text-app-text">
-                  {phase === 'audio' ? (isPreparingAudio ? "..." : (isAudioPlaying ? "Playing" : "Loading...")) : formatTime(timeLeft)}
+                  {phase === 'audio' ? (isPreparingAudio ? "Preparing..." : (isAudioPlaying ? "Playing" : "Tap Play")) : formatTime(timeLeft)}
                 </div>
                 {phase === 'prep' && (
                   <button 
@@ -8864,7 +8956,7 @@ function TaskModal({
                         {phase === 'prep' ? (
                           task.category === 'Repeat Sentence' ? `Beginning in ${timeLeft} sec` : `Recording starts in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : (timeLeft > 0 ? `Beginning in ${timeLeft} sec` : 'Click Play to Listen')))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
@@ -8872,7 +8964,7 @@ function TaskModal({
                     </div>
                     <div className="flex items-center gap-6 pt-2">
                       {/* Control Button */}
-                      {!isPreparingAudio && !(phase === 'audio' && !isAudioPlaying && !audioFinished) && <button 
+                      {!isPreparingAudio && <button 
                         onClick={() => {
                           if (phase === 'prep') skipPrep();
                           else if (phase === 'recording') {
@@ -8889,7 +8981,9 @@ function TaskModal({
                               handleFinish();
                             }
                           } else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
-                            if (audioRef.current) {
+                            if (playAudioRef.current) {
+                              playAudioRef.current();
+                            } else if (audioRef.current) {
                               audioRef.current.play().catch(e => console.error("Manual play failed", e));
                               setIsAudioPlaying(true);
                             }
@@ -8913,18 +9007,18 @@ function TaskModal({
                           "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           isPreparingAudio && "cursor-wait"
                         )}
-                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : 'Play')}
+                        title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : (phase === 'audio' && !isAudioPlaying) ? 'Play Audio' : 'Playing')}
                       >
                         {isPreparingAudio ? <Loader2 size={28} className="animate-spin text-white" /> : 
                          (phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
                           (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
                           recordingStopped ? <CheckCircle size={28} /> :
-                          (isAudioPlaying ? <Headphones size={28} /> : <Loader2 size={28} className="animate-spin text-white" />))}
+                          (isAudioPlaying ? <Headphones size={28} /> : <Play size={28} fill="currentColor" className="text-white ml-1" />))}
                       </button>}
 
                       <div className="flex-1 overflow-hidden">
-                        {/* Spinner when preparing or audio loading, wave when active, progress bar otherwise */}
-                        {(isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
+                        {/* Spinner when preparing, wave when active, progress bar otherwise */}
+                        {isPreparingAudio ? (
                           <div className="w-full h-12 flex items-center justify-center">
                             <Loader2 size={28} className="text-blue-400 animate-spin" />
                           </div>
@@ -9000,7 +9094,7 @@ function TaskModal({
                         ) : phase === 'prep' ? (
                           `Beginning in ${timeLeft} sec`
                         ) : phase === 'audio' ? (
-                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : `Beginning in ${timeLeft} sec`))
+                          isPreparingAudio ? 'Preparing...' : (isAudioPlaying ? 'Playing...' : (audioFinished ? 'Preparing...' : (timeLeft > 0 ? `Beginning in ${timeLeft} sec` : 'Click Play to Listen')))
                         ) : phase === 'recording' ? (
                           recordingStopped ? 'Recorded' : 'Recording...'
                         ) : 'Ready'}
@@ -9024,7 +9118,7 @@ function TaskModal({
                           <RotateCcw size={16} />
                           <span>Retry Audio</span>
                         </button>
-                      ) : !isPreparingAudio && !(phase === 'audio' && !isAudioPlaying) && (
+                      ) : !isPreparingAudio && (
                         <button 
                           onClick={() => {
                             if (phase === 'prep') {
@@ -9040,6 +9134,21 @@ function TaskModal({
                               } else {
                                 handleFinish();
                               }
+                            } else if (phase === 'audio' && !isAudioPlaying && !audioFinished) {
+                              if (playAudioRef.current) {
+                                playAudioRef.current();
+                              } else if (audioRef.current) {
+                                audioRef.current.play().catch(e => console.error("Manual play failed", e));
+                                setIsAudioPlaying(true);
+                              }
+                            } else if (phase === 'audio' && audioFinished) {
+                              if (task.prepTime && task.prepTime > 0 && task.section === 'speaking') {
+                                setPhase('prep');
+                                setTimeLeft(task.prepTime);
+                              } else {
+                                setPhase('recording');
+                                setTimeLeft(task.recordingTime ?? 40);
+                              }
                             }
                           }}
                           disabled={(phase === 'audio' && isAudioPlaying) || recordingStopped}
@@ -9050,12 +9159,12 @@ function TaskModal({
                             recordingStopped ? "bg-gray-400 text-white cursor-default opacity-60" :
                             "bg-blue-500 text-white hover:scale-105 disabled:opacity-50",
                           )}
-                          title={phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : 'Play'}
+                          title={isPreparingAudio ? 'Preparing...' : (phase === 'prep' ? 'Click to play if you are ready' : recordingStopped ? 'Recording stopped' : phase === 'recording' ? 'Stop' : (phase === 'audio' && !isAudioPlaying) ? 'Play Audio' : 'Playing')}
                         >
                           {phase === 'prep' ? <Play size={28} fill="currentColor" className="ml-1" /> : 
                            (phase === 'recording' && !recordingStopped) ? <div className="w-6 h-6 bg-white rounded-sm" /> :
                            recordingStopped ? <CheckCircle size={28} /> :
-                           (isAudioPlaying ? <Headphones size={28} /> : <Play size={28} className="text-white ml-1" />)}
+                           (isAudioPlaying ? <Headphones size={28} /> : <Play size={28} fill="currentColor" className="text-white ml-1" />)}
                         </button>
                       )}
 
@@ -9065,7 +9174,7 @@ function TaskModal({
                           <p className="text-sm text-gray-500">
                             The audio stream could not be loaded. Tap "Retry Audio" to reload.
                           </p>
-                        ) : (isPreparingAudio || (phase === 'audio' && !isAudioPlaying)) ? (
+                        ) : isPreparingAudio ? (
                           <div className="w-full h-12 flex items-center justify-center">
                             <Loader2 size={28} className="text-blue-400 animate-spin" />
                           </div>

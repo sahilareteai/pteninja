@@ -91,4 +91,28 @@ describe("Live Server AI Endpoints (/api/generate-tts and /api/analyze-speaking)
       expect(res.status).not.toBe(401);
     });
   });
+
+  describe("POST /api/analyze-writing", () => {
+    it("accepts mobile requests and scores writing without 401 Unauthorized", async () => {
+      const res = await request(app)
+        .post("/api/analyze-writing")
+        .set("X-PTE-App-Platform", "mobile")
+        .set("Origin", "capacitor://localhost")
+        .send({
+          text: "The rapid development of artificial intelligence has significantly transformed modern communication and industry.",
+          taskType: "Summarize Written Text"
+        });
+
+      expect([200, 503]).toContain(res.status);
+      if (res.status === 200) {
+        expect(res.body.overall).toBeDefined();
+        expect(typeof res.body.overall).toBe("number");
+        expect(res.body.grammar).toBeDefined();
+        expect(res.body.vocabulary).toBeDefined();
+        expect(res.body.spelling).toBeDefined();
+        expect(res.body.content).toBeDefined();
+      }
+      expect(res.status).not.toBe(401);
+    });
+  });
 });
