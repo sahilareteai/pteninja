@@ -95,8 +95,8 @@ const TRANSIENT_RETRY_BASE_MS = 1000;
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
 
 // Multimodal audio model for Gemini speech analysis fallback.
-// gemini-2.5-flash natively supports direct audio inlineData (AAC, WAV, WebM).
-const AUDIO_MODEL = process.env.GEMINI_AUDIO_MODEL || "gemini-2.5-flash";
+// gemini-3.8-flash natively supports direct audio inlineData (AAC, WAV, WebM) across both Gemini and Vertex AI.
+const AUDIO_MODEL = process.env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash";
 
 // TTS model. gemini-3.8-flash-tts is the active production model supporting native
 // audio output across both the Gemini Developer API and Vertex AI (with role: 'user').
@@ -4390,7 +4390,7 @@ Return a valid JSON object matching EXACTLY this structure:
       try {
         const response = await serverCallGemini({
           model: AUDIO_MODEL,
-          contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
+          contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: cleanMimeType, data: audioData } }] }],
           config: {
             responseMimeType: "application/json",
             responseSchema: {
