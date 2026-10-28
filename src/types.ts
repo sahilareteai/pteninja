@@ -124,6 +124,7 @@ export interface UserData {
   savedMockSession?: MockTestSavedSession | null;
   savedMockSessions?: Record<string, MockTestSavedSession> | null;
   currentSessionId?: string;
+  sessionCreatedAt?: number;
   role?: 'admin' | 'user';
   referralCode?: string;
   referredBy?: string | null;

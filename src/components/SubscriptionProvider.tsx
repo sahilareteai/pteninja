@@ -65,6 +65,27 @@ interface SubscriptionContextType {
   quickGuestAccess: () => Promise<void>;
 }
 
+const establishNewSession = () => {
+  const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const now = Date.now();
+  try {
+    localStorage.setItem('pte_session_id', newSessionId);
+    localStorage.setItem('pte_session_created_at', String(now));
+  } catch (e) {
+    console.warn('[Session] Failed to set localStorage session:', e);
+  }
+  return { sessionId: newSessionId, sessionCreatedAt: now };
+};
+
+const clearLocalSession = () => {
+  try {
+    localStorage.removeItem('pte_session_id');
+    localStorage.removeItem('pte_session_created_at');
+  } catch (e) {
+    console.warn('[Session] Failed to clear local session:', e);
+  }
+};
+
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -193,25 +214,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         const userRef = doc(db, 'users', firebaseUser.uid);
         
-        // Handle session ID
+        // Handle session ID & creation timestamp
         let localSessionId = localStorage.getItem('pte_session_id');
+        let localCreatedAt = parseInt(localStorage.getItem('pte_session_created_at') || '0', 10);
         if (!localSessionId) {
-          localSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-          localStorage.setItem('pte_session_id', localSessionId);
+          const fresh = establishNewSession();
+          localSessionId = fresh.sessionId;
+          localCreatedAt = fresh.sessionCreatedAt;
+        } else if (!localCreatedAt) {
+          localCreatedAt = Date.now();
+          try {
+            localStorage.setItem('pte_session_created_at', String(localCreatedAt));
+          } catch {}
         }
-
-        // Always claim this device's session in Firestore.
-        // This fixes a race condition where login() pre-sets a new session ID in
-        // localStorage but onAuthStateChanged previously skipped the Firestore write
-        // (because a local ID already existed), causing an immediate false mismatch.
-        let sessionClaimed = false;
-        updateDoc(userRef, { currentSessionId: localSessionId })
-          .then(() => { sessionClaimed = true; })
-          .catch(() => {
-            // Doc doesn't exist yet – it will be created in the snapshot handler's
-            // else block. sessionClaimed will be set to true once the snapshot
-            // confirms our session ID is reflected in Firestore.
-          });
 
         // Listen for real-time updates to user data
         unsubDoc = onSnapshot(userRef, (docSnap) => {
@@ -221,19 +236,40 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (docSnap.exists()) {
             const userData = docSnap.data() as UserData;
             
-            // Session check – only enforce after our session is established in
-            // Firestore to prevent false "session expired" errors during sign-in.
-            const currentLocalSessionId = localStorage.getItem('pte_session_id');
-            // Confirm session is claimed once Firestore reflects our session ID.
-            if (userData.currentSessionId === currentLocalSessionId) {
-              sessionClaimed = true;
-            }
-            if (sessionClaimed && userData.currentSessionId && currentLocalSessionId && userData.currentSessionId !== currentLocalSessionId) {
-              // Another device logged in after we established our session
-              auth.signOut();
-              localStorage.removeItem('pte_session_id');
-              setSessionError("You have been signed out because your account is being used on another device.");
-              return;
+            // Multi-device session enforcement
+            // Only enforce for registered accounts (never kick out anonymous guest users)
+            if (!firebaseUser.isAnonymous) {
+              const currentLocalSessionId = localStorage.getItem('pte_session_id');
+              const currentLocalCreatedAt = parseInt(localStorage.getItem('pte_session_created_at') || '0', 10);
+
+              if (userData.currentSessionId && currentLocalSessionId) {
+                if (userData.currentSessionId !== currentLocalSessionId) {
+                  const remoteCreatedAt = userData.sessionCreatedAt || 0;
+                  // Only sign out if another device established a newer session AFTER this device
+                  if (remoteCreatedAt > currentLocalCreatedAt) {
+                    console.warn('[Session] Superseded by newer session on another device. Signing out.');
+                    auth.signOut();
+                    clearLocalSession();
+                    setSessionError("You have been signed out because your account is being used on another device.");
+                    return;
+                  } else {
+                    // This device is newer or writing its session. Re-assert in Firestore so older device knows.
+                    updateDoc(userRef, {
+                      currentSessionId: currentLocalSessionId,
+                      sessionCreatedAt: currentLocalCreatedAt || Date.now()
+                    }).catch(() => {});
+                  }
+                } else if (!userData.sessionCreatedAt && currentLocalCreatedAt) {
+                  // Session IDs match; backfill missing timestamp in legacy Firestore doc
+                  updateDoc(userRef, { sessionCreatedAt: currentLocalCreatedAt }).catch(() => {});
+                }
+              } else if (currentLocalSessionId && !userData.currentSessionId) {
+                // Claim session in Firestore if not yet set
+                updateDoc(userRef, {
+                  currentSessionId: currentLocalSessionId,
+                  sessionCreatedAt: currentLocalCreatedAt || Date.now()
+                }).catch(() => {});
+              }
             }
 
             // Sync emailVerified if it changed
@@ -327,7 +363,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               favoriteWords: [],
               schedule: [],
               goals: [],
-              currentSessionId: localStorage.getItem('pte_session_id') || undefined
+              currentSessionId: localStorage.getItem('pte_session_id') || undefined,
+              sessionCreatedAt: parseInt(localStorage.getItem('pte_session_created_at') || '0', 10) || undefined
             };
 
             // Remove undefined fields before sending to Firestore
@@ -485,8 +522,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setIsAuthenticating(true);
     setAuthError(null);
     
-    const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('pte_session_id', newSessionId);
+    const { sessionId: newSessionId, sessionCreatedAt } = establishNewSession();
 
     try {
       if (isNativeMobile()) {
@@ -532,22 +568,40 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         const credential = GoogleAuthProvider.credential(googleIdToken, res?.credential?.accessToken);
+        let signedInUser: any = null;
         if (auth.currentUser && auth.currentUser.isAnonymous) {
           try {
-            await linkWithCredential(auth.currentUser, credential);
+            const linkRes = await linkWithCredential(auth.currentUser, credential);
+            signedInUser = linkRes.user;
           } catch (linkErr: any) {
             console.log('[GoogleAuth] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
-            await signInWithCredential(auth, credential);
+            const signRes = await signInWithCredential(auth, credential);
+            signedInUser = signRes.user;
           }
         } else {
-          await signInWithCredential(auth, credential);
+          const signRes = await signInWithCredential(auth, credential);
+          signedInUser = signRes.user;
         }
+
+        if (signedInUser) {
+          updateDoc(doc(db, 'users', signedInUser.uid), {
+            currentSessionId: newSessionId,
+            sessionCreatedAt
+          }).catch(() => {});
+        }
+
         setShowAuthModal(false);
         setIsAuthenticating(false);
         return;
       }
 
-      await signInWithPopup(auth, googleProvider);
+      const popRes = await signInWithPopup(auth, googleProvider);
+      if (popRes.user) {
+        updateDoc(doc(db, 'users', popRes.user.uid), {
+          currentSessionId: newSessionId,
+          sessionCreatedAt
+        }).catch(() => {});
+      }
       setShowAuthModal(false);
       setIsAuthenticating(false);
     } catch (error: any) {
@@ -584,8 +638,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setIsAuthenticating(true);
     setAuthError(null);
 
-    const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('pte_session_id', newSessionId);
+    const { sessionId: newSessionId, sessionCreatedAt } = establishNewSession();
 
     try {
       if (isNativeMobile() && isIOS()) {
@@ -683,7 +736,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         if (firebaseUser) {
-          const instantUser = createInstantAppleUser(firebaseUser, newSessionId, appleDisplayName);
+          const instantUser = createInstantAppleUser(firebaseUser, newSessionId, appleDisplayName, sessionCreatedAt);
           setUser(instantUser);
 
           const userRef = doc(db, 'users', firebaseUser.uid);
@@ -731,7 +784,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 emailVerified: true
               },
               newSessionId,
-              androidUser.displayName || undefined
+              androidUser.displayName || undefined,
+              sessionCreatedAt
             );
             setUser(instantUser);
             const userRef = doc(db, 'users', androidUser.uid);
@@ -767,7 +821,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const firebaseUser = userCred?.user || auth.currentUser;
       if (firebaseUser) {
-        const instantUser = createInstantAppleUser(firebaseUser, newSessionId, firebaseUser.displayName || undefined);
+        const instantUser = createInstantAppleUser(firebaseUser, newSessionId, firebaseUser.displayName || undefined, sessionCreatedAt);
         setUser(instantUser);
         const userRef = doc(db, 'users', firebaseUser.uid);
         setDoc(userRef, instantUser, { merge: true }).catch((err) => {
@@ -810,8 +864,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (emailMode === 'signin') {
       if (!authEmail.trim() || !authPassword) return setAuthError("Please enter email and password.");
       setIsAuthenticating(true);
+      const { sessionId: newSessionId, sessionCreatedAt } = establishNewSession();
       try {
-        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const signinRes = await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        if (signinRes.user) {
+          updateDoc(doc(db, 'users', signinRes.user.uid), {
+            currentSessionId: newSessionId,
+            sessionCreatedAt
+          }).catch(() => {});
+        }
         setShowAuthModal(false);
       } catch (err: any) {
         setIsAuthenticating(false);
@@ -828,6 +889,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return setAuthError("Password must be at least 6 characters.");
       }
       setIsAuthenticating(true);
+      const { sessionId: newSessionId, sessionCreatedAt } = establishNewSession();
       try {
         let firebaseUser: FirebaseUser;
 
@@ -886,7 +948,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           taskScores: {},
           favoriteWords: [],
           schedule: [],
-          goals: []
+          goals: [],
+          currentSessionId: newSessionId,
+          sessionCreatedAt
         };
 
         await setDoc(userRef, newUser, { merge: true });
@@ -980,7 +1044,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const logout = async () => {
     try {
-      localStorage.removeItem('pte_session_id');
+      clearLocalSession();
       setUser(null);
       setShowAuthModal(false);
 

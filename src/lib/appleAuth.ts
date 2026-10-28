@@ -108,7 +108,8 @@ export function isAppleAuthCancellation(error: any): boolean {
 export function createInstantAppleUser(
   firebaseUser: { uid: string; email?: string | null; displayName?: string | null; emailVerified?: boolean },
   currentSessionId: string,
-  appleDisplayName?: string
+  appleDisplayName?: string,
+  sessionCreatedAt?: number
 ): UserData {
   const now = new Date();
   const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -137,5 +138,6 @@ export function createInstantAppleUser(
     schedule: [],
     goals: [],
     currentSessionId: currentSessionId || undefined,
+    sessionCreatedAt: sessionCreatedAt || Date.now(),
   };
 }
