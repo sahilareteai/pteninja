@@ -24,6 +24,11 @@ async function proxyPost<T>(path: string, body: Record<string, unknown>, retryCo
   let token = await getIdToken(retryCount > 0);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (isNativeMobile()) {
+    headers['X-PTE-App-Platform'] = 'mobile';
+    if (auth.currentUser?.uid) headers['X-PTE-UID'] = auth.currentUser.uid;
+    if (auth.currentUser?.email) headers['X-PTE-Email'] = auth.currentUser.email;
+  }
 
   // Direct target URL resolution: on native mobile or relative /api/ paths, always resolve to absolute API_BASE_URL
   let targetUrl: string;

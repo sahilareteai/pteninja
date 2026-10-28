@@ -963,6 +963,49 @@ extension CAPPluginCall {
   console.log('✅ Successfully patched FirebaseAuthenticationPlugin.swift with direct JSON config, safe options parsing, and public reject extension.');
 }
 
+const capConfigJsonFile = path.resolve(__dirname, '../ios/App/App/capacitor.config.json');
+if (fs.existsSync(capConfigJsonFile)) {
+  try {
+    const raw = fs.readFileSync(capConfigJsonFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.packageClassList)) {
+      let modified = false;
+      if (!parsed.packageClassList.includes('AppleStoreKitPlugin')) {
+        parsed.packageClassList.push('AppleStoreKitPlugin');
+        modified = true;
+      }
+      if (!parsed.packageClassList.includes('App.AppleStoreKitPlugin')) {
+        parsed.packageClassList.push('App.AppleStoreKitPlugin');
+        modified = true;
+      }
+      if (modified) {
+        fs.writeFileSync(capConfigJsonFile, JSON.stringify(parsed, null, '\t'), 'utf8');
+        console.log('✅ Successfully ensured AppleStoreKitPlugin is in ios capacitor.config.json packageClassList.');
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Could not patch capacitor.config.json:', err.message);
+  }
+}
+
+const mainStoryboardFile = path.resolve(__dirname, '../ios/App/App/Base.lproj/Main.storyboard');
+if (fs.existsSync(mainStoryboardFile)) {
+  try {
+    let sbContent = fs.readFileSync(mainStoryboardFile, 'utf8');
+    if (sbContent.includes('customClass="CAPBridgeViewController"')) {
+      sbContent = sbContent.replace(
+        'customClass="CAPBridgeViewController" customModule="Capacitor"',
+        'customClass="MainViewController" customModule="App" customModuleProvider="target"'
+      );
+      fs.writeFileSync(mainStoryboardFile, sbContent, 'utf8');
+      console.log('✅ Successfully ensured MainViewController is configured in Main.storyboard.');
+    }
+  } catch (err) {
+    console.warn('⚠️ Could not patch Main.storyboard:', err.message);
+  }
+}
+
+
 
 
 

@@ -35,6 +35,16 @@ export interface AppleStoreKitPluginInterface {
 const NativeAppleStoreKit = registerPlugin<AppleStoreKitPluginInterface>('AppleStoreKit');
 
 /**
+ * Accesses the StoreKit 2 native plugin instance, checking direct Capacitor.Plugins export first.
+ */
+export function getStoreKit(): AppleStoreKitPluginInterface {
+  if (typeof window !== 'undefined' && (window as any).Capacitor?.Plugins?.AppleStoreKit) {
+    return (window as any).Capacitor.Plugins.AppleStoreKit;
+  }
+  return NativeAppleStoreKit;
+}
+
+/**
  * Mapping between internal plan ID and Apple App Store subscription product IDs.
  * These match the Auto-Renewable Subscriptions configured in App Store Connect.
  */
@@ -67,7 +77,7 @@ export async function purchaseAppleSubscription(planId: string): Promise<ApplePu
     throw new Error(`No Apple App Store product mapped for plan: ${planId}`);
   }
 
-  return await NativeAppleStoreKit.purchase({
+  return await getStoreKit().purchase({
     productId: config.productId,
   });
 }
@@ -82,7 +92,7 @@ export async function queryAppleProducts(): Promise<AppleProduct[]> {
 
   try {
     const productIds = Object.values(APPLE_SUBSCRIPTION_MAP).map(item => item.productId);
-    const result = await NativeAppleStoreKit.queryProductDetails({ productIds });
+    const result = await getStoreKit().queryProductDetails({ productIds });
     return result.products || [];
   } catch (err) {
     console.warn('Failed to query Apple App Store products:', err);
@@ -99,7 +109,7 @@ export async function restoreApplePurchases(): Promise<ApplePurchaseResult[]> {
   }
 
   try {
-    const res = await NativeAppleStoreKit.restorePurchases();
+    const res = await getStoreKit().restorePurchases();
     return res.purchases || [];
   } catch (err) {
     console.warn('Failed to restore Apple purchases:', err);
@@ -117,7 +127,7 @@ export async function presentAppleCodeRedemptionSheet(): Promise<void> {
   }
 
   try {
-    await NativeAppleStoreKit.presentCodeRedemptionSheet();
+    await getStoreKit().presentCodeRedemptionSheet();
   } catch (err) {
     console.warn('Failed to present Apple code redemption sheet:', err);
   }

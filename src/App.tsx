@@ -7245,6 +7245,33 @@ const getAudioContext = () => {
   return globalAudioContext;
 };
 
+// Global user-gesture unlocker for WebKit / iOS Safari AudioContext
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  };
+  window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
+  window.addEventListener('touchend', unlockAudio, { passive: true, once: true });
+  window.addEventListener('click', unlockAudio, { passive: true, once: true });
+}
+
+export const safeResumeAudioContext = async (ctx: AudioContext | null): Promise<boolean> => {
+  if (!ctx) return false;
+  if (ctx.state === 'running') return true;
+  try {
+    await Promise.race([
+      ctx.resume().catch(() => {}),
+      new Promise(resolve => setTimeout(resolve, 300)),
+    ]);
+  } catch {
+    // Ignore error
+  }
+  return ctx.state === 'running';
+};
+
 // --- Persistent localStorage audio cache ---
 const LS_AUDIO_PREFIX = 'pte_audio_v1_';
 const LS_AUDIO_MAX = 40; // maximum number of tasks to keep cached in localStorage
@@ -7488,9 +7515,7 @@ function TaskModal({
             return;
           }
 
-          if (ctx.state === 'suspended') {
-            await ctx.resume();
-          }
+          await safeResumeAudioContext(ctx);
 
           const oscillator = ctx.createOscillator();
           const gainNode = ctx.createGain();
@@ -7679,7 +7704,7 @@ function TaskModal({
             
             const ctx = getAudioContext();
             if (!ctx) throw new Error("AudioContext not available");
-            if (ctx.state === 'suspended') await ctx.resume();
+            await safeResumeAudioContext(ctx);
             
             const now = ctx.currentTime;
             let startTime = now;
@@ -7740,7 +7765,7 @@ function TaskModal({
           // Resume AudioContext early so it's running before async TTS generation completes (mobile requirement)
           try {
             const ctx = getAudioContext();
-            if (ctx && ctx.state === 'suspended') await ctx.resume();
+            await safeResumeAudioContext(ctx);
           } catch (resumeErr) {
             console.warn("[Audio] Early AudioContext resume failed:", resumeErr);
           }
@@ -7796,7 +7821,7 @@ function TaskModal({
               try {
                 const ctx = getAudioContext();
                 if (ctx) {
-                  if (ctx.state === 'suspended') await ctx.resume();
+                  await safeResumeAudioContext(ctx);
                   const arrayBuffer = base64ToArrayBuffer(base64);
                   const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
                   if (!isCancelled) {
@@ -8128,7 +8153,7 @@ function TaskModal({
           chunksRef.current.push(e.data);
         }
       };
-      recorder.start();
+      recorder.start(250);
       setMediaRecorder(recorder);
     } catch (err) {
       console.error("Failed to start recording:", err);
