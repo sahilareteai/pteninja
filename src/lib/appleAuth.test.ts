@@ -265,7 +265,7 @@ describe('Apple Authentication Helper Unit Tests', () => {
       const { APP_VERSION, APP_BUILD } = await import('../version');
       expect(APP_VERSION).toBeDefined();
       expect(typeof APP_VERSION).toBe('string');
-      expect(APP_BUILD).toBe(90);
+      expect(APP_BUILD).toBe(91);
     });
   });
 });

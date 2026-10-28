@@ -36,20 +36,29 @@ export const resolveApiUrl = (input: RequestInfo | URL): RequestInfo | URL => {
   }
 
   if (typeof input === 'string') {
-    if (input.startsWith('/api/')) {
-      return `${API_BASE_URL}${input}`;
+    if (input.startsWith('/api/') || input.startsWith('api/')) {
+      const cleanPath = input.startsWith('/') ? input : `/${input}`;
+      return `${API_BASE_URL}${cleanPath}`;
+    }
+    if (input.includes('://localhost/api/') || input.includes('://127.0.0.1/api/')) {
+      try {
+        const parsed = new URL(input);
+        return `${API_BASE_URL}${parsed.pathname}${parsed.search}`;
+      } catch {}
     }
   } else if (input instanceof URL) {
-    if (input.pathname.startsWith('/api/') && (input.hostname === 'localhost' || input.hostname === '127.0.0.1')) {
+    if (input.pathname.startsWith('/api/')) {
       return new URL(`${API_BASE_URL}${input.pathname}${input.search}`);
     }
   } else if (typeof Request !== 'undefined' && input instanceof Request) {
     const url = input.url;
     if (url.includes('/api/')) {
-      const parsed = new URL(url);
-      if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
-        return new Request(`${API_BASE_URL}${parsed.pathname}${parsed.search}`, input);
-      }
+      try {
+        const parsed = new URL(url);
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          return new Request(`${API_BASE_URL}${parsed.pathname}${parsed.search}`, input);
+        }
+      } catch {}
     }
   }
 
@@ -70,8 +79,9 @@ export const initMobileApp = async () => {
 
   console.log('[MobileApp] Initializing PTE Ninja Native Mobile Container...');
 
-  // 1. Transparent fetch proxy for native Android environment
-  const originalFetch = window.fetch;
+  // 1. Transparent fetch proxy for native mobile environments (Android / iOS)
+  // CRITICAL: Bind to window so that detached invocation in WebKit / Safari does not throw "TypeError: Type error"
+  const originalFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const resolvedInput = resolveApiUrl(input);
     return originalFetch(resolvedInput, init);

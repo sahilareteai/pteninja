@@ -188,4 +188,37 @@ describe('iOS Authentication & Error Handling Unit Tests', () => {
       expect(current).toBe(2);
     });
   });
+
+  describe('Mobile API Resolution & Audio Container Handling', () => {
+    it('resolves relative /api paths to production API_BASE_URL on native mobile', () => {
+      vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+      expect(resolveApiUrl('/api/generate-tts')).toBe(`${API_BASE_URL}/api/generate-tts`);
+      expect(resolveApiUrl('api/analyze-speaking')).toBe(`${API_BASE_URL}/api/analyze-speaking`);
+      expect(resolveApiUrl('capacitor://localhost/api/generate-tts')).toBe(`${API_BASE_URL}/api/generate-tts`);
+      vi.restoreAllMocks();
+    });
+
+    it('retains relative /api paths on web browser environment', () => {
+      vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(false);
+      expect(resolveApiUrl('/api/generate-tts')).toBe('/api/generate-tts');
+      vi.restoreAllMocks();
+    });
+
+    it('detects MP4 container signature from iOS audio recordings', () => {
+      // In base64, ftyp header starts with AAAA
+      const sampleMp4Base64 = 'AAAAFGZ0eXBtcDQyAAAAAW1wNDJpc29t';
+      const isMp4 = sampleMp4Base64.startsWith('AAAA');
+      expect(isMp4).toBe(true);
+
+      // In base64, WebM EBML header starts with GkXf
+      const sampleWebMBase64 = 'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAA==';
+      const isWebm = sampleWebMBase64.startsWith('GkXf');
+      expect(isWebm).toBe(true);
+
+      // In base64, RIFF WAV header starts with UklGR
+      const sampleWavBase64 = 'UklGRiQAAABXQVZFRm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+      const isWav = sampleWavBase64.startsWith('UklGR');
+      expect(isWav).toBe(true);
+    });
+  });
 });

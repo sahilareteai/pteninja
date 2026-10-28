@@ -1,4 +1,5 @@
 import { auth } from '../firebase';
+import { API_BASE_URL, resolveApiUrl, isNativeMobile, isIOS } from '../lib/mobile';
 
 /** Returns the current user's Firebase ID token, ensuring an authentic session exists. */
 export async function getIdToken(forceRefresh = false): Promise<string | null> {
@@ -24,7 +25,20 @@ async function proxyPost<T>(path: string, body: Record<string, unknown>, retryCo
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  // Direct target URL resolution: on native mobile or relative /api/ paths, always resolve to absolute API_BASE_URL
+  let targetUrl: string;
+  if (typeof path === 'string') {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      targetUrl = path;
+    } else {
+      const cleanPath = path.startsWith('/') ? path : `/${path}`;
+      targetUrl = isNativeMobile() ? `${API_BASE_URL}${cleanPath}` : cleanPath;
+    }
+  } else {
+    targetUrl = String(resolveApiUrl(path));
+  }
+
+  const res = await fetch(targetUrl, { method: 'POST', headers, body: JSON.stringify(body) });
 
   if (!res.ok) {
     // If token expired or session just linked, refresh token and retry once
@@ -104,8 +118,23 @@ export async function analyzeSpeaking(
   mimeType: string = 'audio/webm',
   correctAnswer?: string,
 ) {
+  // Auto-detect container from base64 signature for iOS/Android recordings
+  let effectiveMime = mimeType;
+  if (audioData.startsWith('AAAA')) {
+    // MP4/M4A ftyp container from iOS Safari/WKWebView
+    effectiveMime = 'audio/mp4';
+  } else if (audioData.startsWith('GkXf')) {
+    // WebM container from Chrome/Android
+    effectiveMime = 'audio/webm';
+  } else if (audioData.startsWith('UklGR')) {
+    // RIFF WAV container
+    effectiveMime = 'audio/wav';
+  } else if (isIOS() && effectiveMime === 'audio/webm') {
+    effectiveMime = 'audio/mp4';
+  }
+
   try {
-    return await proxyPost('/api/analyze-speaking', { audioData, taskType, mimeType, correctAnswer });
+    return await proxyPost('/api/analyze-speaking', { audioData, taskType, mimeType: effectiveMime, correctAnswer });
   } catch (e) {
     console.error('Failed to analyze speaking:', e);
     throw e;
