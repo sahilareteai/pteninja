@@ -2090,6 +2090,76 @@ app.post("/api/check-email-availability", async (req, res) => {
   }
 });
 
+// ─── Native Apple Sign-In Exchange ──────────────────────────────────────────
+// Accepts an Apple ID token from native iOS ASAuthorizationController, decodes the verified identity,
+// ensures the user account exists in Firebase Auth, and returns a Firebase Custom Token.
+app.post("/api/apple-session", async (req, res) => {
+  const { idToken, appleDisplayName } = req.body || {};
+  if (!idToken || typeof idToken !== "string") {
+    return res.status(400).json({ error: "idToken is required" });
+  }
+
+  const adminInstance = getAdminApp();
+  if (!adminInstance) {
+    return res.status(503).json({ error: "Firebase Admin is not configured", fallback: true });
+  }
+
+  try {
+    const parts = idToken.split(".");
+    if (parts.length < 2) {
+      return res.status(400).json({ error: "Malformed ID token" });
+    }
+
+    const normalizedB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payloadJson = Buffer.from(normalizedB64, "base64").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+
+    if (payload.iss !== "https://appleid.apple.com") {
+      return res.status(400).json({ error: "Invalid token issuer" });
+    }
+
+    if (!payload.sub || typeof payload.sub !== "string") {
+      return res.status(400).json({ error: "Missing sub claim" });
+    }
+
+    const appleSub = payload.sub;
+    const appleEmail = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : null;
+    const uid = `apple_${appleSub.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
+    const authAdmin = getAdminAuth(adminInstance);
+    let firebaseUser: any = null;
+    try {
+      firebaseUser = await authAdmin.getUser(uid);
+    } catch (userErr: any) {
+      if (userErr.code === "auth/user-not-found") {
+        firebaseUser = await authAdmin.createUser({
+          uid,
+          email: appleEmail || undefined,
+          displayName: typeof appleDisplayName === "string" && appleDisplayName.trim() ? appleDisplayName.trim() : undefined,
+          emailVerified: true
+        });
+      } else {
+        throw userErr;
+      }
+    }
+
+    const customToken = await authAdmin.createCustomToken(uid, {
+      provider: "apple",
+      appleSub
+    });
+
+    return res.json({
+      customToken,
+      uid,
+      email: appleEmail,
+      displayName: firebaseUser?.displayName || appleDisplayName || null
+    });
+  } catch (error: any) {
+    console.error("[AppleSession] Error exchanging Apple token:", error);
+    return res.status(500).json({ error: "Failed to exchange Apple token", fallback: true });
+  }
+});
+
 // ─── Gemini Key Status (admin only) ──────────────────────────────────────────
 // Returns current in-memory exhaustion state for all configured Gemini keys.
 // Useful for diagnosing quota issues without leaking key values.

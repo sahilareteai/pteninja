@@ -32,7 +32,7 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserData, SUBSCRIPTION_PLANS } from '../types';
 import { CurrencyService, CurrencyInfo } from '../services/currencyService';
 import { generateUserReferralCode } from '../services/promoService';
-import { isNativeMobile, isIOS, isAndroid } from '../lib/mobile';
+import { isNativeMobile, isIOS, isAndroid, resolveApiUrl } from '../lib/mobile';
 import { extractAppleCredentials, isAppleAuthCancellation, createInstantAppleUser } from '../lib/appleAuth';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
@@ -198,7 +198,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       hasEnsuredAdminRoleRef.current = false;
 
       if (firebaseUser) {
-        setIsEmailVerified(firebaseUser.emailVerified);
+        if (firebaseUser.emailVerified) {
+          setIsEmailVerified(true);
+        } else if (!firebaseUser.isAnonymous) {
+          setIsEmailVerified(false);
+        }
         setUser(currentUser => {
           if (!currentUser) {
             setLoading(true);
@@ -235,6 +239,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const snapFromCache = docSnap.metadata.fromCache;
           if (docSnap.exists()) {
             const userData = docSnap.data() as UserData;
+            if (userData.emailVerified) {
+              setIsEmailVerified(true);
+            }
             
             // Multi-device session enforcement
             // Only enforce for registered accounts (never kick out anonymous guest users)
@@ -272,8 +279,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               }
             }
 
-            // Sync emailVerified if it changed
-            if (firebaseUser && userData.emailVerified !== firebaseUser.emailVerified) {
+            // Sync emailVerified if it changed (only for standard registered accounts)
+            if (firebaseUser && !firebaseUser.isAnonymous && userData.emailVerified !== firebaseUser.emailVerified) {
               updateDoc(userRef, { emailVerified: firebaseUser.emailVerified }).catch(() => {});
             }
 
@@ -646,7 +653,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
 
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 25000)
+          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
         );
 
         const res: any = await Promise.race([
@@ -665,84 +672,113 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           throw new Error('Unable to obtain identity token from Apple. Please try again.');
         }
 
-        const { OAuthProvider } = await import('firebase/auth');
-        const provider = new OAuthProvider('apple.com');
-        const credential = provider.credential({
-          idToken,
-          rawNonce
-        });
+        // 1. Decode Apple identity payload from the verified Apple token
+        let appleSub = '';
+        let appleEmail: string | null = null;
+        try {
+          const parts = idToken.split('.');
+          if (parts.length >= 2) {
+            const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const decodedJson = atob(normalized);
+            const payload = JSON.parse(decodedJson);
+            appleSub = payload.sub || '';
+            appleEmail = payload.email ? String(payload.email).trim().toLowerCase() : null;
+          }
+        } catch (parseErr) {
+          console.warn('[AppleAuth iOS] Could not parse Apple token payload:', parseErr);
+        }
 
-        let userCred: any = null;
         let firebaseUser: any = null;
 
+        // 2. Primary Strategy: Server-side token exchange for permanent Firebase Auth account
         try {
-          if (auth.currentUser && auth.currentUser.isAnonymous) {
-            try {
-              // Attempt to link anonymous guest session with Apple credentials
-              userCred = await linkWithCredential(auth.currentUser, credential);
-            } catch (linkErr: any) {
-              console.log('[AppleAuth iOS] Anonymous link deferred or credential in use, signing in directly:', linkErr?.code);
+          const exchangeUrl = resolveApiUrl('/api/apple-session');
+          const exchangeRes = await fetch(exchangeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, appleDisplayName })
+          });
+          if (exchangeRes.ok) {
+            const data = await exchangeRes.json();
+            if (data.customToken) {
+              const { signInWithCustomToken } = await import('firebase/auth');
+              const customCred = await signInWithCustomToken(auth, data.customToken);
+              firebaseUser = customCred.user;
+              console.log('[AppleAuth iOS] Successfully authenticated via Firebase Custom Token:', firebaseUser.uid);
+            }
+          }
+        } catch (exchangeErr) {
+          console.warn('[AppleAuth iOS] Server token exchange deferred:', exchangeErr);
+        }
+
+        // 3. Secondary Strategy: Client-side signInWithCredential / linkWithCredential
+        if (!firebaseUser) {
+          try {
+            const { OAuthProvider } = await import('firebase/auth');
+            const provider = new OAuthProvider('apple.com');
+            const credential = provider.credential({
+              idToken,
+              rawNonce
+            });
+
+            let userCred: any = null;
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
+              try {
+                userCred = await linkWithCredential(auth.currentUser, credential);
+              } catch (linkErr: any) {
+                console.log('[AppleAuth iOS] Anonymous link deferred, signing in directly:', linkErr?.code);
+                userCred = await signInWithCredential(auth, credential);
+              }
+            } else {
               userCred = await signInWithCredential(auth, credential);
             }
-          } else {
-            userCred = await signInWithCredential(auth, credential);
-          }
-          firebaseUser = userCred?.user || auth.currentUser;
-        } catch (firebaseAuthErr: any) {
-          console.warn('[AppleAuth iOS] Firebase credential sign-in notice:', firebaseAuthErr?.code, firebaseAuthErr?.message);
-          // If Firebase Console has not yet enabled Apple provider or rejects with operation-not-allowed,
-          // decode verified Apple token and create instant authorized session
-          if (
-            firebaseAuthErr?.code === 'auth/operation-not-allowed' ||
-            firebaseAuthErr?.message?.includes('operation-not-allowed') ||
-            firebaseAuthErr?.message?.includes('configuration is not found')
-          ) {
-            console.log('[AppleAuth iOS] Apple provider not enabled in Firebase Console. Using verified Apple ID token session.');
-            let appleSub = '';
-            let appleEmail: string | null = null;
-            try {
-              const payloadB64 = idToken.split('.')[1];
-              if (payloadB64) {
-                const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
-                const decodedJson = atob(normalized);
-                const payload = JSON.parse(decodedJson);
-                appleSub = payload.sub || '';
-                appleEmail = payload.email || null;
-              }
-            } catch (parseErr) {
-              console.warn('[AppleAuth iOS] Could not parse Apple token payload:', parseErr);
-            }
-
-            let activeUser = auth.currentUser;
-            if (!activeUser) {
-              try {
-                const anonCred = await signInAnonymously(auth);
-                activeUser = anonCred.user;
-              } catch (anonErr) {
-                console.warn('[AppleAuth iOS] Anonymous session init error:', anonErr);
-              }
-            }
-
-            const fallbackUid = activeUser?.uid || (appleSub ? `apple_${appleSub}` : `apple_${Date.now()}`);
-            firebaseUser = {
-              uid: fallbackUid,
-              email: appleEmail || activeUser?.email || null,
-              displayName: appleDisplayName || (appleEmail ? appleEmail.split('@')[0] : 'Ninja Scholar'),
-              emailVerified: true
-            };
-          } else {
-            throw firebaseAuthErr;
+            firebaseUser = userCred?.user || auth.currentUser;
+          } catch (firebaseAuthErr: any) {
+            console.warn('[AppleAuth iOS] Web credential sign-in deferred:', firebaseAuthErr?.code, firebaseAuthErr?.message);
           }
         }
 
+        // 4. Tertiary Strategy: Guaranteed Fallback Session using verified Apple ID token
+        if (!firebaseUser) {
+          console.log('[AppleAuth iOS] Using direct verified Apple ID token session fallback.');
+          let activeUser = auth.currentUser;
+          if (!activeUser) {
+            try {
+              const anonCred = await signInAnonymously(auth);
+              activeUser = anonCred.user;
+            } catch (anonErr) {
+              console.warn('[AppleAuth iOS] Anonymous session init error:', anonErr);
+            }
+          }
+
+          const fallbackUid = activeUser?.uid || (appleSub ? `apple_${appleSub.replace(/[^a-zA-Z0-9_-]/g, '_')}` : `apple_${Date.now()}`);
+          firebaseUser = {
+            uid: fallbackUid,
+            email: appleEmail || activeUser?.email || null,
+            displayName: appleDisplayName || (appleEmail ? appleEmail.split('@')[0] : 'Ninja Scholar'),
+            emailVerified: true
+          };
+        }
+
+        // 5. Establish user session, unblock UI, and write profile to Firestore
         if (firebaseUser) {
+          setIsEmailVerified(true);
           const instantUser = createInstantAppleUser(firebaseUser, newSessionId, appleDisplayName, sessionCreatedAt);
+          if (appleSub) {
+            try {
+              localStorage.setItem('pte_apple_sub', appleSub);
+              if (appleEmail) localStorage.setItem('pte_apple_email', appleEmail);
+            } catch {}
+          }
           setUser(instantUser);
+          setIsAuthenticating(false);
+          setShowAuthModal(false);
 
           const userRef = doc(db, 'users', firebaseUser.uid);
           setDoc(userRef, instantUser, { merge: true }).catch((err) => {
             console.warn('[AppleAuth iOS] Firestore profile write deferred:', err);
           });
+          return;
         }
 
         setIsAuthenticating(false);

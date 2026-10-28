@@ -26,12 +26,15 @@ export function extractAppleCredentials(res: any): ExtractedAppleCredentials {
     displayName = res.credential.displayName;
   } else if (res.displayName) {
     displayName = res.displayName;
+  } else if (res.response?.givenName || res.response?.familyName) {
+    displayName = [res.response.givenName, res.response.familyName].filter(Boolean).join(' ');
   }
 
-  // 2. Extract idToken from credential or root level
+  // 2. Extract idToken from credential, response, or root level
   const idToken =
     res.credential?.idToken ||
     res.idToken ||
+    res.response?.identityToken ||
     res.credential?.token ||
     res.token ||
     (typeof res.credential === 'string' ? res.credential : undefined);
@@ -50,10 +53,11 @@ export function extractAppleCredentials(res: any): ExtractedAppleCredentials {
     throw new Error('Unable to obtain identity token from Apple. Please try again.');
   }
 
-  // 3. Extract rawNonce from credential or root level
+  // 3. Extract rawNonce from credential, response, or root level
   const rawNonce =
     res.credential?.nonce ||
     res.nonce ||
+    res.response?.nonce ||
     res.credential?.rawNonce ||
     res.rawNonce ||
     undefined;
@@ -62,6 +66,7 @@ export function extractAppleCredentials(res: any): ExtractedAppleCredentials {
   const authorizationCode =
     res.credential?.authorizationCode ||
     res.authorizationCode ||
+    res.response?.authorizationCode ||
     undefined;
 
   return {

@@ -66,6 +66,24 @@ describe('Apple Authentication Helper Unit Tests', () => {
       expect(creds.displayName).toBe('Ninja Scholar');
     });
 
+    it('extracts credentials from res.response structure from native iOS plugins', () => {
+      const res = {
+        response: {
+          identityToken: 'jwt.token.abc',
+          nonce: 'raw_nonce_xyz',
+          authorizationCode: 'auth_code_123',
+          givenName: 'Ninja',
+          familyName: 'Master',
+        },
+      };
+
+      const creds = extractAppleCredentials(res);
+      expect(creds.idToken).toBe('jwt.token.abc');
+      expect(creds.rawNonce).toBe('raw_nonce_xyz');
+      expect(creds.authorizationCode).toBe('auth_code_123');
+      expect(creds.displayName).toBe('Ninja Master');
+    });
+
     it('throws a descriptive error when response is missing', () => {
       expect(() => extractAppleCredentials(null)).toThrow(
         'No authentication response received from Apple.'
