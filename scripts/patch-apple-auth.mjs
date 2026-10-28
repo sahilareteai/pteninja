@@ -62,25 +62,18 @@ class AppleAuthProviderHandler: NSObject {
 @available(iOS 13.0, *)
 extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        if let window = self.pluginImplementation.getPlugin().bridge?.viewController?.view.window {
-            return window
-        }
         if let window = self.pluginImplementation.getPlugin().webView?.window {
             return window
         }
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            if let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                return window
-            }
-            if let window = windowScene.windows.first {
-                return window
-            }
-        }
-        if let delegateWindow = (UIApplication.shared.delegate as? AppDelegate)?.window, let window = delegateWindow {
+        let activeScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+        if let window = activeScene?.windows.first(where: { $0.isKeyWindow }) ?? activeScene?.windows.first {
             return window
         }
-        return ASPresentationAnchor()
+        let allScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        if let window = allScenes.flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) ?? allScenes.flatMap({ $0.windows }).first {
+            return window
+        }
+        return UIWindow()
     }
 
     // Adapted from https://auth0.com/docs/api-auth/tutorials/nonce#generate-a-cryptographically-random-nonce
@@ -96,7 +89,7 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
                 var random: UInt8 = 0
                 let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
                 if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \\(errorCode)")
                 }
                 return random
             }
@@ -170,7 +163,7 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
         var displayName: String?
         if let fullName = appleIDCredential.fullName {
             if let givenName = fullName.givenName, let familyName = fullName.familyName {
-                displayName = "\(givenName) \(familyName)"
+                displayName = "\\(givenName) \\(familyName)"
             }
         }
         let credential = OAuthProvider.appleCredential(withIDToken: idTokenString,
@@ -188,7 +181,7 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         self.activeAuthController = nil
         let nsError = error as NSError
-        let codeStr = "\(nsError.code)"
+        let codeStr = String(nsError.code)
         let message = error.localizedDescription
         CAPLog.print("[AppleAuth] Authorization failed with code: ", codeStr, ", error: ", message)
         if self.isLink == true {
