@@ -652,8 +652,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // --- iOS NATIVE SIGN IN WITH APPLE (Face ID / Touch ID / Passcode) ---
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
 
+        // Snappy safety timeout: Never allow native Apple sheet or bridge to freeze indefinitely on mobile
         const appleTimeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 35000)
+          setTimeout(() => reject(new Error('Apple Sign-In timed out. Please try again.')), 15000)
         );
 
         const res: any = await Promise.race([
@@ -688,101 +689,84 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           console.warn('[AppleAuth iOS] Could not parse Apple token payload:', parseErr);
         }
 
-        let firebaseUser: any = null;
+        // 2. Compute UID and build immediate instant user profile
+        const fallbackUid = auth.currentUser?.uid || (appleSub ? `apple_${appleSub.replace(/[^a-zA-Z0-9_-]/g, '_')}` : `apple_${Date.now()}`);
+        const initialProfile = {
+          uid: fallbackUid,
+          email: appleEmail || auth.currentUser?.email || null,
+          displayName: appleDisplayName || (appleEmail ? appleEmail.split('@')[0] : 'Ninja Scholar'),
+          emailVerified: true
+        };
 
-        // 2. Primary Strategy: Server-side token exchange for permanent Firebase Auth account
-        try {
-          const exchangeUrl = resolveApiUrl('/api/apple-session');
-          const exchangeRes = await fetch(exchangeUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken, appleDisplayName })
-          });
-          if (exchangeRes.ok) {
-            const data = await exchangeRes.json();
-            if (data.customToken) {
-              const { signInWithCustomToken } = await import('firebase/auth');
-              const customCred = await signInWithCustomToken(auth, data.customToken);
-              firebaseUser = customCred.user;
-              console.log('[AppleAuth iOS] Successfully authenticated via Firebase Custom Token:', firebaseUser.uid);
-            }
-          }
-        } catch (exchangeErr) {
-          console.warn('[AppleAuth iOS] Server token exchange deferred:', exchangeErr);
-        }
+        const instantUser = createInstantAppleUser(initialProfile, newSessionId, appleDisplayName, sessionCreatedAt);
 
-        // 3. Secondary Strategy: Client-side signInWithCredential / linkWithCredential
-        if (!firebaseUser) {
+        if (appleSub) {
           try {
-            const { OAuthProvider } = await import('firebase/auth');
-            const provider = new OAuthProvider('apple.com');
-            const credential = provider.credential({
-              idToken,
-              rawNonce
-            });
-
-            let userCred: any = null;
-            if (auth.currentUser && auth.currentUser.isAnonymous) {
-              try {
-                userCred = await linkWithCredential(auth.currentUser, credential);
-              } catch (linkErr: any) {
-                console.log('[AppleAuth iOS] Anonymous link deferred, signing in directly:', linkErr?.code);
-                userCred = await signInWithCredential(auth, credential);
-              }
-            } else {
-              userCred = await signInWithCredential(auth, credential);
-            }
-            firebaseUser = userCred?.user || auth.currentUser;
-          } catch (firebaseAuthErr: any) {
-            console.warn('[AppleAuth iOS] Web credential sign-in deferred:', firebaseAuthErr?.code, firebaseAuthErr?.message);
-          }
+            localStorage.setItem('pte_apple_sub', appleSub);
+            if (appleEmail) localStorage.setItem('pte_apple_email', appleEmail);
+          } catch {}
         }
 
-        // 4. Tertiary Strategy: Guaranteed Fallback Session using verified Apple ID token
-        if (!firebaseUser) {
-          console.log('[AppleAuth iOS] Using direct verified Apple ID token session fallback.');
-          let activeUser = auth.currentUser;
-          if (!activeUser) {
-            try {
-              const anonCred = await signInAnonymously(auth);
-              activeUser = anonCred.user;
-            } catch (anonErr) {
-              console.warn('[AppleAuth iOS] Anonymous session init error:', anonErr);
-            }
-          }
-
-          const fallbackUid = activeUser?.uid || (appleSub ? `apple_${appleSub.replace(/[^a-zA-Z0-9_-]/g, '_')}` : `apple_${Date.now()}`);
-          firebaseUser = {
-            uid: fallbackUid,
-            email: appleEmail || activeUser?.email || null,
-            displayName: appleDisplayName || (appleEmail ? appleEmail.split('@')[0] : 'Ninja Scholar'),
-            emailVerified: true
-          };
-        }
-
-        // 5. Establish user session, unblock UI, and write profile to Firestore
-        if (firebaseUser) {
-          setIsEmailVerified(true);
-          const instantUser = createInstantAppleUser(firebaseUser, newSessionId, appleDisplayName, sessionCreatedAt);
-          if (appleSub) {
-            try {
-              localStorage.setItem('pte_apple_sub', appleSub);
-              if (appleEmail) localStorage.setItem('pte_apple_email', appleEmail);
-            } catch {}
-          }
-          setUser(instantUser);
-          setIsAuthenticating(false);
-          setShowAuthModal(false);
-
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          setDoc(userRef, instantUser, { merge: true }).catch((err) => {
-            console.warn('[AppleAuth iOS] Firestore profile write deferred:', err);
-          });
-          return;
-        }
-
+        // 3. IMMEDIATELY SET USER & UNBLOCK UI!
+        // This transitions App.tsx from MobileOnboarding into the Dojo immediately!
+        // The spinner stops, the user enters the Dojo with ZERO delay, exactly like guest access!
+        setIsEmailVerified(true);
+        setUser(instantUser);
         setIsAuthenticating(false);
         setShowAuthModal(false);
+
+        // 4. Background tasks: Firestore sync & Firebase Auth session link
+        // Non-blocking firestore profile write
+        const userRef = doc(db, 'users', fallbackUid);
+        setDoc(userRef, instantUser, { merge: true }).catch((err) => {
+          console.warn('[AppleAuth iOS] Background profile write deferred:', err);
+        });
+
+        // Background authentication / custom token exchange (non-blocking, 4s timeout)
+        (async () => {
+          try {
+            // Strategy A: Server-side token exchange
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            try {
+              const exchangeUrl = resolveApiUrl('/api/apple-session');
+              const exchangeRes = await fetch(exchangeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken, appleDisplayName }),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              if (exchangeRes.ok) {
+                const data = await exchangeRes.json();
+                if (data.customToken) {
+                  const { signInWithCustomToken } = await import('firebase/auth');
+                  const customCred = await signInWithCustomToken(auth, data.customToken);
+                  console.log('[AppleAuth iOS] Background Firebase Custom Token linked:', customCred.user.uid);
+                  return;
+                }
+              }
+            } catch (fetchErr) {
+              clearTimeout(timeoutId);
+            }
+
+            // Strategy B: Client-side signInWithCredential with 4s timeout
+            if (rawNonce) {
+              const { OAuthProvider } = await import('firebase/auth');
+              const provider = new OAuthProvider('apple.com');
+              const credential = provider.credential({ idToken, rawNonce });
+              const fbTimeout = new Promise<never>((_, reject) => setTimeout(reject, 4000));
+              if (auth.currentUser && auth.currentUser.isAnonymous) {
+                await Promise.race([linkWithCredential(auth.currentUser, credential), fbTimeout]);
+              } else {
+                await Promise.race([signInWithCredential(auth, credential), fbTimeout]);
+              }
+            }
+          } catch (bgErr) {
+            console.warn('[AppleAuth iOS] Background auth sync deferred:', bgErr);
+          }
+        })();
+
         return;
       }
 

@@ -124,12 +124,26 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
       setIsSigningIn(true);
       setSigningInProvider('google');
       await onGoogleLogin();
+    } catch (err) {
+      console.warn('[MobileOnboarding] Google sign-in catch:', err);
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);
       isSubmittingRef.current = false;
     }
   };
+
+  // Safety watchdog: Never allow button spinner to remain spinning longer than 15s
+  useEffect(() => {
+    if (!isSigningIn) return;
+    const watchdog = setTimeout(() => {
+      console.warn('[MobileOnboarding] isSigningIn safety watchdog released.');
+      setIsSigningIn(false);
+      setSigningInProvider(null);
+      isSubmittingRef.current = false;
+    }, 15000);
+    return () => clearTimeout(watchdog);
+  }, [isSigningIn]);
 
   const handleAppleClick = async () => {
     if (!onAppleLogin || isSigningIn || isSubmittingRef.current) return;
@@ -138,6 +152,8 @@ export const MobileOnboarding: React.FC<MobileOnboardingProps> = ({
       setIsSigningIn(true);
       setSigningInProvider('apple');
       await onAppleLogin();
+    } catch (err) {
+      console.warn('[MobileOnboarding] Apple sign-in catch:', err);
     } finally {
       setIsSigningIn(false);
       setSigningInProvider(null);

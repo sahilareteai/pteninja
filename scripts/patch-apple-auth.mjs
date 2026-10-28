@@ -34,26 +34,35 @@ class AppleAuthProviderHandler: NSObject {
     fileprivate var currentNonce: String?
     fileprivate var isLink: Bool?
     fileprivate var activeAuthController: ASAuthorizationController?
+    private var savedCall: CAPPluginCall?
 
     init(_ pluginImplementation: FirebaseAuthentication) {
         self.pluginImplementation = pluginImplementation
     }
 
     func signIn(call: CAPPluginCall) {
+        self.savedCall = call
+        call.keepAlive = true
         if #available(iOS 13, *) {
             self.isLink = false
             self.startSignInWithAppleFlow()
         } else {
-            self.pluginImplementation.handleFailedSignIn(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)
+            self.savedCall = nil
+            call.keepAlive = false
+            call.resolve(["error": "Sign in with Apple requires iOS 13+", "code": "DEVICE_UNSUPPORTED"])
         }
     }
 
     func link(call: CAPPluginCall) {
+        self.savedCall = call
+        call.keepAlive = true
         if #available(iOS 13, *) {
             self.isLink = true
             self.startSignInWithAppleFlow()
         } else {
-            self.pluginImplementation.handleFailedLink(message: self.pluginImplementation.getPlugin().errorDeviceUnsupported, error: nil)
+            self.savedCall = nil
+            call.keepAlive = false
+            call.resolve(["error": "Link with Apple requires iOS 13+", "code": "DEVICE_UNSUPPORTED"])
         }
     }
 }
@@ -139,55 +148,82 @@ extension AppleAuthProviderHandler: ASAuthorizationControllerDelegate, ASAuthori
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        self.activeAuthController = nil
-        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            self.pluginImplementation.handleFailedSignIn(message: "Invalid credential type received from Apple", error: nil)
-            return
-        }
-        guard let nonce = currentNonce else {
-            self.pluginImplementation.handleFailedSignIn(message: "Invalid state: No nonce found", error: nil)
-            return
-        }
-        guard let appleIDToken = appleIDCredential.identityToken else {
-            self.pluginImplementation.handleFailedSignIn(message: "Unable to fetch identity token from Apple", error: nil)
-            return
-        }
-        var authorizationCode: String?
-        if let authorizationCodeData = appleIDCredential.authorizationCode {
-            authorizationCode = String(data: authorizationCodeData, encoding: .utf8)
-        }
-        guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            self.pluginImplementation.handleFailedSignIn(message: "Unable to serialize token string from data", error: nil)
-            return
-        }
-        var displayName: String?
-        if let fullName = appleIDCredential.fullName {
-            if let givenName = fullName.givenName, let familyName = fullName.familyName {
-                displayName = "\\(givenName) \\(familyName)"
+        DispatchQueue.main.async {
+            self.activeAuthController = nil
+            guard let call = self.savedCall ?? self.pluginImplementation.savedCall else {
+                CAPLog.print("[AppleAuth] No saved call to resolve!")
+                return
             }
-        }
-        let credential = OAuthProvider.appleCredential(withIDToken: idTokenString,
-                                                       rawNonce: nonce,
-                                                       fullName: appleIDCredential.fullName)
-        if self.isLink == true {
-            self.pluginImplementation.handleSuccessfulLink(credential: credential, idToken: idTokenString, nonce: nonce,
-                                                           accessToken: nil, serverAuthCode: nil, displayName: displayName, authorizationCode: authorizationCode)
-        } else {
-            self.pluginImplementation.handleSuccessfulSignIn(credential: credential, idToken: idTokenString, nonce: nonce,
-                                                             accessToken: nil, displayName: displayName, authorizationCode: authorizationCode, serverAuthCode: nil)
+            call.keepAlive = false
+            self.savedCall = nil
+            self.pluginImplementation.savedCall = nil
+
+            guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                call.resolve(["error": "Invalid credential type received from Apple", "code": "INVALID_CREDENTIAL"])
+                return
+            }
+            guard let nonce = self.currentNonce else {
+                call.resolve(["error": "Invalid state: No nonce found", "code": "NO_NONCE"])
+                return
+            }
+            guard let appleIDToken = appleIDCredential.identityToken,
+                  let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+                call.resolve(["error": "Unable to fetch identity token from Apple", "code": "NO_TOKEN"])
+                return
+            }
+
+            var authorizationCode: String?
+            if let authorizationCodeData = appleIDCredential.authorizationCode {
+                authorizationCode = String(data: authorizationCodeData, encoding: .utf8)
+            }
+
+            var displayName: String?
+            if let fullName = appleIDCredential.fullName {
+                if let givenName = fullName.givenName, let familyName = fullName.familyName {
+                    displayName = "\\(givenName) \\(familyName)"
+                } else if let givenName = fullName.givenName {
+                    displayName = givenName
+                }
+            }
+
+            var email: String? = appleIDCredential.email
+
+            let credDict: [String: Any] = [
+                "idToken": idTokenString,
+                "nonce": nonce,
+                "authorizationCode": authorizationCode ?? "",
+                "displayName": displayName ?? "",
+                "email": email ?? ""
+            ]
+
+            let result: [String: Any] = [
+                "idToken": idTokenString,
+                "nonce": nonce,
+                "credential": credDict,
+                "authorizationCode": authorizationCode ?? "",
+                "displayName": displayName ?? "",
+                "email": email ?? ""
+            ]
+
+            CAPLog.print("[AppleAuth] Successfully resolved Apple credential directly to JavaScript on main thread.")
+            call.resolve(result)
         }
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        self.activeAuthController = nil
-        let nsError = error as NSError
-        let codeStr = String(nsError.code)
-        let message = error.localizedDescription
-        CAPLog.print("[AppleAuth] Authorization failed with code: ", codeStr, ", error: ", message)
-        if self.isLink == true {
-            self.pluginImplementation.handleFailedLink(message: message, error: error)
-        } else {
-            self.pluginImplementation.handleFailedSignIn(message: message, error: error)
+        DispatchQueue.main.async {
+            self.activeAuthController = nil
+            let nsError = error as NSError
+            let codeStr = String(nsError.code)
+            let message = error.localizedDescription
+            CAPLog.print("[AppleAuth] Authorization failed with code: ", codeStr, ", error: ", message)
+            guard let call = self.savedCall ?? self.pluginImplementation.savedCall else {
+                return
+            }
+            call.keepAlive = false
+            self.savedCall = nil
+            self.pluginImplementation.savedCall = nil
+            call.resolve(["error": message, "code": codeStr])
         }
     }
 }

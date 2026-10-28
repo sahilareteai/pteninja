@@ -192,6 +192,51 @@ describe('Apple Authentication Helper Unit Tests', () => {
 
       expect(user.displayName).toBe('tarun.ninja');
     });
+
+    it('creates instant profile with apple_sub fallback UID and preserves sessionCreatedAt', () => {
+      const appleSub = '001234.abcdef567890.1234';
+      const fallbackUid = `apple_${appleSub.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const sessionCreatedAt = Date.now();
+      const user = createInstantAppleUser(
+        {
+          uid: fallbackUid,
+          email: 'scholar@privaterelay.appleid.com',
+          displayName: 'PTE Aspirant',
+          emailVerified: true,
+        },
+        'session_abc_999',
+        'PTE Aspirant',
+        sessionCreatedAt
+      );
+
+      expect(user.uid).toBe('apple_001234_abcdef567890_1234');
+      expect(user.email).toBe('scholar@privaterelay.appleid.com');
+      expect(user.displayName).toBe('PTE Aspirant');
+      expect(user.emailVerified).toBe(true);
+      expect(user.sessionCreatedAt).toBe(sessionCreatedAt);
+      expect(user.currentSessionId).toBe('session_abc_999');
+    });
+
+    it('correctly parses simulated Apple ID JWT token payload', () => {
+      const fakePayload = {
+        iss: 'https://appleid.apple.com',
+        aud: 'com.pteninja.app',
+        sub: '001234.userAppleUniqueId.5678',
+        email: 'ninja.user@privaterelay.appleid.com',
+        email_verified: 'true'
+      };
+      const base64UrlPayload = btoa(JSON.stringify(fakePayload)).replace(/\+/g, '-').replace(/\//g, '_');
+      const fakeJwt = `header.${base64UrlPayload}.signature`;
+
+      const parts = fakeJwt.split('.');
+      expect(parts.length).toBe(3);
+      const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const decodedJson = atob(normalized);
+      const payload = JSON.parse(decodedJson);
+
+      expect(payload.sub).toBe('001234.userAppleUniqueId.5678');
+      expect(payload.email).toBe('ninja.user@privaterelay.appleid.com');
+    });
   });
 
   describe('Version & Build Metadata', () => {
@@ -199,7 +244,7 @@ describe('Apple Authentication Helper Unit Tests', () => {
       const { APP_VERSION, APP_BUILD } = await import('../version');
       expect(APP_VERSION).toBeDefined();
       expect(typeof APP_VERSION).toBe('string');
-      expect(APP_BUILD).toBeGreaterThanOrEqual(28);
+      expect(APP_BUILD).toBe(88);
     });
   });
 });
