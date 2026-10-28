@@ -8104,7 +8104,22 @@ function TaskModal({
       };
       updateVolume();
 
-      const recorder = new MediaRecorder(stream);
+      let preferredMimeType = 'audio/webm';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          preferredMimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          preferredMimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          preferredMimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+          preferredMimeType = 'audio/aac';
+        }
+      }
+
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
       recordingStartTimeRef.current = Date.now();
 
@@ -8130,7 +8145,8 @@ function TaskModal({
         reject(new Error("No audio recorded. Please try speaking louder or check your microphone."));
         return;
       }
-      const blob = new Blob(chunksRef.current, { type: mediaRecorder?.mimeType || 'audio/webm' });
+      const activeMimeType = mediaRecorder?.mimeType || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm');
+      const blob = new Blob(chunksRef.current, { type: activeMimeType });
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = () => {
@@ -8256,11 +8272,12 @@ function TaskModal({
         if (!base64 || base64.length < 100) {
            throw new Error("No audio detected");
         }
+        const recordedMime = mediaRecorder?.mimeType || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm');
         setRecordings(prev => {
-          const next = [...prev, { id: crypto.randomUUID(), base64, mimeType: mediaRecorder?.mimeType || 'audio/webm', attemptNum: prev.length + 1 }];
+          const next = [...prev, { id: crypto.randomUUID(), base64, mimeType: recordedMime, attemptNum: prev.length + 1 }];
           return next.slice(-5); // Keep at most 5 recordings to limit memory usage
         });
-        result = await analyzeSpeaking(base64, task.category, mediaRecorder?.mimeType || 'audio/webm', task.correctAnswers?.[0]);
+        result = await analyzeSpeaking(base64, task.category, recordedMime, task.correctAnswers?.[0]);
       } else if (task.section === 'reading' || (task.section === 'listening' && task.category !== 'Summarize Spoken Text')) {
         if (isMockTest) {
           // For objective tasks in mock test, we can just pass the selected options/input

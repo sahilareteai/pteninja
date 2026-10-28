@@ -1,24 +1,37 @@
 import { auth } from '../firebase';
 
-/** Returns the current user's Firebase ID token, or null if not signed in. */
-async function getIdToken(): Promise<string | null> {
+/** Returns the current user's Firebase ID token, ensuring an authentic session exists. */
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
   try {
-    return (await auth.currentUser?.getIdToken()) ?? null;
+    if (!auth.currentUser) {
+      try {
+        const { signInAnonymously } = await import('firebase/auth');
+        await signInAnonymously(auth);
+      } catch (anonErr) {
+        console.warn('[geminiService] Anonymous session bootstrap deferred:', anonErr);
+      }
+    }
+    return (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
   } catch (err) {
     console.warn('[geminiService] Could not retrieve auth token:', err);
     return null;
   }
 }
 
-/** POST to a server-side Gemini proxy endpoint with auth. */
-async function proxyPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const token = await getIdToken();
+/** POST to a server-side Gemini proxy endpoint with auth and automatic 401 retry. */
+async function proxyPost<T>(path: string, body: Record<string, unknown>, retryCount = 0): Promise<T> {
+  let token = await getIdToken(retryCount > 0);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
 
   if (!res.ok) {
+    // If token expired or session just linked, refresh token and retry once
+    if (res.status === 401 && retryCount === 0) {
+      console.warn('[geminiService] Received 401 Unauthorized, refreshing token and retrying...');
+      return proxyPost<T>(path, body, retryCount + 1);
+    }
     const errData = await res.json().catch(() => ({}));
     if (res.status === 503) {
       const err = new Error('GEMINI_QUOTA_EXCEEDED');

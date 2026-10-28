@@ -333,7 +333,7 @@ async function serverCallGroqWhisper(audioBuffer: Buffer, mimeType: string): Pro
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new Error("GROQ_NOT_CONFIGURED");
 
-  const ext = mimeType.includes("wav") ? "wav" : mimeType.includes("mp4") ? "mp4" : "webm";
+  const ext = mimeType.includes("wav") ? "wav" : (mimeType.includes("mp4") || mimeType.includes("aac") || mimeType.includes("m4a")) ? "mp4" : "webm";
   const blob = new Blob([audioBuffer], { type: mimeType });
   const formData = new FormData();
   formData.append("file", blob, `audio.${ext}`);
@@ -2132,25 +2132,41 @@ app.post("/api/apple-session", async (req, res) => {
       firebaseUser = await authAdmin.getUser(uid);
     } catch (userErr: any) {
       if (userErr.code === "auth/user-not-found") {
-        firebaseUser = await authAdmin.createUser({
-          uid,
-          email: appleEmail || undefined,
-          displayName: typeof appleDisplayName === "string" && appleDisplayName.trim() ? appleDisplayName.trim() : undefined,
-          emailVerified: true
-        });
+        try {
+          if (appleEmail) {
+            try {
+              firebaseUser = await authAdmin.getUserByEmail(appleEmail);
+            } catch {}
+          }
+          if (!firebaseUser) {
+            firebaseUser = await authAdmin.createUser({
+              uid,
+              email: appleEmail || undefined,
+              displayName: typeof appleDisplayName === "string" && appleDisplayName.trim() ? appleDisplayName.trim() : undefined,
+              emailVerified: true
+            });
+          }
+        } catch (createErr: any) {
+          if (createErr.code === "auth/email-already-exists" && appleEmail) {
+            firebaseUser = await authAdmin.getUserByEmail(appleEmail);
+          } else {
+            throw createErr;
+          }
+        }
       } else {
         throw userErr;
       }
     }
 
-    const customToken = await authAdmin.createCustomToken(uid, {
+    const effectiveUid = firebaseUser?.uid || uid;
+    const customToken = await authAdmin.createCustomToken(effectiveUid, {
       provider: "apple",
       appleSub
     });
 
     return res.json({
       customToken,
-      uid,
+      uid: effectiveUid,
       email: appleEmail,
       displayName: firebaseUser?.displayName || appleDisplayName || null
     });
@@ -4260,7 +4276,12 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
-  const cleanMimeType = mimeType.split(";")[0].trim();
+  let cleanMimeType = mimeType.split(";")[0].trim().toLowerCase();
+  // iOS Safari / WKWebView MediaRecorder outputs AAC audio packaged in MP4 container (audio/mp4).
+  // Gemini's native audio multimodal input expects audio/aac, audio/wav, or audio/webm.
+  if (cleanMimeType === "audio/mp4" || cleanMimeType === "audio/m4a" || cleanMimeType === "audio/x-m4a" || cleanMimeType === "video/mp4") {
+    cleanMimeType = "audio/aac";
+  }
   let prompt = `You are a strict PTE Academic Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, score strictly on PTE Academic criteria (10-90 scale): Content — relevance and completeness of ideas addressing the task; Oral Fluency — naturalness of speech rhythm, smooth pacing, minimal unnatural hesitations or false starts; Pronunciation — clarity, accurate sound production, and intelligibility for a competent English speaker. Apply genuine PTE standards: a mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Identify specific weaknesses in pauses, rhythm, and mispronounced words.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
     prompt += ` The expected answer is: "${sanitizePromptValue(correctAnswer, 200)}". Please check if the spoken response matches this answer or is a valid synonym.`;

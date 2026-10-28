@@ -237,6 +237,27 @@ describe('Apple Authentication Helper Unit Tests', () => {
       expect(payload.sub).toBe('001234.userAppleUniqueId.5678');
       expect(payload.email).toBe('ninja.user@privaterelay.appleid.com');
     });
+    it('creates instant profile for Google users and preserves session parameters', () => {
+      const sessionCreatedAt = 1793165000000;
+      const user = createInstantAppleUser(
+        {
+          uid: 'google_user_uid_123',
+          email: 'google.student@gmail.com',
+          displayName: 'Google Scholar',
+          emailVerified: true
+        },
+        'session_google_777',
+        'Google Scholar',
+        sessionCreatedAt
+      );
+
+      expect(user.uid).toBe('google_user_uid_123');
+      expect(user.email).toBe('google.student@gmail.com');
+      expect(user.displayName).toBe('Google Scholar');
+      expect(user.emailVerified).toBe(true);
+      expect(user.sessionCreatedAt).toBe(sessionCreatedAt);
+      expect(user.currentSessionId).toBe('session_google_777');
+    });
   });
 
   describe('Version & Build Metadata', () => {
@@ -244,7 +265,7 @@ describe('Apple Authentication Helper Unit Tests', () => {
       const { APP_VERSION, APP_BUILD } = await import('../version');
       expect(APP_VERSION).toBeDefined();
       expect(typeof APP_VERSION).toBe('string');
-      expect(APP_BUILD).toBe(89);
+      expect(APP_BUILD).toBe(90);
     });
   });
 });

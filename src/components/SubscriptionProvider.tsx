@@ -252,8 +252,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               if (userData.currentSessionId && currentLocalSessionId) {
                 if (userData.currentSessionId !== currentLocalSessionId) {
                   const remoteCreatedAt = userData.sessionCreatedAt || 0;
-                  // Only sign out if another device established a newer session AFTER this device
-                  if (remoteCreatedAt > currentLocalCreatedAt) {
+                  // Only sign out if another device established a newer session AFTER this device (with 1.5s tolerance)
+                  if (currentLocalCreatedAt > 0 && remoteCreatedAt > (currentLocalCreatedAt + 1500)) {
                     console.warn('[Session] Superseded by newer session on another device. Signing out.');
                     auth.signOut();
                     clearLocalSession();
@@ -555,6 +555,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         if (res && res.error) {
+          const errCode = String(res.code || '');
+          const errMsg = String(res.error || '').toLowerCase();
+          if (errCode === '-5' || errCode === '1001' || errMsg.includes('cancel') || errMsg.includes('canceled') || errMsg.includes('cancelled')) {
+            console.log('[GoogleAuth] User cancelled Google sign-in sheet.');
+            setIsAuthenticating(false);
+            return;
+          }
           const err = new Error(res.error);
           (err as any).code = res.code;
           throw err;
@@ -590,11 +597,27 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           signedInUser = signRes.user;
         }
 
-        if (signedInUser) {
-          updateDoc(doc(db, 'users', signedInUser.uid), {
+        const targetUser = signedInUser || auth.currentUser;
+        if (targetUser) {
+          const instantUser = createInstantAppleUser(
+            {
+              uid: targetUser.uid,
+              email: targetUser.email || res?.user?.email || null,
+              displayName: targetUser.displayName || res?.user?.displayName || 'Ninja Scholar',
+              emailVerified: true
+            },
+            newSessionId,
+            targetUser.displayName || res?.user?.displayName || undefined,
+            sessionCreatedAt
+          );
+          setIsEmailVerified(true);
+          setUser(instantUser);
+          const userRef = doc(db, 'users', targetUser.uid);
+          setDoc(userRef, {
+            ...instantUser,
             currentSessionId: newSessionId,
             sessionCreatedAt
-          }).catch(() => {});
+          }, { merge: true }).catch(() => {});
         }
 
         setShowAuthModal(false);
@@ -604,6 +627,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const popRes = await signInWithPopup(auth, googleProvider);
       if (popRes.user) {
+        const instantUser = createInstantAppleUser(
+          {
+            uid: popRes.user.uid,
+            email: popRes.user.email || null,
+            displayName: popRes.user.displayName || 'Ninja Scholar',
+            emailVerified: true
+          },
+          newSessionId,
+          popRes.user.displayName || undefined,
+          sessionCreatedAt
+        );
+        setIsEmailVerified(true);
+        setUser(instantUser);
         updateDoc(doc(db, 'users', popRes.user.uid), {
           currentSessionId: newSessionId,
           sessionCreatedAt
@@ -743,6 +779,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
                   const { signInWithCustomToken } = await import('firebase/auth');
                   const customCred = await signInWithCustomToken(auth, data.customToken);
                   console.log('[AppleAuth iOS] Background Firebase Custom Token linked:', customCred.user.uid);
+                  const linkedUid = customCred.user.uid;
+                  await updateDoc(doc(db, 'users', linkedUid), {
+                    currentSessionId: newSessionId,
+                    sessionCreatedAt
+                  }).catch(() => {
+                    return setDoc(doc(db, 'users', linkedUid), {
+                      ...instantUser,
+                      uid: linkedUid,
+                      currentSessionId: newSessionId,
+                      sessionCreatedAt
+                    }, { merge: true });
+                  });
+                  setUser(prev => prev ? { ...prev, uid: linkedUid } : prev);
                   return;
                 }
               }
@@ -756,10 +805,28 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
               const provider = new OAuthProvider('apple.com');
               const credential = provider.credential({ idToken, rawNonce });
               const fbTimeout = new Promise<never>((_, reject) => setTimeout(reject, 4000));
+              let linkedUser: any = null;
               if (auth.currentUser && auth.currentUser.isAnonymous) {
-                await Promise.race([linkWithCredential(auth.currentUser, credential), fbTimeout]);
+                const r = await Promise.race([linkWithCredential(auth.currentUser, credential), fbTimeout]);
+                linkedUser = r.user;
               } else {
-                await Promise.race([signInWithCredential(auth, credential), fbTimeout]);
+                const r = await Promise.race([signInWithCredential(auth, credential), fbTimeout]);
+                linkedUser = r.user;
+              }
+              if (linkedUser) {
+                const linkedUid = linkedUser.uid;
+                await updateDoc(doc(db, 'users', linkedUid), {
+                  currentSessionId: newSessionId,
+                  sessionCreatedAt
+                }).catch(() => {
+                  return setDoc(doc(db, 'users', linkedUid), {
+                    ...instantUser,
+                    uid: linkedUid,
+                    currentSessionId: newSessionId,
+                    sessionCreatedAt
+                  }, { merge: true });
+                });
+                setUser(prev => prev ? { ...prev, uid: linkedUid } : prev);
               }
             }
           } catch (bgErr) {

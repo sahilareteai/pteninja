@@ -244,6 +244,7 @@ import GoogleSignIn
 class GoogleAuthProviderHandler: NSObject {
     let errorSdkNotIncluded = "The Google Sign-In SDK is not included in this build. Add the required CocoaPods subspec or Swift package trait."
     var pluginImplementation: FirebaseAuthentication
+    var savedCall: CAPPluginCall?
 
     init(_ pluginImplementation: FirebaseAuthentication) {
         self.pluginImplementation = pluginImplementation
@@ -251,10 +252,14 @@ class GoogleAuthProviderHandler: NSObject {
     }
 
     func signIn(call: CAPPluginCall) {
+        call.keepAlive = true
+        self.savedCall = call
         startSignInWithGoogleFlow(call, isLink: false)
     }
 
     func link(call: CAPPluginCall) {
+        call.keepAlive = true
+        self.savedCall = call
         startSignInWithGoogleFlow(call, isLink: true)
     }
 
@@ -267,10 +272,11 @@ class GoogleAuthProviderHandler: NSObject {
     private func startSignInWithGoogleFlow(_ call: CAPPluginCall, isLink: Bool) {
         #if RGCFA_INCLUDE_GOOGLE
         guard let clientId = FirebaseApp.app()?.options.clientID else {
-            if isLink == true {
-                self.pluginImplementation.handleFailedLink(message: "Google client ID not configured in Firebase.", error: nil)
-            } else {
-                self.pluginImplementation.handleFailedSignIn(message: "Google client ID not configured in Firebase.", error: nil)
+            DispatchQueue.main.async {
+                guard let saved = self.savedCall else { return }
+                saved.keepAlive = false
+                self.savedCall = nil
+                saved.resolve(["error": "Google client ID not configured in Firebase.", "code": "NO_CLIENT_ID"])
             }
             return
         }
@@ -292,53 +298,79 @@ class GoogleAuthProviderHandler: NSObject {
             presentingVC = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first(where: { $0.isKeyWindow })?.rootViewController
         }
         guard let controller = presentingVC else {
-            if isLink == true {
-                self.pluginImplementation.handleFailedLink(message: "Unable to present Google Sign-In view controller.", error: nil)
-            } else {
-                self.pluginImplementation.handleFailedSignIn(message: "Unable to present Google Sign-In view controller.", error: nil)
+            DispatchQueue.main.async {
+                guard let saved = self.savedCall else { return }
+                saved.keepAlive = false
+                self.savedCall = nil
+                saved.resolve(["error": "Unable to present Google Sign-In view controller.", "code": "NO_CONTROLLER"])
             }
             return
         }
         let scopes = (call.options["scopes"] as? [String]) ?? []
 
         DispatchQueue.main.async {
-            GIDSignIn.sharedInstance.signIn(withPresenting: controller, hint: nil, additionalScopes: scopes) { [unowned self] result, error in
-                if let error = error {
-                    if isLink == true {
-                        self.pluginImplementation.handleFailedLink(message: nil, error: error)
-                    } else {
-                        self.pluginImplementation.handleFailedSignIn(message: nil, error: error)
-                    }
-                    return
-                }
+            GIDSignIn.sharedInstance.signIn(withPresenting: controller, hint: nil, additionalScopes: scopes) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    guard let self = self, let saved = self.savedCall else { return }
+                    saved.keepAlive = false
+                    self.savedCall = nil
 
-                guard let user = result?.user,
-                      let idToken = user.idToken?.tokenString
-                else {
-                    if isLink == true {
-                        self.pluginImplementation.handleFailedLink(message: "Unable to obtain Google identity token.", error: nil)
-                    } else {
-                        self.pluginImplementation.handleFailedSignIn(message: "Unable to obtain Google identity token.", error: nil)
+                    if let error = error {
+                        let nsError = error as NSError
+                        let codeStr = String(nsError.code)
+                        let message = error.localizedDescription
+                        CAPLog.print("[GoogleAuth] Sign-in failed with code: ", codeStr, ", error: ", message)
+                        saved.resolve(["error": message, "code": codeStr])
+                        return
                     }
-                    return
-                }
-                let accessToken = user.accessToken.tokenString
-                let serverAuthCode = result?.serverAuthCode
-                let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
-                if isLink == true {
-                    self.pluginImplementation.handleSuccessfulLink(credential: credential, idToken: idToken, nonce: nil,
-                                                                   accessToken: accessToken, serverAuthCode: serverAuthCode, displayName: nil, authorizationCode: nil)
-                } else {
-                    self.pluginImplementation.handleSuccessfulSignIn(credential: credential, idToken: idToken, nonce: nil,
-                                                                     accessToken: accessToken, displayName: nil, authorizationCode: nil, serverAuthCode: serverAuthCode)
+
+                    guard let user = result?.user,
+                          let idToken = user.idToken?.tokenString else {
+                        saved.resolve(["error": "Unable to obtain Google identity token.", "code": "NO_TOKEN"])
+                        return
+                    }
+
+                    let accessToken = user.accessToken.tokenString
+                    let serverAuthCode = result?.serverAuthCode ?? ""
+                    let displayName = user.profile?.name ?? ""
+                    let email = user.profile?.email ?? ""
+                    let uid = user.userID ?? ""
+
+                    let credDict: [String: Any] = [
+                        "idToken": idToken,
+                        "accessToken": accessToken,
+                        "serverAuthCode": serverAuthCode,
+                        "displayName": displayName,
+                        "email": email
+                    ]
+
+                    let userDict: [String: Any] = [
+                        "uid": uid,
+                        "email": email,
+                        "displayName": displayName
+                    ]
+
+                    let resDict: [String: Any] = [
+                        "idToken": idToken,
+                        "accessToken": accessToken,
+                        "credential": credDict,
+                        "user": userDict,
+                        "displayName": displayName,
+                        "email": email,
+                        "serverAuthCode": serverAuthCode
+                    ]
+
+                    CAPLog.print("[GoogleAuth] Successfully resolved Google credential directly on main thread.")
+                    saved.resolve(resDict)
                 }
             }
         }
         #else
-        if isLink == true {
-            pluginImplementation.handleFailedLink(message: errorSdkNotIncluded, error: nil)
-        } else {
-            pluginImplementation.handleFailedSignIn(message: errorSdkNotIncluded, error: nil)
+        DispatchQueue.main.async {
+            guard let saved = self.savedCall else { return }
+            saved.keepAlive = false
+            self.savedCall = nil
+            saved.resolve(["error": self.errorSdkNotIncluded, "code": "SDK_NOT_INCLUDED"])
         }
         #endif
     }
