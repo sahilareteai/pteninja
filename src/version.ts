@@ -1,3 +1,3 @@
 export const APP_VERSION = '1.0';
-export const APP_BUILD = 96;
+export const APP_BUILD = 97;
 
