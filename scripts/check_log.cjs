@@ -15,7 +15,9 @@ try {
     console.log(`- ${r.name} (#${r.id}) Status: ${r.status}, Conclusion: ${r.conclusion}`);
   }
 
-  const targetRun = runs[0];
+  const targetRun = process.argv[2] 
+    ? (runs.find(r => String(r.id) === process.argv[2]) || { id: process.argv[2], name: 'Target Run', status: 'unknown', conclusion: 'unknown' })
+    : runs[0];
   console.log(`\nInspecting ${targetRun.name} (#${targetRun.id}): Status: ${targetRun.status}, Conclusion: ${targetRun.conclusion}`);
   const jobsJson = execSync(`curl.exe -s -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/sahilareteai/pteninja/actions/runs/${targetRun.id}/jobs"`).toString();
   const jobs = JSON.parse(jobsJson).jobs;
