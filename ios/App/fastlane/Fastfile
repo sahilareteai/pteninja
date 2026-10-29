@@ -138,12 +138,17 @@ platform :ios do
     )
 
     build_number = ENV["BUILD_NUMBER"]
+    if build_number.nil? || build_number.strip.empty?
+      build_number = "99"
+    end
     app_version = ENV["APP_VERSION"] || "1.0"
 
-    UI.message("Preparing App Store submission for version #{app_version} (build: #{build_number || 'UI attached'})...")
+    UI.message("Preparing App Store submission for version #{app_version} (build: #{build_number})...")
     UI.message("Note: submit_for_review is set to FALSE per user instruction.")
 
     # Ensure App Store Review Detail exists on Apple's servers so deliver does not crash with No data
+    target_version = nil
+    app = nil
     begin
       app = Spaceship::ConnectAPI::App.find("com.pteninja.app")
       if app
@@ -161,11 +166,25 @@ platform :ios do
               contactFirstName: "Sahil",
               contactLastName: "Arora",
               contactEmail: "support@pteninja.com",
-              contactPhone: "+61400000000",
+              contactPhone: "+91-9289063827",
               demoAccountRequired: false,
               notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app."
             })
             UI.success("App Store Review Details successfully initialized.")
+          else
+            UI.message("Updating App Store Review Details contact info for version #{app_version}...")
+            begin
+              rd.update(attributes: {
+                contactFirstName: "Sahil",
+                contactLastName: "Arora",
+                contactEmail: "support@pteninja.com",
+                contactPhone: "+91-9289063827",
+                notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app."
+              })
+              UI.success("App Store Review Details contact phone updated to +91-9289063827.")
+            rescue => e
+              UI.message("Notice updating review detail: #{e.message}")
+            end
           end
         end
       end
@@ -195,6 +214,71 @@ platform :ios do
     end
 
     deliver(deliver_config)
+
+    # Attempt to associate subscription items to the review submission
+    begin
+      if app && target_version
+        UI.message("Checking review submission container for app version #{app_version} and subscriptions...")
+        platform_enum = Spaceship::ConnectAPI::Platform::IOS
+        
+        # Check existing or create review submission container
+        review_sub = nil
+        begin
+          review_sub = app.get_ready_review_submission(platform: platform_enum, includes: "items")
+        rescue => e
+          UI.message("Notice fetching ready review submission: #{e.message}")
+        end
+
+        if review_sub.nil?
+          UI.message("Creating new Review Submission container for iOS...")
+          begin
+            review_sub = app.create_review_submission(platform: platform_enum)
+          rescue => cr_err
+            UI.message("Review submission creation notice: #{cr_err.message}")
+          end
+        end
+
+        if review_sub
+          UI.message("Review submission container ID: #{review_sub.id}")
+          existing_items = review_sub.items || []
+          has_version_item = existing_items.any? { |i| i.respond_to?(:app_store_version_id) && i.app_store_version_id == target_version.id }
+          
+          unless has_version_item
+            UI.message("Attaching App Store version #{target_version.id} to review submission...")
+            begin
+              review_sub.add_app_store_version_to_review_items(app_store_version_id: target_version.id)
+              UI.success("Attached version to review submission.")
+            rescue => e
+              UI.message("Notice attaching version to review items: #{e.message}")
+            end
+          end
+
+          # Fetch and link subscriptions
+          begin
+            subs_resp = Spaceship::ConnectAPI.get_subscriptions(app_id: app.id)
+            all_subs = subs_resp.to_models || []
+            UI.message("Found #{all_subs.count} subscriptions in App Store Connect: #{all_subs.map { |s| s.respond_to?(:product_id) ? s.product_id : s.id }.join(', ')}")
+            
+            all_subs.each do |sub|
+              begin
+                UI.message("Associating subscription #{sub.id} to review submission...")
+                Spaceship::ConnectAPI.client.post_review_submission_item(
+                  review_submission_id: review_sub.id,
+                  subscription_id: sub.id
+                )
+                UI.success("Associated subscription #{sub.id}!")
+              rescue => sub_err
+                UI.message("Notice associating subscription #{sub.id}: #{sub_err.message}")
+              end
+            end
+          rescue => e
+            UI.message("Notice during subscription query: #{e.message}")
+          end
+        end
+      end
+    rescue => e
+      UI.message("Notice during review submission association: #{e.message}")
+    end
 
     UI.success("App Store Connect submission prepared successfully! Build #{build_number} and all assets are staged.")
     UI.important("The app has NOT been submitted for review. You can now review everything in App Store Connect before submitting.")
