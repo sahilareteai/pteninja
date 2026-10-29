@@ -63,11 +63,24 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 let clean = productId.replacingOccurrences(of: "pte_ninja_", with: "")
                 candidateSet.insert("com.pteninja.app.\(productId)")
                 candidateSet.insert("com.pteninja.app.\(clean)")
+                candidateSet.insert("com.pteninja.app.sub.\(clean)")
+                candidateSet.insert("com.pteninja.app.subscription.\(clean)")
+                candidateSet.insert("com.pteninja.app.vip.\(clean)")
                 candidateSet.insert("com.pteninja.\(clean)")
                 candidateSet.insert("com.pteninja.\(productId)")
                 candidateSet.insert("pteninja_\(clean)")
+                candidateSet.insert("pteninja.\(clean)")
                 candidateSet.insert("pte_\(clean)")
+                candidateSet.insert("\(clean)_vip")
+                candidateSet.insert("vip_\(clean)")
+                candidateSet.insert("sub_\(clean)")
                 candidateSet.insert(clean)
+                if clean == "annual" {
+                    candidateSet.insert("yearly")
+                    candidateSet.insert("pte_ninja_yearly")
+                    candidateSet.insert("com.pteninja.app.yearly")
+                    candidateSet.insert("1year")
+                }
 
                 if let extraCandidates = call.getArray("candidateIds") as? [String] {
                     for extra in extraCandidates {
@@ -137,11 +150,24 @@ public class AppleStoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                     let clean = id.replacingOccurrences(of: "pte_ninja_", with: "")
                     candidateSet.insert("com.pteninja.app.\(id)")
                     candidateSet.insert("com.pteninja.app.\(clean)")
+                    candidateSet.insert("com.pteninja.app.sub.\(clean)")
+                    candidateSet.insert("com.pteninja.app.subscription.\(clean)")
+                    candidateSet.insert("com.pteninja.app.vip.\(clean)")
                     candidateSet.insert("com.pteninja.\(clean)")
                     candidateSet.insert("com.pteninja.\(id)")
                     candidateSet.insert("pteninja_\(clean)")
+                    candidateSet.insert("pteninja.\(clean)")
                     candidateSet.insert("pte_\(clean)")
+                    candidateSet.insert("\(clean)_vip")
+                    candidateSet.insert("vip_\(clean)")
+                    candidateSet.insert("sub_\(clean)")
                     candidateSet.insert(clean)
+                    if clean == "annual" {
+                        candidateSet.insert("yearly")
+                        candidateSet.insert("pte_ninja_yearly")
+                        candidateSet.insert("com.pteninja.app.yearly")
+                        candidateSet.insert("1year")
+                    }
                 }
 
                 CAPLog.print("AppleStoreKit: Querying details for candidates: \(candidateSet)")

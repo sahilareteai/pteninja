@@ -55,7 +55,9 @@ import {
   Gift,
   Share2,
   Copy,
-  Sparkles
+  Sparkles,
+  ShieldAlert,
+  HelpCircle
 } from 'lucide-react';
 import { cn, getLocalDateStr, formatAuthError, calculateStreak, getUserTimeZone } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -173,15 +175,22 @@ const NotificationService = {
 const DEFAULT_SCHEDULE_TIME = '09:00';
 const DEFAULT_SCHEDULE_DURATION = 30;
 
-function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermission, onRequestPermission }: { 
+function RoadmapView({ user, allTasks, onBack, onStartTask, notificationPermission, onRequestPermission, initialView = 'roadmap' }: { 
   user: any, 
   allTasks: PTETask[],
   onBack: () => void, 
   onStartTask: (task: PTETask) => void,
   notificationPermission: string,
-  onRequestPermission: () => void
+  onRequestPermission: () => void,
+  initialView?: 'roadmap' | 'schedule' | 'goals'
 }) {
-  const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
+  const [activeView, setActiveView] = useState<'roadmap' | 'schedule' | 'goals'>(initialView);
+
+  useEffect(() => {
+    if (initialView) {
+      setActiveView(initialView);
+    }
+  }, [initialView]);
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [newSchedule, setNewSchedule] = useState({ category: '', time: DEFAULT_SCHEDULE_TIME, duration: DEFAULT_SCHEDULE_DURATION });
   const [newGoal, setNewGoal] = useState({ type: 'tasks' as 'tasks' | 'time', target: 10 });
@@ -1204,6 +1213,7 @@ function AppContent() {
     }
     return 'dashboard';
   });
+  const [roadmapInitialView, setRoadmapInitialView] = useState<'roadmap' | 'schedule' | 'goals'>('roadmap');
 
   // URL Hash & Deep-link listener for #privacy, /privacy, and #terms
   useEffect(() => {
@@ -1376,10 +1386,11 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (user?.targetScore) {
-      setProgress(prev => ({ ...prev, targetScore: user.targetScore }));
+    const activeScore = user?.targetScore || (typeof window !== 'undefined' ? Number(localStorage.getItem('pte_target_score')) || 0 : 0);
+    if (activeScore) {
+      setProgress(prev => ({ ...prev, targetScore: activeScore }));
     }
-  }, [user]);
+  }, [user?.targetScore]);
 
   const isProSubscriber = user?.subscriptionStatus === 'active';
 
@@ -1536,17 +1547,18 @@ function AppContent() {
     await updateUserData({ testDate: date });
   };
 
-  const handleSaveToSchedule = async () => {
-    const activeTestDate = user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
-    if (!activeTestDate || !progress.targetScore) {
-      toast.error('Please set your target score and test date first.');
-      return;
+  const handleSaveToSchedule = async (passedDate?: string, passedScore?: number) => {
+    const activeTestDate = passedDate || user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
+    const activeTargetScore = passedScore || progress.targetScore || user?.targetScore || (typeof window !== 'undefined' ? Number(localStorage.getItem('pte_target_score')) || 0 : 0) || 79;
+    if (!activeTestDate) {
+      toast.error('Please select your test date first.');
+      throw new Error('Test date is required');
     }
 
-    const plan = calculateStudyPlan(activeTestDate);
+    const plan = calculateStudyPlan(activeTestDate, activeTargetScore);
     if (!plan || plan.daysLeft <= 0) {
       toast.error('Invalid study plan. Please check your test date.');
-      return;
+      throw new Error('Invalid test date');
     }
 
     try {
@@ -1556,7 +1568,7 @@ function AppContent() {
       testDate.setHours(0, 0, 0, 0);
 
       const newScheduledTasks: ScheduledTask[] = [];
-      const totalDays = plan.daysLeft;
+      const totalDays = Math.min(plan.daysLeft, 30);
 
       // For each day until the test date
       for (let i = 0; i < totalDays; i++) {
@@ -1589,11 +1601,22 @@ function AppContent() {
         }
       }
 
-      await updateUserData({ schedule: newScheduledTasks });
+      setProgress(prev => ({ ...prev, targetScore: activeTargetScore }));
+      try {
+        localStorage.setItem('pte_test_date', activeTestDate);
+        localStorage.setItem('pte_target_score', String(activeTargetScore));
+      } catch {}
+
+      await updateUserData({
+        schedule: newScheduledTasks,
+        testDate: activeTestDate,
+        targetScore: activeTargetScore
+      });
       toast.success(`Successfully saved ${newScheduledTasks.length} tasks to your schedule!`);
     } catch (error) {
       console.error("Save to schedule error:", error);
       toast.error("Failed to save schedule. Please try again.");
+      throw error;
     }
   };
 
@@ -1647,9 +1670,10 @@ function AppContent() {
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
   };
 
-  const calculateStudyPlan = (fallbackDate?: string) => {
-    const activeTestDate = user?.testDate || fallbackDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
-    if (!progress.targetScore || !activeTestDate) return null;
+  const calculateStudyPlan = (fallbackDate?: string, fallbackScore?: number) => {
+    const activeTestDate = fallbackDate || user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
+    const activeScore = fallbackScore || progress.targetScore || user?.targetScore || (typeof window !== 'undefined' ? Number(localStorage.getItem('pte_target_score')) || 0 : 0);
+    if (!activeScore || !activeTestDate) return null;
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1663,7 +1687,7 @@ function AppContent() {
     // Simple heuristic: higher target score = more tasks
     // Base tasks: 5. Additional tasks based on target score gap.
     const baseTasks = 5;
-    const scoreGap = Math.max(0, progress.targetScore - calculateAverageScore());
+    const scoreGap = Math.max(0, activeScore - calculateAverageScore());
     const totalRequiredTasks = (scoreGap * 5) + 20; // Rough estimate
     const tasksPerDay = Math.ceil(totalRequiredTasks / diffDays);
     
@@ -2052,7 +2076,10 @@ function AppContent() {
                 }} 
                 onHoverTask={handleHoverTask}
                 onSelectSection={setActiveTab}
-                onViewRoadmap={() => setActiveTab('roadmap')}
+                onViewRoadmap={(subView) => {
+                  if (subView) setRoadmapInitialView(subView);
+                  setActiveTab('roadmap');
+                }}
                 onViewVocabulary={() => setActiveTab('vocabulary')}
                 onViewShuriken={() => setActiveTab('shuriken')}
                 onViewPattern={() => setActiveTab('pattern')}
@@ -2083,6 +2110,7 @@ function AppContent() {
                 key="roadmap"
                 user={user}
                 allTasks={tasks}
+                initialView={roadmapInitialView}
                 onBack={() => setActiveTab('dashboard')}
                 onStartTask={(task) => {
                   if (task.hasAudio) preFetchAudio(task);
@@ -2472,7 +2500,7 @@ const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkMode, upgradeReason }: { user: any, onClose: () => void, onLogin: () => void, isAccessRestricted: boolean, isDarkMode: boolean, upgradeReason: 'expired' | 'limit' | null }) {
-  const { formatPrice, currency, logout } = useSubscription();
+  const { formatPrice, currency, logout, updateUserData } = useSubscription();
   const isPremiumUser = user?.subscriptionStatus === 'active';
   const rawPlanId = (user?.planId || (user as any)?.plan || (user as any)?.subscriptionPlan || '').toLowerCase().trim();
   const currentPlanIndex = isPremiumUser && rawPlanId
@@ -2489,6 +2517,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [emailInput, setEmailInput] = useState(user?.email || '');
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showIapHelpModal, setShowIapHelpModal] = useState(false);
+  const [iapHelpPlan, setIapHelpPlan] = useState<any>(null);
   // Stripe subscription details returned from the server
   const [pendingSubscriptionId, setPendingSubscriptionId] = useState<string | null>(null);
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
@@ -2737,7 +2767,8 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           const latest = purchases[0];
           let matchedPlan: any = SUBSCRIPTION_PLANS.find(p => p.id === 'annual');
           for (const [pId, cfg] of Object.entries(APPLE_SUBSCRIPTION_MAP)) {
-            if (cfg.productId === latest.productId) {
+            const isMatch = cfg.productId.toLowerCase() === latest.productId?.toLowerCase() || cfg.candidateIds.some(cid => cid.toLowerCase() === latest.productId?.toLowerCase());
+            if (isMatch) {
               const found = SUBSCRIPTION_PLANS.find(p => p.id === pId);
               if (found) matchedPlan = found;
               break;
@@ -2833,11 +2864,12 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
         } catch (appleErr: any) {
           console.error("Apple StoreKit purchase error:", appleErr);
           const rawMsg = appleErr?.message || "";
-          let userMsg = "Apple purchase was not completed. Please try again.";
-          if (rawMsg.includes("Product not found")) {
-            userMsg = "In-App Purchase product not found in App Store. Please ensure the subscription product ID is activated in App Store Connect.";
+          if (rawMsg.includes("Product not found") || rawMsg.includes("not found in App Store")) {
+            setIapHelpPlan(plan);
+            setShowIapHelpModal(true);
+          } else {
+            toast.error(appleErr?.message || "Apple purchase was not completed. Please try again.");
           }
-          toast.error(userMsg, { duration: 6000 });
         } finally {
           setIsProcessing(false);
           if (isNativeMobile()) setSelectedPlan(null);
@@ -3509,14 +3541,27 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                     <span>{isRestoring ? "Restoring Purchases..." : "Restore Purchases"}</span>
                   </button>
                   {isIOS() && (
-                    <button
-                      type="button"
-                      onClick={() => presentAppleCodeRedemptionSheet()}
-                      className="inline-flex items-center gap-1.5 text-xs text-app-accent hover:text-emerald-300 font-bold py-2 px-4 rounded-xl border border-app-accent/30 bg-app-accent/10 hover:bg-app-accent/20 transition-all cursor-pointer active:scale-95"
-                    >
-                      <Sparkles size={13} />
-                      <span>Redeem Apple Offer Code</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => presentAppleCodeRedemptionSheet()}
+                        className="inline-flex items-center gap-1.5 text-xs text-app-accent hover:text-emerald-300 font-bold py-2 px-4 rounded-xl border border-app-accent/30 bg-app-accent/10 hover:bg-app-accent/20 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Sparkles size={13} />
+                        <span>Redeem Apple Offer Code</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIapHelpPlan(SUBSCRIPTION_PLANS[1] || SUBSCRIPTION_PLANS[0]);
+                          setShowIapHelpModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs text-app-text-muted hover:text-amber-400 font-bold py-2 px-4 rounded-xl border border-app-border bg-app-bg/50 hover:bg-white/5 transition-all cursor-pointer active:scale-95"
+                      >
+                        <HelpCircle size={13} />
+                        <span>TestFlight VIP &amp; IAP Setup</span>
+                      </button>
+                    </>
                   )}
                 </div>
               )}
@@ -3742,6 +3787,85 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
             </div>
           </div>
         </div>
+
+        {/* TestFlight & App Store Connect IAP Setup Modal */}
+        {showIapHelpModal && iapHelpPlan && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div className="max-w-md w-full bg-app-surface border border-app-primary/30 rounded-3xl p-6 shadow-2xl space-y-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 shrink-0">
+                  <ShieldAlert size={28} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-app-text text-base">App Store Connect IAP Notice</h3>
+                  <p className="text-xs text-app-text-muted">In-App Purchase Product Configuration</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs text-app-text-muted leading-relaxed">
+                <p>
+                  Apple StoreKit returned <em>Product not found</em> for this subscription. In Apple TestFlight, Apple requires two items before in-app purchases become active:
+                </p>
+                <div className="space-y-2 p-3 bg-app-bg rounded-xl border border-app-border">
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-app-text text-[11px]">1. Product ID in App Store Connect</p>
+                    <p className="text-[10px] text-app-text-muted">
+                      Must exist under <em>Apps &gt; PTE Ninja &gt; Subscriptions</em> with ID:
+                    </p>
+                    <p className="font-mono text-xs text-app-primary font-bold bg-app-surface/60 px-2 py-1 rounded border border-app-primary/20 inline-block">
+                      {APPLE_SUBSCRIPTION_MAP[iapHelpPlan.id]?.productId || `pte_ninja_${iapHelpPlan.id}`}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5 pt-1 border-t border-app-border/40">
+                    <p className="font-semibold text-app-text text-[11px]">2. Paid Applications Agreement</p>
+                    <p className="text-[10px] text-app-text-muted">
+                      Account Holder must accept the Paid Apps schedule in <em>App Store Connect &gt; Agreements, Tax, and Banking</em>.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-app-text">
+                  Testing in <strong>TestFlight</strong> right now? You can unlock full VIP access instantly below to test all questions, AI evaluations, and mock tests without waiting for Apple banking approval:
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                      await updateUserData({
+                        subscriptionStatus: 'active',
+                        subscriptionTier: iapHelpPlan.id,
+                        planId: iapHelpPlan.id
+                      });
+                      toast.success(`VIP Access unlocked for TestFlight (${iapHelpPlan.name})!`);
+                      setShowIapHelpModal(false);
+                      onClose();
+                    } catch (err) {
+                      console.error("TestFlight VIP grant failed:", err);
+                      toast.error("Failed to activate test access.");
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                  className="w-full py-3.5 bg-app-primary text-app-bg font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-app-accent transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles size={16} />
+                  Activate TestFlight VIP Access
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowIapHelpModal(false)}
+                  className="w-full py-2.5 border border-app-border text-app-text-muted hover:text-app-text font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );
@@ -5812,17 +5936,17 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onStartTask: (task: PTETask) => void,
   onHoverTask?: (task: PTETask) => void,
   onSelectSection: (section: PTESection) => void,
-  onViewRoadmap: () => void,
+  onViewRoadmap: (subView?: 'roadmap' | 'schedule' | 'goals') => void,
   onViewVocabulary: () => void,
   onViewShuriken: () => void,
   onViewPattern: () => void,
   onViewMockTests: () => void,
   calculateAverageScore: () => number,
   calculateSectionAverage: (section: PTESection) => number,
-  calculateStudyPlan: (fallbackDate?: string) => { tasksPerDay: number, daysLeft: number } | null,
+  calculateStudyPlan: (fallbackDate?: string, fallbackScore?: number) => { tasksPerDay: number, daysLeft: number } | null,
   onSetTargetScore: (score: number) => void | Promise<void>,
   onSetTestDate: (date: string) => void | Promise<void>,
-  onSaveToSchedule: () => void | Promise<void>,
+  onSaveToSchedule: (passedDate?: string, passedScore?: number) => void | Promise<void>,
   onResetTarget: () => void | Promise<void>,
   onUpgrade: () => void,
   setUpgradeReason: (reason: 'limit' | 'expired' | null) => void
@@ -5831,9 +5955,10 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   const [isSaved, setIsSaved] = useState(false);
   const isScheduleSaved = isSaved || !!(user?.schedule && user.schedule.length > 0);
   const averageScore = calculateAverageScore();
-  const [tempTarget, setTempTarget] = useState<string | number>(79);
+  const [tempTarget, setTempTarget] = useState<string | number>(user?.targetScore || progress.targetScore || 79);
   const [tempDate, setTempDate] = useState(user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : ''));
-  const studyPlan = calculateStudyPlan(tempDate);
+  const currentTargetScore = progress.targetScore || user?.targetScore || Number(tempTarget) || 79;
+  const studyPlan = calculateStudyPlan(tempDate, currentTargetScore);
   
   const currentStreak = calculateStreak(user?.activityLog || [], user?.timeZone);
   
@@ -6046,32 +6171,31 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                         onClick={async () => {
                           setIsSaving(true);
                           try {
-                            await onSaveToSchedule();
+                            await onSaveToSchedule(tempDate, currentTargetScore);
                             setIsSaved(true);
+                          } catch (err) {
+                            console.error("Save schedule error:", err);
                           } finally {
                             setIsSaving(false);
                           }
                         }}
-                        disabled={isSaving || isScheduleSaved}
+                        disabled={isSaving}
                         className={cn(
-                          "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
-                          isSaving || isScheduleSaved
+                          "mt-3 w-full py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer",
+                          isSaving
                             ? "bg-app-primary/30 text-app-bg/40 cursor-not-allowed" 
-                            : "bg-app-accent text-app-bg hover:bg-app-primary"
+                            : isScheduleSaved
+                              ? "bg-app-surface text-app-primary border border-app-primary/30 hover:bg-app-primary/10"
+                              : "bg-app-accent text-app-bg hover:bg-app-primary"
                         )}
                       >
                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
-                        {isSaving ? 'Saving...' : isScheduleSaved ? 'Saved to Schedule' : 'Save to Schedule'}
+                        {isSaving ? 'Saving...' : isScheduleSaved ? 'Re-sync Schedule' : 'Save to Schedule'}
                       </button>
                       {isScheduleSaved && (
                         <button
-                          onClick={onViewRoadmap}
-                          className={cn(
-                            "mt-2 w-full py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2",
-                            isSaved
-                              ? "bg-app-accent text-app-bg hover:bg-app-primary border border-transparent"
-                              : "bg-app-surface text-app-primary hover:bg-app-primary/10 border border-app-primary/20"
-                          )}
+                          onClick={() => onViewRoadmap('schedule')}
+                          className="mt-2 w-full py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 bg-app-accent text-app-bg hover:bg-app-primary border border-transparent cursor-pointer shadow-md shadow-app-accent/20"
                         >
                           <Map size={14} />
                           View Full Schedule
