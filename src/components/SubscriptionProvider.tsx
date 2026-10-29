@@ -36,7 +36,7 @@ import { isNativeMobile, isIOS, isAndroid, resolveApiUrl } from '../lib/mobile';
 import { extractAppleCredentials, isAppleAuthCancellation, createInstantAppleUser } from '../lib/appleAuth';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Zap, Check, CheckCircle, X, ShieldCheck, CreditCard, User, LogOut, Loader2, Mail, Phone, Key, ArrowRight, Sparkles } from 'lucide-react';
-import { getLocalDateStr, formatAuthError } from '../lib/utils';
+import { getLocalDateStr, formatAuthError, getUserTimeZone } from '../lib/utils';
 import { Logo } from './Logo';
 
 interface SubscriptionContextType {
@@ -63,6 +63,8 @@ interface SubscriptionContextType {
   googleLogin: () => Promise<void>;
   appleLogin?: () => Promise<void>;
   quickGuestAccess: () => Promise<void>;
+  updateUserData: (data: Partial<UserData>) => Promise<void>;
+  recordActivity: (customTimeZone?: string) => Promise<void>;
 }
 
 const establishNewSession = () => {
@@ -242,6 +244,28 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             if (userData.emailVerified) {
               setIsEmailVerified(true);
             }
+
+            // Merge with local activityLog to guarantee streak updates never regress
+            try {
+              const localLogStr = localStorage.getItem('pte_local_activity_log');
+              if (localLogStr) {
+                const localLog = JSON.parse(localLogStr);
+                if (Array.isArray(localLog) && localLog.length > 0) {
+                  userData.activityLog = Array.from(new Set([...(userData.activityLog || []), ...localLog])).sort();
+                }
+              }
+            } catch (e) {}
+
+            // Merge with local favorite words for flashcards
+            try {
+              const localFavStr = localStorage.getItem('pte_favorite_words');
+              if (localFavStr) {
+                const localFav = JSON.parse(localFavStr);
+                if (Array.isArray(localFav) && localFav.length > 0) {
+                  userData.favoriteWords = Array.from(new Set([...(userData.favoriteWords || []), ...localFav]));
+                }
+              }
+            } catch (e) {}
             
             // Multi-device session enforcement
             // Only enforce for registered accounts (never kick out anonymous guest users)
@@ -1399,19 +1423,100 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [user, isAccessRestricted]);
   
-  useEffect(() => {
-    if (user && user.uid) {
-      const today = getLocalDateStr();
-      const activityLog = user.activityLog || [];
-      
-      if (!activityLog.includes(today)) {
-        const newLog = [...activityLog, today].sort();
+  const updateUserData = async (data: Partial<UserData>) => {
+    setUser(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, ...data };
+      try {
+        localStorage.setItem('pte_cached_user', JSON.stringify(updated));
+        if (data.favoriteWords) {
+          localStorage.setItem('pte_favorite_words', JSON.stringify(data.favoriteWords));
+        }
+        if (data.activityLog) {
+          localStorage.setItem('pte_local_activity_log', JSON.stringify(data.activityLog));
+        }
+      } catch (e) {}
+      return updated;
+    });
+
+    if (user?.uid) {
+      try {
         const userRef = doc(db, 'users', user.uid);
-        updateDoc(userRef, { activityLog: newLog }).catch(err => {
-          handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-        });
+        await updateDoc(userRef, data);
+      } catch (err) {
+        console.warn('updateUserData firestore error:', err);
       }
     }
+  };
+
+  const recordActivity = async (customTimeZone?: string) => {
+    const tz = customTimeZone || user?.timeZone || getUserTimeZone();
+    const today = getLocalDateStr(new Date(), tz);
+
+    let existingLog: string[] = [];
+    if (user?.activityLog && Array.isArray(user.activityLog)) {
+      existingLog = user.activityLog;
+    } else {
+      try {
+        const cached = localStorage.getItem('pte_local_activity_log');
+        if (cached) existingLog = JSON.parse(cached);
+      } catch (e) {}
+    }
+
+    if (!existingLog.includes(today)) {
+      const newLog = Array.from(new Set([...existingLog, today])).sort();
+      try {
+        localStorage.setItem('pte_local_activity_log', JSON.stringify(newLog));
+      } catch (e) {}
+
+      // Immediately update local React state so streak increments with zero delay!
+      setUser(prev => prev ? ({ ...prev, activityLog: newLog, timeZone: tz }) : prev);
+
+      // Persist to Firestore if authenticated
+      if (user?.uid) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, { activityLog: newLog, timeZone: tz });
+        } catch (err) {
+          console.warn('Error recording active day:', err);
+        }
+      }
+    }
+  };
+
+  // Keep day streak up to date: on user change, on visibility/foreground, on focus, and every minute
+  useEffect(() => {
+    if (user) {
+      recordActivity();
+    }
+
+    const handleActive = () => {
+      if (document.visibilityState === 'visible' && user) {
+        recordActivity();
+      }
+    };
+
+    const handleFocus = () => {
+      if (user) {
+        recordActivity();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleActive);
+    window.addEventListener('focus', handleFocus);
+
+    // Midnight rollover tracker: runs every 60 seconds to detect day change live
+    const interval = setInterval(() => {
+      if (user) {
+        recordActivity();
+      }
+    }, 60000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleActive);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, [user?.uid, user?.activityLog?.length]);
 
   useEffect(() => {
@@ -1444,7 +1549,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       checkEmailVerification,
       googleLogin: handleGoogleLogin,
       appleLogin: handleAppleLogin,
-      quickGuestAccess: handleQuickGuestAccess
+      quickGuestAccess: handleQuickGuestAccess,
+      updateUserData,
+      recordActivity
     }}>
       {children}
 

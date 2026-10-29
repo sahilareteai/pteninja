@@ -6,15 +6,101 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Returns the current (or given) date as a YYYY-MM-DD string in the
- * user's LOCAL timezone, not UTC. This ensures day boundaries line up
- * with local midnight regardless of the user's timezone offset.
+ * Resolves the user's local timezone (e.g. 'Asia/Kolkata' for India).
  */
-export function getLocalDateStr(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+export function getUserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+/**
+ * Returns the date as a YYYY-MM-DD string in the specified or detected timezone.
+ * Uses 'en-CA' locale which is ISO-like (YYYY-MM-DD) according to the timezone.
+ */
+export function getLocalDateStr(date: Date = new Date(), timeZone?: string): string {
+  const tz = timeZone || getUserTimeZone();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(date);
+  } catch {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+}
+
+/**
+ * Converts a YYYY-MM-DD string into an integer day number using Date.UTC.
+ * Consecutive calendar days always have a difference of exactly 1,
+ * immune to local daylight savings time, midnight shifts, or leap seconds.
+ */
+export function getDayNumber(dateStr: string): number {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  const parts = dateStr.trim().split('-');
+  if (parts.length < 3) return 0;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return 0;
+  return Math.floor(Date.UTC(y, m - 1, d) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculates the active study streak based on an array of YYYY-MM-DD activity logs.
+ * Supports timezone matching and treats activity today or yesterday as an active streak.
+ */
+export function calculateStreak(activityLog: string[] = [], timeZone?: string): number {
+  if (!activityLog || !Array.isArray(activityLog) || activityLog.length === 0) return 0;
+
+  const todayStr = getLocalDateStr(new Date(), timeZone);
+  const todayDayNum = getDayNumber(todayStr);
+
+  // Extract unique valid day numbers and sort descending (newest first)
+  const dayNumbers = Array.from(
+    new Set(
+      activityLog
+        .filter(s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.trim()))
+        .map(s => getDayNumber(s.trim()))
+        .filter(num => num > 0)
+    )
+  ).sort((a, b) => b - a);
+
+  if (dayNumbers.length === 0) return 0;
+
+  const newestDay = dayNumbers[0];
+
+  // If the newest logged day is today or yesterday, the streak is alive!
+  // If the last activity was 2 or more days ago, the streak is broken.
+  let expectedDay: number;
+  if (newestDay === todayDayNum) {
+    expectedDay = todayDayNum;
+  } else if (newestDay === todayDayNum - 1) {
+    expectedDay = todayDayNum - 1;
+  } else {
+    return 0;
+  }
+
+  let streak = 0;
+  for (const dayNum of dayNumbers) {
+    if (dayNum === expectedDay) {
+      streak++;
+      expectedDay--;
+    } else if (dayNum < expectedDay) {
+      // Day missed in between -> streak ends
+      break;
+    }
+  }
+
+  return streak;
 }
 
 /**

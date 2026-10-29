@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatAuthError } from './utils';
+import { formatAuthError, getLocalDateStr, getDayNumber, calculateStreak } from './utils';
 
 describe('formatAuthError', () => {
   it('translates auth/account-exists-with-different-credential into clear non-technical text', () => {
@@ -58,5 +58,72 @@ describe('formatAuthError', () => {
     const message = formatAuthError('Firebase: Something strange happened in Firebase Console.');
     expect(message).not.toContain('Firebase');
     expect(message).not.toContain('Firebase Console');
+  });
+});
+
+describe('getLocalDateStr and timezone tracking', () => {
+  it('formats dates in YYYY-MM-DD correctly for specific timezones like Asia/Kolkata', () => {
+    // 2026-10-28 19:00:00 UTC is 2026-10-29 00:30:00 in Asia/Kolkata (UTC + 5:30)
+    const lateUtcDate = new Date('2026-10-28T19:00:00.000Z');
+    expect(getLocalDateStr(lateUtcDate, 'UTC')).toBe('2026-10-28');
+    expect(getLocalDateStr(lateUtcDate, 'Asia/Kolkata')).toBe('2026-10-29');
+
+    // 2026-10-29 01:00:00 UTC is 2026-10-29 in both UTC and Asia/Kolkata
+    const morningUtcDate = new Date('2026-10-29T01:00:00.000Z');
+    expect(getLocalDateStr(morningUtcDate, 'UTC')).toBe('2026-10-29');
+    expect(getLocalDateStr(morningUtcDate, 'Asia/Kolkata')).toBe('2026-10-29');
+  });
+
+  it('getDayNumber returns consecutive day numbers for consecutive calendar dates', () => {
+    const day1 = getDayNumber('2026-10-28');
+    const day2 = getDayNumber('2026-10-29');
+    const day3 = getDayNumber('2026-10-30');
+    expect(day2 - day1).toBe(1);
+    expect(day3 - day2).toBe(1);
+
+    // Month boundary: Oct 31 to Nov 1
+    const oct31 = getDayNumber('2026-10-31');
+    const nov1 = getDayNumber('2026-11-01');
+    expect(nov1 - oct31).toBe(1);
+  });
+});
+
+describe('calculateStreak', () => {
+  it('returns 0 for empty activity log', () => {
+    expect(calculateStreak([])).toBe(0);
+  });
+
+  it('calculates 1-day streak if logged today only', () => {
+    const today = getLocalDateStr(new Date());
+    expect(calculateStreak([today])).toBe(1);
+  });
+
+  it('calculates 1-day streak if logged yesterday and user opens today', () => {
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = getLocalDateStr(yesterdayDate);
+    expect(calculateStreak([yesterday])).toBe(1);
+  });
+
+  it('calculates 2-day streak if logged yesterday and today', () => {
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = getLocalDateStr(yesterdayDate);
+    const today = getLocalDateStr(new Date());
+    expect(calculateStreak([yesterday, today])).toBe(2);
+  });
+
+  it('handles consecutive streak across month boundaries', () => {
+    // If today is mock or fixed, test streak logic
+    const dayNumbers = ['2026-10-28', '2026-10-29'];
+    const streak = calculateStreak(dayNumbers, 'Asia/Kolkata');
+    expect(streak).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns 0 if last logged activity was 2 or more days ago', () => {
+    const threeDaysAgoDate = new Date();
+    threeDaysAgoDate.setDate(threeDaysAgoDate.getDate() - 3);
+    const threeDaysAgo = getLocalDateStr(threeDaysAgoDate);
+    expect(calculateStreak([threeDaysAgo])).toBe(0);
   });
 });

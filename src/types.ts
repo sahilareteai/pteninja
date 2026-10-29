@@ -131,6 +131,7 @@ export interface UserData {
   referralCount?: number;
   signupPlatform?: 'web' | 'mobile' | 'ios' | 'android';
   freeEvaluationsBonus?: number;
+  timeZone?: string;
 }
 
 export const SUBSCRIPTION_PLANS = [

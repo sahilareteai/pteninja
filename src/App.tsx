@@ -57,7 +57,7 @@ import {
   Copy,
   Sparkles
 } from 'lucide-react';
-import { cn, getLocalDateStr, formatAuthError } from './lib/utils';
+import { cn, getLocalDateStr, formatAuthError, calculateStreak, getUserTimeZone } from './lib/utils';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { DatePicker } from './components/DatePicker';
@@ -129,44 +129,6 @@ const INITIAL_PROGRESS: UserProgress = {
   completedTasks: [],
   taskScores: {},
   favoriteWords: []
-};
-
-const calculateStreak = (activityLog: string[] = []) => {
-  if (!activityLog || activityLog.length === 0) return 0;
-
-  const todayStr = getLocalDateStr();
-
-  // Deduplicate and sort descending so we walk from most-recent to oldest
-  const uniqueLogs = Array.from(new Set(activityLog)).sort((a, b) => b.localeCompare(a));
-
-  if (uniqueLogs.length === 0) return 0;
-
-  // The streak must start from today or yesterday; otherwise it is broken
-  let checkStr = todayStr;
-  if (uniqueLogs[0] !== checkStr) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = getLocalDateStr(yesterday);
-    if (uniqueLogs[0] !== yesterdayStr) {
-      return 0;
-    }
-    checkStr = yesterdayStr;
-  }
-
-  let streak = 0;
-  for (const logStr of uniqueLogs) {
-    if (logStr === checkStr) {
-      streak++;
-      // Step back one calendar day using local date arithmetic
-      const checkDate = new Date(+checkStr.split('-')[0], +checkStr.split('-')[1] - 1, +checkStr.split('-')[2]);
-      checkDate.setDate(checkDate.getDate() - 1);
-      checkStr = getLocalDateStr(checkDate);
-    } else if (logStr < checkStr) {
-      break;
-    }
-  }
-
-  return streak;
 };
 
 const NotificationService = {
@@ -1342,7 +1304,7 @@ function AppContent() {
   );
   const sentNotifications = useRef<Set<string>>(new Set());
   const [upgradeReason, setUpgradeReason] = useState<'expired' | 'limit' | null>(null);
-  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, appleLogin, quickGuestAccess } = useSubscription();
+  const { user, loading, login, continueAsGuest, logout, showSubscriptionModal, setShowSubscriptionModal, showAuthModal, isAccessRestricted, authError, setAuthError, formatPrice, currency, pendingGuestWriteRef, isEmailVerified, resendEmailVerification, checkEmailVerification, googleLogin, appleLogin, quickGuestAccess, updateUserData, recordActivity } = useSubscription();
 
   const [appReadyTimeout, setAppReadyTimeout] = useState(false);
 
@@ -1559,37 +1521,29 @@ function AppContent() {
   }, [user?.schedule, notificationPermission]);
 
   const handleSetTargetScore = async (score: number) => {
-    if (user?.uid) {
-      try {
-        const cappedScore = Math.min(90, Math.max(0, score));
-        await updateDoc(doc(db, 'users', user.uid), { targetScore: cappedScore });
-        setProgress(prev => ({ ...prev, targetScore: cappedScore }));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-      }
-    } else {
-      const cappedScore = Math.min(90, Math.max(0, score));
-      setProgress(prev => ({ ...prev, targetScore: cappedScore }));
-    }
+    const cappedScore = Math.min(90, Math.max(10, score));
+    setProgress(prev => ({ ...prev, targetScore: cappedScore }));
+    try {
+      localStorage.setItem('pte_target_score', String(cappedScore));
+    } catch {}
+    await updateUserData({ targetScore: cappedScore });
   };
 
   const handleSetTestDate = async (date: string) => {
-    if (user?.uid) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), { testDate: date });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-      }
-    }
+    try {
+      localStorage.setItem('pte_test_date', date);
+    } catch {}
+    await updateUserData({ testDate: date });
   };
 
   const handleSaveToSchedule = async () => {
-    if (!user?.uid || !user?.testDate || !progress.targetScore) {
+    const activeTestDate = user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
+    if (!activeTestDate || !progress.targetScore) {
       toast.error('Please set your target score and test date first.');
       return;
     }
 
-    const plan = calculateStudyPlan();
+    const plan = calculateStudyPlan(activeTestDate);
     if (!plan || plan.daysLeft <= 0) {
       toast.error('Invalid study plan. Please check your test date.');
       return;
@@ -1598,7 +1552,7 @@ function AppContent() {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const testDate = new Date(user.testDate);
+      const testDate = new Date(activeTestDate);
       testDate.setHours(0, 0, 0, 0);
 
       const newScheduledTasks: ScheduledTask[] = [];
@@ -1635,27 +1589,22 @@ function AppContent() {
         }
       }
 
-      await updateDoc(doc(db, 'users', user.uid), {
-        schedule: newScheduledTasks
-      });
-
+      await updateUserData({ schedule: newScheduledTasks });
       toast.success(`Successfully saved ${newScheduledTasks.length} tasks to your schedule!`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      console.error("Save to schedule error:", error);
+      toast.error("Failed to save schedule. Please try again.");
     }
   };
 
   const handleResetTarget = async () => {
-    if (user?.uid) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), { targetScore: 0, testDate: null });
-        setProgress(prev => ({ ...prev, targetScore: 0 }));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-      }
-    } else {
-      setProgress(prev => ({ ...prev, targetScore: 0 }));
-    }
+    setProgress(prev => ({ ...prev, targetScore: 0 }));
+    try {
+      localStorage.removeItem('pte_target_score');
+      localStorage.removeItem('pte_test_date');
+    } catch {}
+    await updateUserData({ targetScore: 0, testDate: undefined });
+    toast.info("Goal and study plan reset.");
   };
 
   const handleSelectTask = (task: PTETask, allTasks: PTETask[]) => {
@@ -1678,7 +1627,7 @@ function AppContent() {
     // Gemini quota while the user is still browsing the task list.
   };
 
-  const currentStreak = calculateStreak(user?.activityLog);
+  const currentStreak = calculateStreak(user?.activityLog, user?.timeZone);
 
   const calculateAverageScore = () => {
     if (!user?.taskScores || Object.keys(user.taskScores).length === 0) return 0;
@@ -1698,11 +1647,14 @@ function AppContent() {
     return totalAttempts > 0 ? Math.round(totalScore / totalAttempts) : 0;
   };
 
-  const calculateStudyPlan = () => {
-    if (!progress.targetScore || !user?.testDate) return null;
+  const calculateStudyPlan = (fallbackDate?: string) => {
+    const activeTestDate = user?.testDate || fallbackDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : '');
+    if (!progress.targetScore || !activeTestDate) return null;
     
     const today = new Date();
-    const testDate = new Date(user.testDate);
+    today.setHours(0, 0, 0, 0);
+    const testDate = new Date(activeTestDate);
+    testDate.setHours(0, 0, 0, 0);
     const diffTime = testDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
@@ -2151,6 +2103,7 @@ function AppContent() {
               <VocabularyBuilder 
                 key="vocabulary"
                 user={user}
+                onUpdateUserData={updateUserData}
                 onBack={() => setActiveTab('dashboard')}
               />
             ) : activeTab === 'shuriken' ? (
@@ -5866,7 +5819,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   onViewMockTests: () => void,
   calculateAverageScore: () => number,
   calculateSectionAverage: (section: PTESection) => number,
-  calculateStudyPlan: () => { tasksPerDay: number, daysLeft: number } | null,
+  calculateStudyPlan: (fallbackDate?: string) => { tasksPerDay: number, daysLeft: number } | null,
   onSetTargetScore: (score: number) => void | Promise<void>,
   onSetTestDate: (date: string) => void | Promise<void>,
   onSaveToSchedule: () => void | Promise<void>,
@@ -5878,11 +5831,11 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
   const [isSaved, setIsSaved] = useState(false);
   const isScheduleSaved = isSaved || !!(user?.schedule && user.schedule.length > 0);
   const averageScore = calculateAverageScore();
-  const studyPlan = calculateStudyPlan();
   const [tempTarget, setTempTarget] = useState<string | number>(79);
-  const [tempDate, setTempDate] = useState(user?.testDate || '');
+  const [tempDate, setTempDate] = useState(user?.testDate || (typeof window !== 'undefined' ? localStorage.getItem('pte_test_date') || '' : ''));
+  const studyPlan = calculateStudyPlan(tempDate);
   
-  const currentStreak = calculateStreak(user?.activityLog || []);
+  const currentStreak = calculateStreak(user?.activityLog || [], user?.timeZone);
   
   // Analysis logic
   const totalTasks = allTasks.length;
@@ -6007,7 +5960,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                     <DatePicker 
                       value={tempDate}
                       onChange={(date) => setTempDate(date)}
-                      minDate={new Date().toISOString().split('T')[0]}
+                      minDate={getLocalDateStr()}
                       placeholder="Select your test date"
                     />
                   </div>
@@ -6025,12 +5978,13 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                       try {
                         await onSetTargetScore(score);
                         await onSetTestDate(tempDate);
+                        toast.success(`Study plan created! Target score: ${score}`);
                       } catch (error) {
-                        // Error is already handled by handleFirestoreError in the parent
                         console.error("Goal setting error:", error);
+                        toast.error("Failed to set study plan. Please try again.");
                       }
                     }}
-                    className="w-full py-4 bg-app-primary text-app-bg rounded-xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20"
+                    className="w-full py-4 bg-app-primary text-app-bg rounded-xl font-bold uppercase tracking-widest hover:bg-app-accent transition-all shadow-lg shadow-app-primary/20 cursor-pointer"
                   >
                     Create My Study Plan
                   </button>
@@ -6048,7 +6002,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                   </div>
                   <button 
                     onClick={onResetTarget}
-                    className="p-2 text-app-text-muted/50 hover:text-red-400 transition-colors"
+                    className="p-2 text-app-text-muted/50 hover:text-red-400 transition-colors cursor-pointer"
                     title="Reset Goal"
                   >
                     <RefreshCw size={20} />
@@ -6086,7 +6040,7 @@ function Dashboard({ progress, user, allTasks, onStartTask, onHoverTask, onSelec
                         <span className="text-xs text-app-text-muted uppercase tracking-wider font-bold">Tasks / Day</span>
                       </div>
                       <p className="text-[10px] md:text-xs text-app-text-muted leading-relaxed">
-                        Complete these tasks daily to reach your goal of {progress.targetScore} by {new Date(user.testDate).toLocaleDateString()}.
+                        Complete these tasks daily to reach your goal of {progress.targetScore} by {tempDate ? new Date(tempDate).toLocaleDateString() : (user?.testDate ? new Date(user.testDate).toLocaleDateString() : 'your test date')}.
                       </p>
                       <button
                         onClick={async () => {
@@ -6525,9 +6479,9 @@ function DailyShurikenView({ user, allTasks, onBack, onStartTask, onHoverTask }:
   );
 }
 
-function WordDetailContent({ word, user, onToggleFavorite, onPlayPronunciation }: {
+function WordDetailContent({ word, isFavorite, onToggleFavorite, onPlayPronunciation }: {
   word: VocabularyWord,
-  user: any,
+  isFavorite: boolean,
   onToggleFavorite: (id: string) => void,
   onPlayPronunciation: (word: string) => void
 }) {
@@ -6539,17 +6493,19 @@ function WordDetailContent({ word, user, onToggleFavorite, onPlayPronunciation }
           <button 
             onClick={() => onToggleFavorite(word.id)}
             className={cn(
-              "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all border",
-              user?.favoriteWords?.includes(word.id)
+              "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all border cursor-pointer",
+              isFavorite
                 ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
                 : "bg-white/5 border-white/10 text-app-text-muted hover:border-app-primary/50"
             )}
+            title={isFavorite ? "Remove from Flashcards" : "Add to Flashcards"}
           >
-            <Star size={20} className="md:w-6 md:h-6" fill={user?.favoriteWords?.includes(word.id) ? "currentColor" : "none"} />
+            <Star size={20} className="md:w-6 md:h-6" fill={isFavorite ? "currentColor" : "none"} />
           </button>
           <button 
             onClick={() => onPlayPronunciation(word.word)}
-            className="w-10 h-10 md:w-12 md:h-12 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary hover:bg-app-primary hover:text-app-bg transition-all"
+            className="w-10 h-10 md:w-12 md:h-12 bg-app-primary/10 rounded-xl flex items-center justify-center text-app-primary hover:bg-app-primary hover:text-app-bg transition-all cursor-pointer"
+            title="Listen to pronunciation"
           >
             <Volume2 size={20} className="md:w-6 md:h-6" />
           </button>
@@ -6575,22 +6531,22 @@ function WordDetailContent({ word, user, onToggleFavorite, onPlayPronunciation }
         <button 
           onClick={() => onToggleFavorite(word.id)}
           className={cn(
-            "w-full py-4 font-bold rounded-2xl transition-all shadow-lg",
-            user?.favoriteWords?.includes(word.id)
-              ? "bg-app-surface text-app-primary border border-app-primary/20"
+            "w-full py-4 font-bold rounded-2xl transition-all shadow-lg cursor-pointer",
+            isFavorite
+              ? "bg-app-surface text-app-primary border border-app-primary/20 hover:bg-app-primary/10"
               : "bg-app-primary text-app-bg hover:bg-app-accent"
           )}
         >
-          {user?.favoriteWords?.includes(word.id) ? 'Remove from Flashcards' : 'Add to Flashcards'}
+          {isFavorite ? 'Remove from Flashcards' : 'Add to Flashcards'}
         </button>
       </div>
     </div>
   );
 }
 
-function WordDetailModal({ word, user, onClose, onToggleFavorite, onPlayPronunciation }: {
+function WordDetailModal({ word, isFavorite, onClose, onToggleFavorite, onPlayPronunciation }: {
   word: VocabularyWord,
-  user: any,
+  isFavorite: boolean,
   onClose: () => void,
   onToggleFavorite: (id: string) => void,
   onPlayPronunciation: (word: string) => void
@@ -6612,7 +6568,7 @@ function WordDetailModal({ word, user, onClose, onToggleFavorite, onPlayPronunci
         <div className="pt-4 pr-14">
           <WordDetailContent 
             word={word}
-            user={user}
+            isFavorite={isFavorite}
             onToggleFavorite={onToggleFavorite}
             onPlayPronunciation={onPlayPronunciation}
           />
@@ -6622,18 +6578,50 @@ function WordDetailModal({ word, user, onClose, onToggleFavorite, onPlayPronunci
   );
 }
 
-function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) {
+function VocabularyBuilder({ user, onUpdateUserData, onBack }: { user: any, onUpdateUserData?: (data: Partial<UserData>) => Promise<void>, onBack: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWord, setSelectedWord] = useState<VocabularyWord | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const wordListRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Maintain local state for favorite words so UI updates in 0ms regardless of connection/auth
+  const [favoriteWords, setFavoriteWords] = useState<string[]>(() => {
+    if (user?.favoriteWords && Array.isArray(user.favoriteWords)) {
+      return user.favoriteWords;
+    }
+    try {
+      const cached = localStorage.getItem('pte_favorite_words');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
+
+  // Sync if remote user updates
+  useEffect(() => {
+    if (user?.favoriteWords && Array.isArray(user.favoriteWords)) {
+      setFavoriteWords(user.favoriteWords);
+    }
+  }, [user?.favoriteWords]);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Pre-warm SpeechSynthesis voices
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      const onVoices = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', onVoices);
+      return () => window.removeEventListener('voiceschanged', onVoices);
+    }
   }, []);
 
   useEffect(() => {
@@ -6646,7 +6634,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     const matchesSearch = !searchTerm ||
                          w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          w.meaning.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFavorite = !showFavoritesOnly || user?.favoriteWords?.includes(w.id);
+    const matchesFavorite = !showFavoritesOnly || favoriteWords.includes(w.id);
     return matchesSearch && matchesFavorite;
   }).sort((a, b) => {
     if (!searchTerm) return 0;
@@ -6662,66 +6650,78 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     return 0;
   });
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const playPronunciation = (word: string) => {
     if (!word || !word.trim()) return;
-    const cleanWord = word.trim().toLowerCase();
+    const cleanWord = word.trim();
 
-    // Stop any previously playing pronunciation
-    if (audioRef.current) {
+    // 1. Primary: Native SpeechSynthesis (synchronous within user gesture on iOS / Android / Desktop)
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      } catch (e) {}
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanWord);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.85;
+
+        const voices = window.speechSynthesis.getVoices();
+        const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Samantha') || v.name.includes('Siri') || v.name.includes('Natural') || v.name.includes('Google') || v.default));
+        if (enVoice) utterance.voice = enVoice;
+
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch (synthErr) {
+        console.warn("Speech synthesis error, falling back to TTS API:", synthErr);
+      }
     }
 
-    // High quality standard American English dictionary pronunciation MP3
-    const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanWord)}&type=2`;
-    const audio = new Audio(audioUrl);
-    audioRef.current = audio;
-
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch((err) => {
-        console.warn("Dictionary audio failed, trying Google TTS:", err);
-        const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(cleanWord)}`;
-        const fallbackAudio = new Audio(fallbackUrl);
-        audioRef.current = fallbackAudio;
-        fallbackAudio.play().catch((fbErr) => {
-          console.warn("Audio fallback failed, trying SpeechSynthesis:", fbErr);
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            try {
-              window.speechSynthesis.cancel();
-              const utterance = new SpeechSynthesisUtterance(cleanWord);
-              utterance.lang = 'en-US';
-              utterance.rate = 0.85;
-              window.speechSynthesis.speak(utterance);
-            } catch (synthErr) {
-              console.error("Speech synthesis failed:", synthErr);
-            }
-          }
-        });
-      });
-    }
+    // 2. High-fidelity cloud TTS fallback
+    generateTTS(cleanWord).then(base64 => {
+      if (!base64) return;
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+        } catch {}
+      }
+      const audio = new Audio(`data:audio/wav;base64,${base64}`);
+      audioRef.current = audio;
+      audio.play().catch(err => console.warn("TTS audio playback failed:", err));
+    }).catch(err => {
+      console.warn("generateTTS fallback error:", err);
+    });
   };
 
   const handleToggleFavorite = async (wordId: string) => {
-    if (!user?.uid) return;
-    
-    const currentFavorites = user.favoriteWords || [];
-    const isFavorite = currentFavorites.includes(wordId);
-    
-    const newFavorites = isFavorite 
-      ? currentFavorites.filter((id: string) => id !== wordId)
-      : [...currentFavorites, wordId];
+    const isFav = favoriteWords.includes(wordId);
+    const targetWord = PTE_VOCABULARY.find(w => w.id === wordId);
+    const wordTitle = targetWord?.word || 'Word';
 
+    const newFavorites = isFav 
+      ? favoriteWords.filter((id: string) => id !== wordId)
+      : [...favoriteWords, wordId];
+
+    // 1. Immediately update local state
+    setFavoriteWords(newFavorites);
+
+    // 2. Immediately cache in localStorage
     try {
-      await updateDoc(doc(db, 'users', user.uid), { 
-        favoriteWords: newFavorites 
-      });
+      localStorage.setItem('pte_favorite_words', JSON.stringify(newFavorites));
+    } catch {}
+
+    // 3. User feedback
+    if (isFav) {
+      toast.info(`Removed "${wordTitle}" from flashcards`);
+    } else {
+      toast.success(`Added "${wordTitle}" to flashcards!`);
+    }
+
+    // 4. Persist to Firestore / user context
+    try {
+      if (onUpdateUserData) {
+        await onUpdateUserData({ favoriteWords: newFavorites });
+      } else if (user?.uid) {
+        await updateDoc(doc(db, 'users', user.uid), { favoriteWords: newFavorites });
+      }
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      console.warn('Failed to sync favorites to Firestore:', err);
     }
   };
 
@@ -6734,7 +6734,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 md:mb-8">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0">
+          <button onClick={onBack} className="p-2 hover:bg-app-surface rounded-full transition-colors shrink-0 cursor-pointer">
             <ChevronRight className="rotate-180" size={24} />
           </button>
           <div className="p-3 rounded-2xl bg-app-primary/10 shrink-0">
@@ -6763,7 +6763,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
           <button 
             onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
             className={cn(
-              "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap flex items-center gap-2",
+              "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer",
               showFavoritesOnly ? "bg-amber-500 text-app-bg border-amber-500" : "bg-app-surface text-app-text-muted border-app-primary/20 hover:border-app-primary/50"
             )}
           >
@@ -6776,7 +6776,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div ref={wordListRef} className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           {filteredWords.map(word => {
-            const isFavorite = user?.favoriteWords?.includes(word.id);
+            const isFavorite = favoriteWords.includes(word.id);
             return (
               <div 
                 key={word.id}
@@ -6792,16 +6792,13 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                   <button 
                     onClick={async (e) => {
                       e.stopPropagation();
-                      try {
-                        await handleToggleFavorite(word.id);
-                      } catch (err) {
-                        console.error("Failed to toggle favorite:", err);
-                      }
+                      await handleToggleFavorite(word.id);
                     }}
                     className={cn(
-                      "p-1.5 rounded-lg transition-colors hover:bg-white/5",
+                      "p-1.5 rounded-lg transition-colors hover:bg-white/5 cursor-pointer",
                       isFavorite ? "text-yellow-400" : "text-app-text-muted/30"
                     )}
+                    title={isFavorite ? "Remove from Flashcards" : "Add to Flashcards"}
                   >
                     <Star size={16} fill={isFavorite ? "currentColor" : "none"} />
                   </button>
@@ -6818,9 +6815,10 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
                     playPronunciation(word.word);
                   }}
                   className={cn(
-                    "p-2 rounded-lg transition-colors",
+                    "p-2 rounded-lg transition-colors cursor-pointer",
                     selectedWord?.id === word.id ? "hover:bg-black/10" : "hover:bg-white/5"
                   )}
+                  title="Listen to pronunciation"
                 >
                   <Volume2 size={20} />
                 </button>
@@ -6833,7 +6831,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
           {selectedWord ? (
             <WordDetailContent 
               word={selectedWord}
-              user={user}
+              isFavorite={favoriteWords.includes(selectedWord.id)}
               onToggleFavorite={handleToggleFavorite}
               onPlayPronunciation={playPronunciation}
             />
@@ -6852,7 +6850,7 @@ function VocabularyBuilder({ user, onBack }: { user: any, onBack: () => void }) 
         {isMobile && selectedWord && (
           <WordDetailModal 
             word={selectedWord}
-            user={user}
+            isFavorite={favoriteWords.includes(selectedWord.id)}
             onClose={() => setSelectedWord(null)}
             onToggleFavorite={handleToggleFavorite}
             onPlayPronunciation={playPronunciation}
