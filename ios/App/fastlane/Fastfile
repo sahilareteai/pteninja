@@ -203,6 +203,8 @@ platform :ios do
       force: true,
       skip_screenshots: false,
       skip_metadata: false,
+      skip_review_information: true,
+      ignore_language_directory_validation: true,
       metadata_path: "./fastlane/metadata",
       screenshots_path: "./fastlane/screenshots",
       overwrite_screenshots: true,
