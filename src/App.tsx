@@ -55,9 +55,7 @@ import {
   Gift,
   Share2,
   Copy,
-  Sparkles,
-  ShieldAlert,
-  HelpCircle
+  Sparkles
 } from 'lucide-react';
 import { cn, getLocalDateStr, formatAuthError, calculateStreak, getUserTimeZone } from './lib/utils';
 import { Toaster, toast } from 'sonner';
@@ -2517,8 +2515,6 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
   const [emailInput, setEmailInput] = useState(user?.email || '');
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showIapHelpModal, setShowIapHelpModal] = useState(false);
-  const [iapHelpPlan, setIapHelpPlan] = useState<any>(null);
   // Stripe subscription details returned from the server
   const [pendingSubscriptionId, setPendingSubscriptionId] = useState<string | null>(null);
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
@@ -2863,13 +2859,7 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           }
         } catch (appleErr: any) {
           console.error("Apple StoreKit purchase error:", appleErr);
-          const rawMsg = appleErr?.message || "";
-          if (rawMsg.includes("Product not found") || rawMsg.includes("not found in App Store")) {
-            setIapHelpPlan(plan);
-            setShowIapHelpModal(true);
-          } else {
-            toast.error(appleErr?.message || "Apple purchase was not completed. Please try again.");
-          }
+          toast.error(appleErr?.message || "In-app purchase could not be completed. Please try again.");
         } finally {
           setIsProcessing(false);
           if (isNativeMobile()) setSelectedPlan(null);
@@ -3550,17 +3540,6 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
                         <Sparkles size={13} />
                         <span>Redeem Apple Offer Code</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIapHelpPlan(SUBSCRIPTION_PLANS[1] || SUBSCRIPTION_PLANS[0]);
-                          setShowIapHelpModal(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 text-xs text-app-text-muted hover:text-amber-400 font-bold py-2 px-4 rounded-xl border border-app-border bg-app-bg/50 hover:bg-white/5 transition-all cursor-pointer active:scale-95"
-                      >
-                        <HelpCircle size={13} />
-                        <span>TestFlight VIP &amp; IAP Setup</span>
-                      </button>
                     </>
                   )}
                 </div>
@@ -3788,84 +3767,6 @@ function SubscriptionModal({ user, onClose, onLogin, isAccessRestricted, isDarkM
           </div>
         </div>
 
-        {/* TestFlight & App Store Connect IAP Setup Modal */}
-        {showIapHelpModal && iapHelpPlan && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="max-w-md w-full bg-app-surface border border-app-primary/30 rounded-3xl p-6 shadow-2xl space-y-4 text-left">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 shrink-0">
-                  <ShieldAlert size={28} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-app-text text-base">App Store Connect IAP Notice</h3>
-                  <p className="text-xs text-app-text-muted">In-App Purchase Product Configuration</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-xs text-app-text-muted leading-relaxed">
-                <p>
-                  Apple StoreKit returned <em>Product not found</em> for this subscription. In Apple TestFlight, Apple requires two items before in-app purchases become active:
-                </p>
-                <div className="space-y-2 p-3 bg-app-bg rounded-xl border border-app-border">
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-app-text text-[11px]">1. Product ID in App Store Connect</p>
-                    <p className="text-[10px] text-app-text-muted">
-                      Must exist under <em>Apps &gt; PTE Ninja &gt; Subscriptions</em> with ID:
-                    </p>
-                    <p className="font-mono text-xs text-app-primary font-bold bg-app-surface/60 px-2 py-1 rounded border border-app-primary/20 inline-block">
-                      {APPLE_SUBSCRIPTION_MAP[iapHelpPlan.id]?.productId || `pte_ninja_${iapHelpPlan.id}`}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5 pt-1 border-t border-app-border/40">
-                    <p className="font-semibold text-app-text text-[11px]">2. Paid Applications Agreement</p>
-                    <p className="text-[10px] text-app-text-muted">
-                      Account Holder must accept the Paid Apps schedule in <em>App Store Connect &gt; Agreements, Tax, and Banking</em>.
-                    </p>
-                  </div>
-                </div>
-                <p className="text-[11px] text-app-text">
-                  Testing in <strong>TestFlight</strong> right now? You can unlock full VIP access instantly below to test all questions, AI evaluations, and mock tests without waiting for Apple banking approval:
-                </p>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setIsProcessing(true);
-                    try {
-                      await updateUserData({
-                        subscriptionStatus: 'active',
-                        subscriptionTier: iapHelpPlan.id,
-                        planId: iapHelpPlan.id
-                      });
-                      toast.success(`VIP Access unlocked for TestFlight (${iapHelpPlan.name})!`);
-                      setShowIapHelpModal(false);
-                      onClose();
-                    } catch (err) {
-                      console.error("TestFlight VIP grant failed:", err);
-                      toast.error("Failed to activate test access.");
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }}
-                  className="w-full py-3.5 bg-app-primary text-app-bg font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-app-accent transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Sparkles size={16} />
-                  Activate TestFlight VIP Access
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowIapHelpModal(false)}
-                  className="w-full py-2.5 border border-app-border text-app-text-muted hover:text-app-text font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </motion.div>
     </div>
   );
@@ -5470,8 +5371,9 @@ function MockTestSession({
 
       try {
         if (task.section === 'speaking') {
+          const speakingMime = isIOS() ? 'audio/mp4' : 'audio/webm';
           const result = await Promise.race([
-            analyzeSpeaking(response, task.category, 'audio/webm', task.correctAnswers?.[0]),
+            analyzeSpeaking(response, task.category, speakingMime, task.correctAnswers?.[0]),
             new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
           ]);
           return (result as { overall?: number }).overall ?? 70;
@@ -6774,11 +6676,41 @@ function VocabularyBuilder({ user, onUpdateUserData, onBack }: { user: any, onUp
     return 0;
   });
 
-  const playPronunciation = (word: string) => {
+  const vocabAudioCache = useRef<Record<string, string>>({});
+  const playPronunciation = async (word: string) => {
     if (!word || !word.trim()) return;
     const cleanWord = word.trim();
 
-    // 1. Primary: Native SpeechSynthesis (synchronous within user gesture on iOS / Android / Desktop)
+    // 1. Check local audio cache first
+    const cached = vocabAudioCache.current[cleanWord.toLowerCase()];
+    if (cached) {
+      if (audioRef.current) {
+        try { audioRef.current.pause(); } catch {}
+      }
+      const audio = new Audio(`data:audio/wav;base64,${cached}`);
+      audioRef.current = audio;
+      audio.play().catch(err => console.warn("Cached TTS playback error:", err));
+      return;
+    }
+
+    // 2. Primary: High-fidelity Neural Cloud TTS
+    try {
+      const base64 = await generateTTS(cleanWord);
+      if (base64) {
+        vocabAudioCache.current[cleanWord.toLowerCase()] = base64;
+        if (audioRef.current) {
+          try { audioRef.current.pause(); } catch {}
+        }
+        const audio = new Audio(`data:audio/wav;base64,${base64}`);
+        audioRef.current = audio;
+        await audio.play();
+        return;
+      }
+    } catch (err) {
+      console.warn("Cloud TTS unavailable, falling back to speech synthesis:", err);
+    }
+
+    // 3. Fallback: Native SpeechSynthesis
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
@@ -6787,30 +6719,14 @@ function VocabularyBuilder({ user, onUpdateUserData, onBack }: { user: any, onUp
         utterance.rate = 0.85;
 
         const voices = window.speechSynthesis.getVoices();
-        const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Samantha') || v.name.includes('Siri') || v.name.includes('Natural') || v.name.includes('Google') || v.default));
+        const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Siri') || v.name.includes('Samantha') || v.name.includes('Natural') || v.name.includes('Google') || v.default));
         if (enVoice) utterance.voice = enVoice;
 
         window.speechSynthesis.speak(utterance);
-        return;
       } catch (synthErr) {
-        console.warn("Speech synthesis error, falling back to TTS API:", synthErr);
+        console.warn("Speech synthesis error:", synthErr);
       }
     }
-
-    // 2. High-fidelity cloud TTS fallback
-    generateTTS(cleanWord).then(base64 => {
-      if (!base64) return;
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-        } catch {}
-      }
-      const audio = new Audio(`data:audio/wav;base64,${base64}`);
-      audioRef.current = audio;
-      audio.play().catch(err => console.warn("TTS audio playback failed:", err));
-    }).catch(err => {
-      console.warn("generateTTS fallback error:", err);
-    });
   };
 
   const handleToggleFavorite = async (wordId: string) => {
@@ -8339,7 +8255,14 @@ function TaskModal({
           chunksRef.current.push(e.data);
         }
       };
-      recorder.start(250);
+      // CRITICAL: On iOS WebKit, passing a timeslice causes MediaRecorder to emit fragmented
+      // MP4 slices where the moov box is only in chunk 0. Calling start() without timeslice
+      // ensures WebKit produces a single, perfectly indexed, valid MP4 audio container on stop.
+      if (isIOS()) {
+        recorder.start();
+      } else {
+        recorder.start(500);
+      }
       setMediaRecorder(recorder);
     } catch (err) {
       console.error("Failed to start recording:", err);
@@ -8356,7 +8279,7 @@ function TaskModal({
         reject(new Error("No audio recorded. Please try speaking louder or check your microphone."));
         return;
       }
-      const activeMimeType = mediaRecorder?.mimeType || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm');
+      const activeMimeType = mediaRecorder?.mimeType || (isIOS() ? 'audio/mp4' : (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm'));
       const blob = new Blob(chunksRef.current, { type: activeMimeType });
       const reader = new FileReader();
       reader.readAsDataURL(blob);

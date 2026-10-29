@@ -89,7 +89,7 @@ describe("Live Server AI Endpoints (/api/generate-tts and /api/analyze-speaking)
         expect(res.body.content).toBeDefined();
       }
       expect(res.status).not.toBe(401);
-    }, 15000);
+    }, 60000);
   });
 
   describe("POST /api/analyze-writing", () => {

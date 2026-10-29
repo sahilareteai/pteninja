@@ -87,8 +87,8 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between alert emails
 // Transient (5xx) error retry: retry the same key up to this many times before
 // propagating the error. Short linear backoff (1 s, 2 s) is enough to ride out
 // momentary model overloads without adding meaningful latency on real failures.
-const TRANSIENT_RETRY_MAX = 2;
-const TRANSIENT_RETRY_BASE_MS = 1000;
+const TRANSIENT_RETRY_MAX = 1;
+const TRANSIENT_RETRY_BASE_MS = 500;
 
 // Model names used across text endpoints (analyze-speaking, analyze-writing, support-chat).
 // gemini-3.5-flash-lite is the active successor model on Gemini API.
@@ -4298,10 +4298,25 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
     return res.status(503).json({ error: "AI service is currently unavailable." });
   }
 
+  const rawBase64 = audioData.includes(",") ? audioData.split(",")[1].trim() : audioData.trim();
+  const audioBuffer = Buffer.from(rawBase64, "base64");
+
   let cleanMimeType = mimeType.split(";")[0].trim().toLowerCase();
-  const isIosMp4 = cleanMimeType === "audio/mp4" || cleanMimeType === "audio/m4a" || cleanMimeType === "audio/x-m4a" || cleanMimeType === "video/mp4";
-  const whisperMime = isIosMp4 ? "audio/mp4" : cleanMimeType;
-  const geminiMime = isIosMp4 ? "audio/aac" : cleanMimeType;
+  let detectedMime = cleanMimeType;
+  if (audioBuffer.length >= 8) {
+    const header16 = audioBuffer.subarray(0, 16);
+    if (header16.includes(Buffer.from("ftyp")) || rawBase64.startsWith("AAAA") || cleanMimeType.includes("mp4") || cleanMimeType.includes("m4a")) {
+      detectedMime = "audio/mp4";
+    } else if (audioBuffer[0] === 0x1a && audioBuffer[1] === 0x45 && audioBuffer[2] === 0xdf && audioBuffer[3] === 0xa3) {
+      detectedMime = "audio/webm";
+    } else if (audioBuffer[0] === 0x52 && audioBuffer[1] === 0x49 && audioBuffer[2] === 0x46 && audioBuffer[3] === 0x46) {
+      detectedMime = "audio/wav";
+    }
+  }
+
+  const isIosMp4 = detectedMime === "audio/mp4" || cleanMimeType === "audio/mp4" || cleanMimeType === "audio/m4a" || cleanMimeType === "audio/x-m4a";
+  const whisperMime = isIosMp4 ? "audio/mp4" : detectedMime;
+  const geminiMime = isIosMp4 ? "audio/aac" : detectedMime;
 
   let prompt = `You are a strict PTE Academic Speaking Examiner. Analyze this audio for ${sanitizePromptValue(taskType, 200)}. IMPORTANT: If the audio contains no speech, is completely silent, or contains only background noise without any recognizable words, you MUST set overall, fluency, pronunciation, and content all to 10 and set transcription to "" (empty string). Otherwise, score strictly on PTE Academic criteria (10-90 scale): Content — relevance and completeness of ideas addressing the task; Oral Fluency — naturalness of speech rhythm, smooth pacing, minimal unnatural hesitations or false starts; Pronunciation — clarity, accurate sound production, and intelligibility for a competent English speaker. Apply genuine PTE standards: a mediocre or average response should score in the 40–55 range, a good response in the 60–70 range, and only an excellent near-native response should approach 80–90. Do not inflate scores. Identify specific weaknesses in pauses, rhythm, and mispronounced words.`;
   if (taskType === "Answer Short Question" && correctAnswer) {
@@ -4314,22 +4329,26 @@ app.post("/api/analyze-speaking", geminiProxyLimiter, async (req, res) => {
     // 1. Try Groq Whisper + Groq Chat as PRIMARY engine if configured (ultra-fast <1s latency & 100% reliable)
     if (process.env.GROQ_API_KEY?.trim()) {
       try {
-        const audioBuffer = Buffer.from(audioData, "base64");
         const transcription = await serverCallGroqWhisper(audioBuffer, whisperMime);
 
         if (!transcription || transcription.trim().length < 5) {
-          parsed = {
-            overall: 10,
-            fluency: 10,
-            pronunciation: 10,
-            content: 10,
-            transcription: "",
-            feedback: ["No speech detected. Please record yourself speaking clearly."],
-            mispronounced: [],
-            hesitations: 0,
-            pace: "N/A",
-            stress: "N/A",
-          };
+          // If buffer is truly empty/silent (< 500 bytes), mark no speech detected
+          if (audioBuffer.length < 500) {
+            parsed = {
+              overall: 10,
+              fluency: 10,
+              pronunciation: 10,
+              content: 10,
+              transcription: "",
+              feedback: ["No speech detected. Please record yourself speaking clearly."],
+              mispronounced: [],
+              hesitations: 0,
+              pace: "N/A",
+              stress: "N/A",
+            };
+          } else {
+            console.log(`[AnalyzeSpeaking] Groq Whisper returned short transcription ("${transcription}") for ${audioBuffer.length}b audio. Falling through to Gemini/Vertex multimodal audio.`);
+          }
         } else {
           const groqSpeakingPrompt = `You are a strict PTE Academic Speaking Examiner. Analyze this student response:
 Task: "${sanitizePromptValue(taskType, 200)}"
@@ -4384,12 +4403,12 @@ Return a valid JSON object matching EXACTLY this structure:
       }
     }
 
-    // 2. Fall back to Gemini if Groq was not used or failed
+    // 2. Fall back to Gemini / Vertex AI if Groq was not used, failed, or yielded incomplete transcript
     if (!parsed && serverGeminiKeys.length > 0) {
       try {
         const response = await serverCallGemini({
           model: AUDIO_MODEL,
-          contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: geminiMime, data: audioData } }] }],
+          contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: geminiMime, data: rawBase64 } }] }],
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -4417,7 +4436,7 @@ Return a valid JSON object matching EXACTLY this structure:
 
         parsed = JSON.parse(response.text ?? "{}");
       } catch (geminiErr: any) {
-        console.error(`[AnalyzeSpeaking] Gemini audio call failed:`, geminiErr);
+        console.error(`[AnalyzeSpeaking] Gemini/Vertex audio call failed:`, geminiErr);
         // Do not rethrow — fallback below handles it
       }
     }
@@ -4438,9 +4457,9 @@ Return a valid JSON object matching EXACTLY this structure:
       };
     }
 
-    // Server-side guard: if transcription is empty/blank, override all scores to 10
+    // Server-side guard: only override to 10 if transcription is empty AND audio is truly silent (< 500 bytes)
     const transcription: string = parsed.transcription ?? "";
-    if (transcription.trim().length < 5) {
+    if (transcription.trim().length < 5 && audioBuffer.length < 500) {
       parsed.overall = 10;
       parsed.fluency = 10;
       parsed.pronunciation = 10;

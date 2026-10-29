@@ -148,25 +148,57 @@ export async function analyzeSpeaking(
   mimeType: string = 'audio/webm',
   correctAnswer?: string,
 ) {
+  const rawAudio = audioData.includes(',') ? audioData.split(',')[1].trim() : audioData.trim();
+
   // Auto-detect container from base64 signature for iOS/Android recordings
   let effectiveMime = mimeType;
-  if (audioData.startsWith('AAAA')) {
-    // MP4/M4A ftyp container from iOS Safari/WKWebView
+  if (rawAudio.startsWith('AAAA') || rawAudio.slice(0, 48).includes('ftyp') || isIOS() || mimeType.includes('mp4')) {
     effectiveMime = 'audio/mp4';
-  } else if (audioData.startsWith('GkXf')) {
-    // WebM container from Chrome/Android
+  } else if (rawAudio.startsWith('GkXf') || mimeType.includes('webm')) {
     effectiveMime = 'audio/webm';
-  } else if (audioData.startsWith('UklGR')) {
-    // RIFF WAV container
+  } else if (rawAudio.startsWith('UklGR') || mimeType.includes('wav')) {
     effectiveMime = 'audio/wav';
-  } else if (isIOS() && effectiveMime === 'audio/webm') {
-    effectiveMime = 'audio/mp4';
   }
 
   try {
-    return await proxyPost('/api/analyze-speaking', { audioData, taskType, mimeType: effectiveMime, correctAnswer });
-  } catch (e) {
-    console.error('Failed to analyze speaking:', e);
+    return await proxyPost('/api/analyze-speaking', { audioData: rawAudio, taskType, mimeType: effectiveMime, correctAnswer });
+  } catch (e: any) {
+    console.warn('[geminiService] Proxy analyze-speaking failed, attempting Firebase AI fallback:', e?.message);
+    try {
+      const { getAI, getGenerativeModel } = await import('firebase/ai');
+      const { app } = await import('../firebase');
+      const ai = getAI(app);
+      const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+      const prompt = `You are a strict PTE Academic Speaking Examiner. Analyze this spoken audio for ${taskType}.
+Expected answer (if any): "${correctAnswer || ''}".
+Score strictly on the 10-90 PTE Academic scale for Content, Oral Fluency, and Pronunciation.
+Provide actionable feedback, list any mispronounced words, estimate hesitations, pace, and stress.
+Return a valid JSON object matching this structure:
+{
+  "overall": number,
+  "fluency": number,
+  "pronunciation": number,
+  "content": number,
+  "transcription": string,
+  "feedback": string[],
+  "mispronounced": string[],
+  "hesitations": number,
+  "pace": string,
+  "stress": string
+}`;
+
+      const res = await model.generateContent([
+        { inlineData: { mimeType: effectiveMime, data: rawAudio } },
+        { text: prompt }
+      ]);
+      const resText = res.response.text();
+      const match = resText.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+    } catch (fbErr) {
+      console.error('[geminiService] Firebase AI speaking fallback error:', fbErr);
+    }
     throw e;
   }
 }
@@ -185,7 +217,37 @@ export async function analyzeWriting(text: string, taskType: string): Promise<Wr
   try {
     return await proxyPost<WritingAnalysisResult>('/api/analyze-writing', { text, taskType });
   } catch (e: any) {
-    console.error('Failed to analyze writing:', e);
+    console.warn('[geminiService] Proxy analyze-writing failed, attempting Firebase AI fallback:', e?.message);
+    try {
+      const { getAI, getGenerativeModel } = await import('firebase/ai');
+      const { app } = await import('../firebase');
+      const ai = getAI(app);
+      const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+      const prompt = `You are a strict PTE Academic Writing Examiner. Analyze this student response for task "${taskType}":
+"${text}"
+Score strictly on the 10-90 scale for: overall, grammar, vocabulary, spelling, content.
+Provide actionable tips and list specific mistakes.
+Return a valid JSON object matching:
+{
+  "overall": number,
+  "grammar": number,
+  "vocabulary": number,
+  "spelling": number,
+  "content": number,
+  "tips": string[],
+  "mistakes": string[]
+}`;
+
+      const res = await model.generateContent(prompt);
+      const resText = res.response.text();
+      const match = resText.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]) as WritingAnalysisResult;
+      }
+    } catch (fbErr) {
+      console.error('[geminiService] Firebase AI writing fallback error:', fbErr);
+    }
+
     if (e.message === 'GEMINI_QUOTA_EXCEEDED') throw e;
     return {
       overall: 50,
