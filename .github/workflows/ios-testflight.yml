@@ -15,6 +15,7 @@ on:
       - 'src/**'
       - 'index.html'
       - 'ios/**'
+      - '!ios/App/fastlane/**'
       - 'scripts/**'
       - 'package.json'
       - '.github/workflows/ios-testflight.yml'
@@ -73,4 +74,6 @@ jobs:
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 || secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '3WJZNVGDTV' }}
           GITHUB_RUN_NUMBER: ${{ github.event.inputs.build_number || github.run_number }}
+          FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: '60'
+          FASTLANE_XCODEBUILD_SETTINGS_RETRIES: '6'
         run: fastlane ios beta

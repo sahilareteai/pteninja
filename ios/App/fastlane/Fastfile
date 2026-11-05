@@ -146,14 +146,263 @@ platform :ios do
     UI.message("Preparing App Store submission for version #{app_version} (build: #{build_number})...")
     UI.message("Note: submit_for_review is set to FALSE per user instruction.")
 
-    # Ensure App Store Review Detail exists on Apple's servers so deliver does not crash with No data
+    require "net/http"
+    require "uri"
+    require "json"
+    require "jwt"
+    require "openssl"
+
+    ec_key = OpenSSL::PKey::EC.new(raw_key)
+    jwt_token = JWT.encode(
+      {
+        iss: issuer_id,
+        iat: Time.now.to_i - 60,
+        exp: Time.now.to_i + 1100,
+        aud: "appstoreconnect-v1"
+      },
+      ec_key,
+      "ES256",
+      { kid: key_id, typ: "JWT" }
+    )
+
+    asc_req = lambda do |method, path, body = nil|
+      url = path.start_with?("http") ? URI(path) : URI("https://api.appstoreconnect.apple.com/v1/#{path.sub(/^\//, '')}")
+      http = Net::HTTP.new(url.host, url.port)
+      http.use_ssl = true
+      req_class = case method.to_s.upcase
+                  when "GET" then Net::HTTP::Get
+                  when "POST" then Net::HTTP::Post
+                  when "PATCH" then Net::HTTP::Patch
+                  when "DELETE" then Net::HTTP::Delete
+                  end
+      req = req_class.new(url)
+      req["Authorization"] = "Bearer #{jwt_token}"
+      req["Content-Type"] = "application/json"
+      req.body = body.to_json if body
+      res = http.request(req)
+      parsed = begin
+        res.body && !res.body.empty? ? JSON.parse(res.body) : {}
+      rescue
+        { "raw" => res.body }
+      end
+      [res.code.to_i, parsed]
+    end
+
+    # Ensure App Store Review Detail, Content Rights, Category, Age Rating, Build, and Pricing are configured
     target_version = nil
     app = nil
+    has_existing_screenshots = true
     begin
       app = Spaceship::ConnectAPI::App.find("com.pteninja.app")
       if app
+        UI.message("Found App ID: #{app.id}")
+
+        # 1. Set Content Rights Declaration on App
+        UI.message("Setting contentRightsDeclaration to DOES_NOT_USE_THIRD_PARTY_CONTENT...")
+        code, body = asc_req.call(:patch, "apps/#{app.id}", {
+          data: {
+            type: "apps",
+            id: app.id,
+            attributes: {
+              contentRightsDeclaration: "DOES_NOT_USE_THIRD_PARTY_CONTENT"
+            }
+          }
+        })
+        if code >= 200 && code < 300
+          UI.success("contentRightsDeclaration updated successfully.")
+        else
+          UI.message("contentRightsDeclaration response (#{code}): #{body.to_json}")
+        end
+
+        # 2. Fetch AppInfo to set Primary Category and Age Rating Declaration
+        code_ai, body_ai = asc_req.call(:get, "apps/#{app.id}/appInfos")
+        app_infos = body_ai["data"] || []
+        editable_app_info = app_infos.find { |ai| ai.dig("attributes", "appStoreState") != "READY_FOR_SALE" } || app_infos.first
+        if editable_app_info
+          ai_id = editable_app_info["id"]
+          UI.message("Setting Primary Category (EDUCATION) on appInfo #{ai_id}...")
+          code_cat, body_cat = asc_req.call(:patch, "appInfos/#{ai_id}", {
+            data: {
+              type: "appInfos",
+              id: ai_id,
+              relationships: {
+                primaryCategory: {
+                  data: { type: "appCategories", id: "EDUCATION" }
+                }
+              }
+            }
+          })
+          if code_cat >= 200 && code_cat < 300
+            UI.success("Primary Category set to EDUCATION.")
+          else
+            UI.message("Primary Category response (#{code_cat}): #{body_cat.to_json}")
+          end
+
+          # 3. Update Age Rating Declaration
+          code_ard, body_ard = asc_req.call(:get, "appInfos/#{ai_id}/ageRatingDeclaration")
+          ard_data = body_ard["data"]
+          if ard_data && ard_data["id"]
+            ard_id = ard_data["id"]
+            UI.message("Found ageRatingDeclaration #{ard_id}. Current attributes: #{ard_data['attributes'].to_json}")
+
+            ard_attrs = {
+              alcoholTobaccoOrDrugUseOrReferences: "NONE",
+              contests: "NONE",
+              gamblingSimulated: "NONE",
+              horrorOrFearThemes: "NONE",
+              matureOrSuggestiveThemes: "NONE",
+              medicalOrTreatmentInformation: "NONE",
+              profanityOrCrudeHumor: "NONE",
+              sexualContentGraphicAndNudity: "NONE",
+              sexualContentOrNudity: "NONE",
+              violenceCartoonOrFantasy: "NONE",
+              violenceRealistic: "NONE",
+              violenceRealisticProlongedGraphicOrSadistic: "NONE",
+              gunsOrOtherWeapons: "NONE",
+              healthOrWellnessTopics: false,
+              messagingAndChat: false,
+              advertising: false,
+              parentalControls: false,
+              ageAssurance: false,
+              lootBox: false,
+              userGeneratedContent: false,
+              socialMedia: false,
+              gambling: false,
+              unrestrictedWebAccess: false
+            }
+
+            3.times do |attempt|
+              code_patch_ard, body_patch_ard = asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
+                data: {
+                  type: "ageRatingDeclarations",
+                  id: ard_id,
+                  attributes: ard_attrs
+                }
+              })
+              if code_patch_ard >= 200 && code_patch_ard < 300
+                UI.success("Age Rating Declaration updated successfully on attempt #{attempt + 1}!")
+                break
+              else
+                UI.message("Age Rating attempt #{attempt + 1} response (#{code_patch_ard}): #{body_patch_ard.to_json}")
+                errs = body_patch_ard["errors"] || []
+                flipped_any = false
+                errs.each do |err|
+                  ptr = err.dig("source", "pointer").to_s
+                  detail = "#{err['title']} #{err['detail']}"
+                  if ptr =~ %r{/data/attributes/([a-zA-Z0-9_]+)}
+                    field_sym = $1.to_sym
+                    if ard_attrs.key?(field_sym)
+                      if detail.include?("not a valid") || detail.include?("must be") || detail.include?("invalid") || detail.include?("type")
+                        ard_attrs[field_sym] = (ard_attrs[field_sym] == "NONE") ? false : "NONE"
+                        flipped_any = true
+                        UI.message("Flipping #{field_sym} to #{ard_attrs[field_sym].inspect}")
+                      else
+                        ard_attrs.delete(field_sym)
+                        flipped_any = true
+                        UI.message("Removing unsupported attribute #{field_sym}")
+                      end
+                    end
+                  end
+                end
+                break unless flipped_any
+              end
+            end
+          end
+        end
+
+        # 4. Set Base App Pricing to $0.00 (Free) if missing
+        code_ps, body_ps = asc_req.call(:get, "apps/#{app.id}/appPriceSchedule")
+        if code_ps == 200 && body_ps["data"]
+          UI.success("App Price Schedule already configured (#{body_ps['data']['id']}).")
+        else
+          UI.message("App Price Schedule missing (#{code_ps}). Fetching $0.00 price point for USA...")
+          code_pp, body_pp = asc_req.call(:get, "apps/#{app.id}/appPricePoints?filter[territory]=USA&limit=200")
+          pps = body_pp["data"] || []
+          free_pp = pps.find { |p| ["0", "0.0", "0.00"].include?(p.dig("attributes", "customerPrice").to_s.strip) }
+          if free_pp
+            UI.message("Found Free AppPricePoint: #{free_pp['id']} (customerPrice: #{free_pp.dig('attributes', 'customerPrice')}). Creating AppPriceSchedule...")
+            code_cps, body_cps = asc_req.call(:post, "appPriceSchedules", {
+              data: {
+                type: "appPriceSchedules",
+                relationships: {
+                  app: { data: { type: "apps", id: app.id } },
+                  baseTerritory: { data: { type: "territories", id: "USA" } },
+                  manualPrices: {
+                    data: [{ type: "appPrices", id: "${price1}" }]
+                  }
+                }
+              },
+              included: [
+                {
+                  type: "appPrices",
+                  id: "${price1}",
+                  attributes: { startDate: nil },
+                  relationships: {
+                    appPricePoint: { data: { type: "appPricePoints", id: free_pp["id"] } }
+                  }
+                }
+              ]
+            })
+            if code_cps >= 200 && code_cps < 300
+              UI.success("Base App Pricing set to $0.00 (Free) successfully!")
+            else
+              UI.message("AppPriceSchedule creation response (#{code_cps}): #{body_cps.to_json}")
+            end
+          else
+            UI.message("Could not locate $0.00 price point in response (#{code_pp}).")
+          end
+        end
+
         target_version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
         if target_version
+          UI.message("Found editable App Store Version: #{target_version.id} (#{target_version.version_string})")
+
+          # Check if screenshots exist on App Store Connect
+          begin
+            code_loc, body_loc = asc_req.call(:get, "appStoreVersions/#{target_version.id}/appStoreVersionLocalizations")
+            locs = body_loc["data"] || []
+            locs.each do |l|
+              locale_name = l.dig("attributes", "locale")
+              code_ss, body_ss = asc_req.call(:get, "appStoreVersionLocalizations/#{l['id']}/appScreenshotSets?include=appScreenshots")
+              sets = body_ss["data"] || []
+              total_shots = (body_ss["included"] || []).count
+              UI.message("Locale #{locale_name}: #{sets.count} screenshot sets, #{total_shots} total screenshots on App Store Connect.")
+              has_existing_screenshots = false if total_shots == 0
+            end
+          rescue => ss_err
+            UI.message("Screenshot check notice: #{ss_err.message}")
+          end
+
+          # 5. Attach Build 102 (or latest VALID build) to target_version
+          code_b, body_b = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
+          builds = body_b["data"] || []
+          UI.message("Found #{builds.count} builds in App Store Connect: #{builds.map { |b| "#{b.dig('attributes', 'version')} (#{b.dig('attributes', 'processingState')}, id=#{b['id']})" }.join(', ')}")
+          selected_build = builds.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds.find { |b| b.dig("attributes", "processingState") == "VALID" }
+          if selected_build
+            b_id = selected_build["id"]
+            b_ver = selected_build.dig("attributes", "version")
+            if selected_build.dig("attributes", "usesNonExemptEncryption").nil?
+              UI.message("Setting usesNonExemptEncryption=false on build #{b_ver} (#{b_id})...")
+              asc_req.call(:patch, "builds/#{b_id}", {
+                data: {
+                  type: "builds",
+                  id: b_id,
+                  attributes: { usesNonExemptEncryption: false }
+                }
+              })
+            end
+            UI.message("Attaching build #{b_ver} (#{b_id}) to App Store Version #{target_version.id}...")
+            code_att, body_att = asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
+              data: { type: "builds", id: b_id }
+            })
+            if code_att >= 200 && code_att < 300
+              UI.success("Successfully attached Build #{b_ver} (#{b_id}) to Version #{app_version}!")
+            else
+              UI.message("Attach build response (#{code_att}): #{body_att.to_json}")
+            end
+          end
+
+          # 6. Review Details contact info
           begin
             rd = target_version.fetch_app_store_review_detail
           rescue => e
@@ -189,7 +438,7 @@ platform :ios do
         end
       end
     rescue => e
-      UI.message("Notice during review detail initialization: #{e.message}")
+      UI.message("Notice during pre-deliver setup: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
     end
 
     deliver_config = {
@@ -201,7 +450,7 @@ platform :ios do
       automatic_release: false,
       phased_release: false,
       force: true,
-      skip_screenshots: (ENV["UPLOAD_SCREENSHOTS"] != "true"),
+      skip_screenshots: (ENV["UPLOAD_SCREENSHOTS"] != "true" && has_existing_screenshots),
       skip_metadata: false,
       ignore_language_directory_validation: true,
       metadata_path: "./fastlane/metadata",
@@ -216,69 +465,105 @@ platform :ios do
 
     deliver(deliver_config)
 
-    # Attempt to associate subscription items to the review submission
+    # 7. Re-verify Build attachment after deliver and inspect/attach Subscriptions
     begin
       if app && target_version
-        UI.message("Checking review submission container for app version #{app_version} and subscriptions...")
-        platform_enum = Spaceship::ConnectAPI::Platform::IOS
-        
-        # Check existing or create review submission container
-        review_sub = nil
-        begin
-          review_sub = app.get_ready_review_submission(platform: platform_enum, includes: "items")
-        rescue => e
-          UI.message("Notice fetching ready review submission: #{e.message}")
+        # Ensure build stays attached after deliver
+        code_b2, body_b2 = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
+        builds2 = body_b2["data"] || []
+        sel_b2 = builds2.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds2.find { |b| b.dig("attributes", "processingState") == "VALID" }
+        if sel_b2
+          asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
+            data: { type: "builds", id: sel_b2["id"] }
+          })
         end
 
+        UI.message("Checking review submission container for app version #{app_version} and subscriptions...")
+        code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&include=items")
+        rs_list = body_rs["data"] || []
+        review_sub = rs_list.find { |r| ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"].include?(r.dig("attributes", "state")) }
         if review_sub.nil?
           UI.message("Creating new Review Submission container for iOS...")
-          begin
-            review_sub = app.create_review_submission(platform: platform_enum)
-          rescue => cr_err
-            UI.message("Review submission creation notice: #{cr_err.message}")
-          end
+          code_crs, body_crs = asc_req.call(:post, "reviewSubmissions", {
+            data: {
+              type: "reviewSubmissions",
+              attributes: { platform: "IOS" },
+              relationships: {
+                app: { data: { type: "apps", id: app.id } }
+              }
+            }
+          })
+          review_sub = body_crs["data"]
         end
 
-        if review_sub
-          UI.message("Review submission container ID: #{review_sub.id}")
-          existing_items = review_sub.items || []
-          has_version_item = existing_items.any? { |i| i.respond_to?(:app_store_version_id) && i.app_store_version_id == target_version.id }
-          
-          unless has_version_item
-            UI.message("Attaching App Store version #{target_version.id} to review submission...")
-            begin
-              review_sub.add_app_store_version_to_review_items(app_store_version_id: target_version.id)
-              UI.success("Attached version to review submission.")
-            rescue => e
-              UI.message("Notice attaching version to review items: #{e.message}")
+        if review_sub && review_sub["id"]
+          rs_id = review_sub["id"]
+          UI.message("Review submission container ID: #{rs_id} (state: #{review_sub.dig('attributes', 'state')})")
+
+          # Attempt to attach App Store Version item
+          UI.message("Attaching App Store version #{target_version.id} to review submission #{rs_id}...")
+          code_vitem, body_vitem = asc_req.call(:post, "reviewSubmissionItems", {
+            data: {
+              type: "reviewSubmissionItems",
+              relationships: {
+                reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
+                appStoreVersion: { data: { type: "appStoreVersions", id: target_version.id } }
+              }
+            }
+          })
+          if code_vitem >= 200 && code_vitem < 300
+            UI.success("Attached App Store version #{target_version.id} to review submission!")
+          else
+            UI.message("Version attachment validation (#{code_vitem}):")
+            (body_vitem["errors"] || []).each do |err|
+              UI.message(" - [#{err['code']}] #{err['title']}: #{err['detail']}")
             end
           end
 
-          # Fetch and link subscriptions
-          begin
-            subs_resp = Spaceship::ConnectAPI.get_subscriptions(app_id: app.id)
-            all_subs = subs_resp.to_models || []
-            UI.message("Found #{all_subs.count} subscriptions in App Store Connect: #{all_subs.map { |s| s.respond_to?(:product_id) ? s.product_id : s.id }.join(', ')}")
-            
-            all_subs.each do |sub|
-              begin
-                UI.message("Associating subscription #{sub.id} to review submission...")
-                Spaceship::ConnectAPI.client.post_review_submission_item(
-                  review_submission_id: review_sub.id,
-                  subscription_id: sub.id
-                )
-                UI.success("Associated subscription #{sub.id}!")
-              rescue => sub_err
-                UI.message("Notice associating subscription #{sub.id}: #{sub_err.message}")
+          # Query Subscription Groups & Subscriptions
+          code_sg, body_sg = asc_req.call(:get, "apps/#{app.id}/subscriptionGroups")
+          groups = body_sg["data"] || []
+          UI.message("Found #{groups.count} Subscription Groups: #{groups.map { |g| "#{g.dig('attributes', 'referenceName')} (#{g['id']})" }.join(', ')}")
+          groups.each do |grp|
+            code_subs, body_subs = asc_req.call(:get, "subscriptionGroups/#{grp['id']}/subscriptions")
+            subs = body_subs["data"] || []
+            UI.message("Group '#{grp.dig('attributes', 'referenceName')}' has #{subs.count} subscriptions:")
+            subs.each do |sub|
+              s_id = sub["id"]
+              s_pid = sub.dig("attributes", "productId")
+              s_name = sub.dig("attributes", "name")
+              s_state = sub.dig("attributes", "state")
+              UI.message("  * Subscription #{s_pid} ('#{s_name}', id=#{s_id}) -> state: #{s_state}")
+
+              # Check localizations & review screenshot for each subscription
+              code_sloc, body_sloc = asc_req.call(:get, "subscriptions/#{s_id}/subscriptionLocalizations")
+              slocs = body_sloc["data"] || []
+              code_sss, body_sss = asc_req.call(:get, "subscriptions/#{s_id}/appStoreReviewScreenshot")
+              has_rev_shot = !body_sss["data"].nil?
+              UI.message("    - Localizations: #{slocs.count}, Review Screenshot present: #{has_rev_shot}")
+
+              # Try attaching subscription to review submission
+              code_sitem, body_sitem = asc_req.call(:post, "reviewSubmissionItems", {
+                data: {
+                  type: "reviewSubmissionItems",
+                  relationships: {
+                    reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
+                    subscription: { data: { type: "subscriptions", id: s_id } }
+                  }
+                }
+              })
+              if code_sitem >= 200 && code_sitem < 300
+                UI.success("    -> Attached subscription #{s_pid} to review submission!")
+              else
+                errs = (body_sitem["errors"] || []).map { |e| "#{e['title']}: #{e['detail']}" }.join(" | ")
+                UI.message("    -> Notice attaching subscription #{s_pid} (#{code_sitem}): #{errs}")
               end
             end
-          rescue => e
-            UI.message("Notice during subscription query: #{e.message}")
           end
         end
       end
     rescue => e
-      UI.message("Notice during review submission association: #{e.message}")
+      UI.message("Notice during review submission association: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
     end
 
     UI.success("App Store Connect submission prepared successfully! Build #{build_number} and all assets are staged.")
