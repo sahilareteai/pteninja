@@ -199,8 +199,7 @@ platform :ios do
         UI.message("Found App ID: #{app.id}")
 
         # 1. Set Content Rights Declaration on App
-        UI.message("Setting contentRightsDeclaration to DOES_NOT_USE_THIRD_PARTY_CONTENT...")
-        code, body = asc_req.call(:patch, "apps/#{app.id}", {
+        asc_req.call(:patch, "apps/#{app.id}", {
           data: {
             type: "apps",
             id: app.id,
@@ -209,11 +208,6 @@ platform :ios do
             }
           }
         })
-        if code >= 200 && code < 300
-          UI.success("contentRightsDeclaration updated successfully.")
-        else
-          UI.message("contentRightsDeclaration response (#{code}): #{body.to_json}")
-        end
 
         # 2. Fetch AppInfo to set Primary Category and Age Rating Declaration
         code_ai, body_ai = asc_req.call(:get, "apps/#{app.id}/appInfos")
@@ -221,8 +215,7 @@ platform :ios do
         editable_app_info = app_infos.find { |ai| ai.dig("attributes", "appStoreState") != "READY_FOR_SALE" } || app_infos.first
         if editable_app_info
           ai_id = editable_app_info["id"]
-          UI.message("Setting Primary Category (EDUCATION) on appInfo #{ai_id}...")
-          code_cat, body_cat = asc_req.call(:patch, "appInfos/#{ai_id}", {
+          asc_req.call(:patch, "appInfos/#{ai_id}", {
             data: {
               type: "appInfos",
               id: ai_id,
@@ -233,19 +226,12 @@ platform :ios do
               }
             }
           })
-          if code_cat >= 200 && code_cat < 300
-            UI.success("Primary Category set to EDUCATION.")
-          else
-            UI.message("Primary Category response (#{code_cat}): #{body_cat.to_json}")
-          end
 
           # 3. Update Age Rating Declaration
           code_ard, body_ard = asc_req.call(:get, "appInfos/#{ai_id}/ageRatingDeclaration")
           ard_data = body_ard["data"]
           if ard_data && ard_data["id"]
             ard_id = ard_data["id"]
-            UI.message("Found ageRatingDeclaration #{ard_id}.")
-
             ard_attrs = {
               alcoholTobaccoOrDrugUseOrReferences: "NONE",
               contests: "NONE",
@@ -271,69 +257,35 @@ platform :ios do
               gambling: false,
               unrestrictedWebAccess: false
             }
-
-            code_patch_ard, body_patch_ard = asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
+            asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
               data: {
                 type: "ageRatingDeclarations",
                 id: ard_id,
                 attributes: ard_attrs
               }
             })
-            if code_patch_ard >= 200 && code_patch_ard < 300
-              UI.success("Age Rating Declaration confirmed (4+).")
-            else
-              UI.message("Age Rating response (#{code_patch_ard}): #{body_patch_ard.to_json}")
-            end
-          end
-        end
-
-        # 4. Set Base App Pricing to $0.00 (Free) if manualPrices are missing
-        code_mp, body_mp = asc_req.call(:get, "appPriceSchedules/#{app.id}/manualPrices")
-        manual_prices = body_mp["data"] || []
-        if code_mp == 200 && !manual_prices.empty?
-          UI.success("App Price Schedule already has #{manual_prices.count} manual price(s) configured.")
-        else
-          UI.message("App Price Schedule manualPrices empty (#{code_mp}). Fetching $0.00 price point for USA...")
-          code_pp, body_pp = asc_req.call(:get, "apps/#{app.id}/appPricePoints?filter[territory]=USA&limit=200")
-          pps = body_pp["data"] || []
-          free_pp = pps.find { |p| ["0", "0.0", "0.00"].include?(p.dig("attributes", "customerPrice").to_s.strip) }
-          if free_pp
-            UI.message("Found Free AppPricePoint: #{free_pp['id']} (customerPrice: #{free_pp.dig('attributes', 'customerPrice')}). Creating AppPriceSchedule...")
-            code_cps, body_cps = asc_req.call(:post, "appPriceSchedules", {
-              data: {
-                type: "appPriceSchedules",
-                relationships: {
-                  app: { data: { type: "apps", id: app.id } },
-                  baseTerritory: { data: { type: "territories", id: "USA" } },
-                  manualPrices: {
-                    data: [{ type: "appPrices", id: "${price1}" }]
-                  }
-                }
-              },
-              included: [
-                {
-                  type: "appPrices",
-                  id: "${price1}",
-                  attributes: { startDate: nil },
-                  relationships: {
-                    appPricePoint: { data: { type: "appPricePoints", id: free_pp["id"] } }
-                  }
-                }
-              ]
-            })
-            if code_cps >= 200 && code_cps < 300
-              UI.success("Base App Pricing set to $0.00 (Free) successfully!")
-            else
-              UI.message("AppPriceSchedule creation response (#{code_cps}): #{body_cps.to_json}")
-            end
-          else
-            UI.message("Could not locate $0.00 price point in response (#{code_pp}).")
           end
         end
 
         target_version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
         if target_version
           UI.message("Found editable App Store Version: #{target_version.id} (#{target_version.version_string})")
+
+          # Set copyright directly on appStoreVersion
+          code_cp, body_cp = asc_req.call(:patch, "appStoreVersions/#{target_version.id}", {
+            data: {
+              type: "appStoreVersions",
+              id: target_version.id,
+              attributes: {
+                copyright: "© 2026 PTE Ninja. All rights reserved."
+              }
+            }
+          })
+          if code_cp >= 200 && code_cp < 300
+            UI.success("Copyright set on App Store Version #{target_version.id}!")
+          else
+            UI.message("Copyright update response (#{code_cp}): #{body_cp.to_json}")
+          end
 
           # Check if screenshots exist on App Store Connect
           begin
@@ -358,23 +310,10 @@ platform :ios do
           if selected_build
             b_id = selected_build["id"]
             b_ver = selected_build.dig("attributes", "version")
-            if selected_build.dig("attributes", "usesNonExemptEncryption").nil?
-              asc_req.call(:patch, "builds/#{b_id}", {
-                data: {
-                  type: "builds",
-                  id: b_id,
-                  attributes: { usesNonExemptEncryption: false }
-                }
-              })
-            end
-            code_att, body_att = asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
+            asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
               data: { type: "builds", id: b_id }
             })
-            if code_att >= 200 && code_att < 300
-              UI.success("Successfully attached Build #{b_ver} (#{b_id}) to Version #{app_version}!")
-            else
-              UI.message("Attach build response (#{code_att}): #{body_att.to_json}")
-            end
+            UI.success("Attached Build #{b_ver} (#{b_id}) to Version #{app_version}!")
           end
 
           # 6. Review Details contact info
@@ -435,7 +374,16 @@ platform :ios do
     # 7. Configure Subscriptions (Group Localization, Prices, Review Screenshots) & Check Review Readiness
     begin
       if app && target_version
-        # Ensure build stays attached after deliver
+        # Ensure copyright and build stay attached after deliver
+        asc_req.call(:patch, "appStoreVersions/#{target_version.id}", {
+          data: {
+            type: "appStoreVersions",
+            id: target_version.id,
+            attributes: {
+              copyright: "© 2026 PTE Ninja. All rights reserved."
+            }
+          }
+        })
         code_b2, body_b2 = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
         builds2 = body_b2["data"] || []
         sel_b2 = builds2.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds2.find { |b| b.dig("attributes", "processingState") == "VALID" }
@@ -446,43 +394,19 @@ platform :ios do
         end
 
         # Prepare Subscriptions so they move from MISSING_METADATA -> READY_TO_SUBMIT
-        shot_file = "./fastlane/screenshots/en-US/APP_IPHONE_67_1.png"
-        shot_bytes = File.exist?(shot_file) ? File.binread(shot_file) : nil
-        default_prices = {
-          "pte_ninja_weekly" => "19.99",
-          "pte_ninja_monthly" => "39.99",
-          "pte_ninja_quarterly" => "89.99",
-          "pte_ninja_annual" => "199.99"
-        }
+        shot_candidates = [
+          File.expand_path("screenshots/en-US/APP_IPHONE_67_1.png", __dir__),
+          "./fastlane/screenshots/en-US/APP_IPHONE_67_1.png",
+          "./screenshots/en-US/APP_IPHONE_67_1.png"
+        ]
+        shot_file = shot_candidates.find { |p| File.exist?(p) }
+        UI.message("Resolved subscription review screenshot path: #{shot_file.inspect}")
+        shot_bytes = shot_file ? File.binread(shot_file) : nil
 
         code_sg, body_sg = asc_req.call(:get, "apps/#{app.id}/subscriptionGroups")
         groups = body_sg["data"] || []
-        UI.message("Found #{groups.count} Subscription Groups: #{groups.map { |g| "#{g.dig('attributes', 'referenceName')} (#{g['id']})" }.join(', ')}")
         groups.each do |grp|
           grp_id = grp["id"]
-          # Ensure Subscription Group has en-US localization
-          code_gloc, body_gloc = asc_req.call(:get, "subscriptionGroups/#{grp_id}/subscriptionGroupLocalizations")
-          glocs = body_gloc["data"] || []
-          if glocs.empty?
-            UI.message("Creating en-US localization for Subscription Group #{grp_id}...")
-            code_cgl, body_cgl = asc_req.call(:post, "subscriptionGroupLocalizations", {
-              data: {
-                type: "subscriptionGroupLocalizations",
-                attributes: {
-                  name: "PTE Ninja VIP Subscriptions",
-                  customAppName: "PTE Ninja",
-                  locale: "en-US"
-                },
-                relationships: {
-                  subscriptionGroup: { data: { type: "subscriptionGroups", id: grp_id } }
-                }
-              }
-            })
-            UI.message("Subscription Group localization creation (#{code_cgl}): #{code_cgl >= 200 && code_cgl < 300 ? 'SUCCESS' : body_cgl.to_json}")
-          else
-            UI.success("Subscription Group #{grp_id} has #{glocs.count} localization(s).")
-          end
-
           code_subs, body_subs = asc_req.call(:get, "subscriptionGroups/#{grp_id}/subscriptions")
           subs = body_subs["data"] || []
           subs.each do |sub|
@@ -492,7 +416,7 @@ platform :ios do
             s_state = sub.dig("attributes", "state")
             UI.message("Checking Subscription #{s_pid} ('#{s_name}', id=#{s_id}, current state=#{s_state})...")
 
-            # 1) Check/upload Subscription Review Screenshot
+            # Check/upload Subscription Review Screenshot
             code_sss, body_sss = asc_req.call(:get, "subscriptions/#{s_id}/appStoreReviewScreenshot")
             existing_shot = body_sss["data"]
             shot_state = existing_shot ? existing_shot.dig("attributes", "assetDeliveryState", "state") : nil
@@ -550,40 +474,11 @@ platform :ios do
             else
               UI.success("  Review Screenshot already present for #{s_pid} (state: #{shot_state}).")
             end
-
-            # 2) Check Subscription Prices
-            code_sp, body_sp = asc_req.call(:get, "subscriptions/#{s_id}/prices?limit=5")
-            sp_list = body_sp["data"] || []
-            if sp_list.empty?
-              target_price = default_prices[s_pid] || "19.99"
-              UI.message("  Subscription #{s_pid} has 0 prices. Looking up USA price point for $#{target_price}...")
-              code_spp, body_spp = asc_req.call(:get, "subscriptions/#{s_id}/pricePoints?filter[territory]=USA&limit=200")
-              spps = body_spp["data"] || []
-              matched_pp = spps.find { |p| p.dig("attributes", "customerPrice").to_s == target_price } || spps.first
-              if matched_pp
-                code_csp, body_csp = asc_req.call(:post, "subscriptionPrices", {
-                  data: {
-                    type: "subscriptionPrices",
-                    attributes: {
-                      startDate: nil,
-                      preserveCurrentPrice: false
-                    },
-                    relationships: {
-                      subscription: { data: { type: "subscriptions", id: s_id } },
-                      subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: matched_pp["id"] } }
-                    }
-                  }
-                })
-                UI.message("  Set price for #{s_pid} (#{code_csp}): #{code_csp >= 200 && code_csp < 300 ? 'SUCCESS' : body_csp.to_json}")
-              end
-            else
-              UI.success("  Subscription #{s_pid} has #{sp_list.count}+ price(s) configured.")
-            end
           end
         end
 
-        # Re-query subscription states after screenshot/price updates
-        sleep(3)
+        # Wait a few seconds for Apple to process the uploaded review screenshots
+        sleep(6)
         groups.each do |grp|
           code_subs2, body_subs2 = asc_req.call(:get, "subscriptionGroups/#{grp['id']}/subscriptions")
           (body_subs2["data"] || []).each do |sub|
