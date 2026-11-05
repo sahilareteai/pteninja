@@ -151,6 +151,7 @@ platform :ios do
     require "json"
     require "jwt"
     require "openssl"
+    require "digest"
 
     ec_key = OpenSSL::PKey::EC.new(raw_key)
     jwt_token = JWT.encode(
@@ -243,7 +244,7 @@ platform :ios do
           ard_data = body_ard["data"]
           if ard_data && ard_data["id"]
             ard_id = ard_data["id"]
-            UI.message("Found ageRatingDeclaration #{ard_id}. Current attributes: #{ard_data['attributes'].to_json}")
+            UI.message("Found ageRatingDeclaration #{ard_id}.")
 
             ard_attrs = {
               alcoholTobaccoOrDrugUseOrReferences: "NONE",
@@ -271,51 +272,28 @@ platform :ios do
               unrestrictedWebAccess: false
             }
 
-            3.times do |attempt|
-              code_patch_ard, body_patch_ard = asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
-                data: {
-                  type: "ageRatingDeclarations",
-                  id: ard_id,
-                  attributes: ard_attrs
-                }
-              })
-              if code_patch_ard >= 200 && code_patch_ard < 300
-                UI.success("Age Rating Declaration updated successfully on attempt #{attempt + 1}!")
-                break
-              else
-                UI.message("Age Rating attempt #{attempt + 1} response (#{code_patch_ard}): #{body_patch_ard.to_json}")
-                errs = body_patch_ard["errors"] || []
-                flipped_any = false
-                errs.each do |err|
-                  ptr = err.dig("source", "pointer").to_s
-                  detail = "#{err['title']} #{err['detail']}"
-                  if ptr =~ %r{/data/attributes/([a-zA-Z0-9_]+)}
-                    field_sym = $1.to_sym
-                    if ard_attrs.key?(field_sym)
-                      if detail.include?("not a valid") || detail.include?("must be") || detail.include?("invalid") || detail.include?("type")
-                        ard_attrs[field_sym] = (ard_attrs[field_sym] == "NONE") ? false : "NONE"
-                        flipped_any = true
-                        UI.message("Flipping #{field_sym} to #{ard_attrs[field_sym].inspect}")
-                      else
-                        ard_attrs.delete(field_sym)
-                        flipped_any = true
-                        UI.message("Removing unsupported attribute #{field_sym}")
-                      end
-                    end
-                  end
-                end
-                break unless flipped_any
-              end
+            code_patch_ard, body_patch_ard = asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
+              data: {
+                type: "ageRatingDeclarations",
+                id: ard_id,
+                attributes: ard_attrs
+              }
+            })
+            if code_patch_ard >= 200 && code_patch_ard < 300
+              UI.success("Age Rating Declaration confirmed (4+).")
+            else
+              UI.message("Age Rating response (#{code_patch_ard}): #{body_patch_ard.to_json}")
             end
           end
         end
 
-        # 4. Set Base App Pricing to $0.00 (Free) if missing
-        code_ps, body_ps = asc_req.call(:get, "apps/#{app.id}/appPriceSchedule")
-        if code_ps == 200 && body_ps["data"]
-          UI.success("App Price Schedule already configured (#{body_ps['data']['id']}).")
+        # 4. Set Base App Pricing to $0.00 (Free) if manualPrices are missing
+        code_mp, body_mp = asc_req.call(:get, "appPriceSchedules/#{app.id}/manualPrices")
+        manual_prices = body_mp["data"] || []
+        if code_mp == 200 && !manual_prices.empty?
+          UI.success("App Price Schedule already has #{manual_prices.count} manual price(s) configured.")
         else
-          UI.message("App Price Schedule missing (#{code_ps}). Fetching $0.00 price point for USA...")
+          UI.message("App Price Schedule manualPrices empty (#{code_mp}). Fetching $0.00 price point for USA...")
           code_pp, body_pp = asc_req.call(:get, "apps/#{app.id}/appPricePoints?filter[territory]=USA&limit=200")
           pps = body_pp["data"] || []
           free_pp = pps.find { |p| ["0", "0.0", "0.00"].include?(p.dig("attributes", "customerPrice").to_s.strip) }
@@ -376,13 +354,11 @@ platform :ios do
           # 5. Attach Build 102 (or latest VALID build) to target_version
           code_b, body_b = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
           builds = body_b["data"] || []
-          UI.message("Found #{builds.count} builds in App Store Connect: #{builds.map { |b| "#{b.dig('attributes', 'version')} (#{b.dig('attributes', 'processingState')}, id=#{b['id']})" }.join(', ')}")
           selected_build = builds.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds.find { |b| b.dig("attributes", "processingState") == "VALID" }
           if selected_build
             b_id = selected_build["id"]
             b_ver = selected_build.dig("attributes", "version")
             if selected_build.dig("attributes", "usesNonExemptEncryption").nil?
-              UI.message("Setting usesNonExemptEncryption=false on build #{b_ver} (#{b_id})...")
               asc_req.call(:patch, "builds/#{b_id}", {
                 data: {
                   type: "builds",
@@ -391,7 +367,6 @@ platform :ios do
                 }
               })
             end
-            UI.message("Attaching build #{b_ver} (#{b_id}) to App Store Version #{target_version.id}...")
             code_att, body_att = asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
               data: { type: "builds", id: b_id }
             })
@@ -410,7 +385,6 @@ platform :ios do
           end
 
           if rd.nil?
-            UI.message("Initializing missing App Store Review Details for version #{app_version}...")
             target_version.create_app_store_review_detail(attributes: {
               contactFirstName: "Sahil",
               contactLastName: "Gupta",
@@ -419,21 +393,14 @@ platform :ios do
               demoAccountRequired: false,
               notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app. For any questions, contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com."
             })
-            UI.success("App Store Review Details successfully initialized.")
           else
-            UI.message("Updating App Store Review Details contact info for version #{app_version}...")
-            begin
-              rd.update(attributes: {
-                contactFirstName: "Sahil",
-                contactLastName: "Gupta",
-                contactEmail: "pteninja.support@gmail.com",
-                contactPhone: "+91-9289063827",
-                notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app. For any questions, contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com."
-              })
-              UI.success("App Store Review Details contact updated to Sahil Gupta (+91-9289063827, pteninja.support@gmail.com).")
-            rescue => e
-              UI.message("Notice updating review detail: #{e.message}")
-            end
+            rd.update(attributes: {
+              contactFirstName: "Sahil",
+              contactLastName: "Gupta",
+              contactEmail: "pteninja.support@gmail.com",
+              contactPhone: "+91-9289063827",
+              notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app. For any questions, contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com."
+            })
           end
         end
       end
@@ -465,7 +432,7 @@ platform :ios do
 
     deliver(deliver_config)
 
-    # 7. Re-verify Build attachment after deliver and inspect/attach Subscriptions
+    # 7. Configure Subscriptions (Group Localization, Prices, Review Screenshots) & Check Review Readiness
     begin
       if app && target_version
         # Ensure build stays attached after deliver
@@ -478,30 +445,159 @@ platform :ios do
           })
         end
 
-        UI.message("Checking review submission container for app version #{app_version} and subscriptions...")
+        # Prepare Subscriptions so they move from MISSING_METADATA -> READY_TO_SUBMIT
+        shot_file = "./fastlane/screenshots/en-US/APP_IPHONE_67_1.png"
+        shot_bytes = File.exist?(shot_file) ? File.binread(shot_file) : nil
+        default_prices = {
+          "pte_ninja_weekly" => "19.99",
+          "pte_ninja_monthly" => "39.99",
+          "pte_ninja_quarterly" => "89.99",
+          "pte_ninja_annual" => "199.99"
+        }
+
+        code_sg, body_sg = asc_req.call(:get, "apps/#{app.id}/subscriptionGroups")
+        groups = body_sg["data"] || []
+        UI.message("Found #{groups.count} Subscription Groups: #{groups.map { |g| "#{g.dig('attributes', 'referenceName')} (#{g['id']})" }.join(', ')}")
+        groups.each do |grp|
+          grp_id = grp["id"]
+          # Ensure Subscription Group has en-US localization
+          code_gloc, body_gloc = asc_req.call(:get, "subscriptionGroups/#{grp_id}/subscriptionGroupLocalizations")
+          glocs = body_gloc["data"] || []
+          if glocs.empty?
+            UI.message("Creating en-US localization for Subscription Group #{grp_id}...")
+            code_cgl, body_cgl = asc_req.call(:post, "subscriptionGroupLocalizations", {
+              data: {
+                type: "subscriptionGroupLocalizations",
+                attributes: {
+                  name: "PTE Ninja VIP Subscriptions",
+                  customAppName: "PTE Ninja",
+                  locale: "en-US"
+                },
+                relationships: {
+                  subscriptionGroup: { data: { type: "subscriptionGroups", id: grp_id } }
+                }
+              }
+            })
+            UI.message("Subscription Group localization creation (#{code_cgl}): #{code_cgl >= 200 && code_cgl < 300 ? 'SUCCESS' : body_cgl.to_json}")
+          else
+            UI.success("Subscription Group #{grp_id} has #{glocs.count} localization(s).")
+          end
+
+          code_subs, body_subs = asc_req.call(:get, "subscriptionGroups/#{grp_id}/subscriptions")
+          subs = body_subs["data"] || []
+          subs.each do |sub|
+            s_id = sub["id"]
+            s_pid = sub.dig("attributes", "productId")
+            s_name = sub.dig("attributes", "name")
+            s_state = sub.dig("attributes", "state")
+            UI.message("Checking Subscription #{s_pid} ('#{s_name}', id=#{s_id}, current state=#{s_state})...")
+
+            # 1) Check/upload Subscription Review Screenshot
+            code_sss, body_sss = asc_req.call(:get, "subscriptions/#{s_id}/appStoreReviewScreenshot")
+            existing_shot = body_sss["data"]
+            shot_state = existing_shot ? existing_shot.dig("attributes", "assetDeliveryState", "state") : nil
+            if existing_shot.nil? || shot_state == "FAILED"
+              if existing_shot && shot_state == "FAILED"
+                asc_req.call(:delete, "subscriptionAppStoreReviewScreenshots/#{existing_shot['id']}")
+              end
+              if shot_bytes
+                UI.message("  Uploading App Store Review Screenshot for #{s_pid} (#{shot_bytes.bytesize} bytes)...")
+                code_resv, body_resv = asc_req.call(:post, "subscriptionAppStoreReviewScreenshots", {
+                  data: {
+                    type: "subscriptionAppStoreReviewScreenshots",
+                    attributes: {
+                      fileName: File.basename(shot_file),
+                      fileSize: shot_bytes.bytesize
+                    },
+                    relationships: {
+                      subscription: { data: { type: "subscriptions", id: s_id } }
+                    }
+                  }
+                })
+                if code_resv >= 200 && code_resv < 300 && body_resv["data"]
+                  shot_id = body_resv["data"]["id"]
+                  ops = body_resv.dig("data", "attributes", "uploadOperations") || []
+                  ops.each do |op|
+                    op_url = URI(op["url"])
+                    op_http = Net::HTTP.new(op_url.host, op_url.port)
+                    op_http.use_ssl = true
+                    op_req = Net::HTTP::Put.new(op_url)
+                    (op["requestHeaders"] || []).each { |h| op_req[h["name"]] = h["value"] }
+                    op_req.body = shot_bytes.byteslice(op["offset"].to_i, op["length"].to_i)
+                    op_res = op_http.request(op_req)
+                    UI.message("    Chunk upload status: #{op_res.code}")
+                  end
+                  md5_hex = Digest::MD5.hexdigest(shot_bytes)
+                  code_comm, body_comm = asc_req.call(:patch, "subscriptionAppStoreReviewScreenshots/#{shot_id}", {
+                    data: {
+                      type: "subscriptionAppStoreReviewScreenshots",
+                      id: shot_id,
+                      attributes: {
+                        uploaded: true,
+                        sourceFileChecksum: md5_hex
+                      }
+                    }
+                  })
+                  if code_comm >= 200 && code_comm < 300
+                    UI.success("  Committed Review Screenshot #{shot_id} for #{s_pid}!")
+                  else
+                    UI.message("  Commit screenshot response (#{code_comm}): #{body_comm.to_json}")
+                  end
+                else
+                  UI.message("  Reserve screenshot response (#{code_resv}): #{body_resv.to_json}")
+                end
+              end
+            else
+              UI.success("  Review Screenshot already present for #{s_pid} (state: #{shot_state}).")
+            end
+
+            # 2) Check Subscription Prices
+            code_sp, body_sp = asc_req.call(:get, "subscriptions/#{s_id}/prices?limit=5")
+            sp_list = body_sp["data"] || []
+            if sp_list.empty?
+              target_price = default_prices[s_pid] || "19.99"
+              UI.message("  Subscription #{s_pid} has 0 prices. Looking up USA price point for $#{target_price}...")
+              code_spp, body_spp = asc_req.call(:get, "subscriptions/#{s_id}/pricePoints?filter[territory]=USA&limit=200")
+              spps = body_spp["data"] || []
+              matched_pp = spps.find { |p| p.dig("attributes", "customerPrice").to_s == target_price } || spps.first
+              if matched_pp
+                code_csp, body_csp = asc_req.call(:post, "subscriptionPrices", {
+                  data: {
+                    type: "subscriptionPrices",
+                    attributes: {
+                      startDate: nil,
+                      preserveCurrentPrice: false
+                    },
+                    relationships: {
+                      subscription: { data: { type: "subscriptions", id: s_id } },
+                      subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: matched_pp["id"] } }
+                    }
+                  }
+                })
+                UI.message("  Set price for #{s_pid} (#{code_csp}): #{code_csp >= 200 && code_csp < 300 ? 'SUCCESS' : body_csp.to_json}")
+              end
+            else
+              UI.success("  Subscription #{s_pid} has #{sp_list.count}+ price(s) configured.")
+            end
+          end
+        end
+
+        # Re-query subscription states after screenshot/price updates
+        sleep(3)
+        groups.each do |grp|
+          code_subs2, body_subs2 = asc_req.call(:get, "subscriptionGroups/#{grp['id']}/subscriptions")
+          (body_subs2["data"] || []).each do |sub|
+            UI.message("  => Updated Subscription #{sub.dig('attributes', 'productId')} state: #{sub.dig('attributes', 'state')}")
+          end
+        end
+
+        # Check Review Submission Container and print detailed validation errors (including meta.associatedErrors)
+        UI.message("Checking review submission container for app version #{app_version}...")
         code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&include=items")
         rs_list = body_rs["data"] || []
         review_sub = rs_list.find { |r| ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"].include?(r.dig("attributes", "state")) }
-        if review_sub.nil?
-          UI.message("Creating new Review Submission container for iOS...")
-          code_crs, body_crs = asc_req.call(:post, "reviewSubmissions", {
-            data: {
-              type: "reviewSubmissions",
-              attributes: { platform: "IOS" },
-              relationships: {
-                app: { data: { type: "apps", id: app.id } }
-              }
-            }
-          })
-          review_sub = body_crs["data"]
-        end
-
         if review_sub && review_sub["id"]
           rs_id = review_sub["id"]
-          UI.message("Review submission container ID: #{rs_id} (state: #{review_sub.dig('attributes', 'state')})")
-
-          # Attempt to attach App Store Version item
-          UI.message("Attaching App Store version #{target_version.id} to review submission #{rs_id}...")
           code_vitem, body_vitem = asc_req.call(:post, "reviewSubmissionItems", {
             data: {
               type: "reviewSubmissionItems",
@@ -512,51 +608,17 @@ platform :ios do
             }
           })
           if code_vitem >= 200 && code_vitem < 300
-            UI.success("Attached App Store version #{target_version.id} to review submission!")
+            UI.success("App Store Version #{target_version.id} is VALID and attached to Review Submission #{rs_id}!")
           else
-            UI.message("Version attachment validation (#{code_vitem}):")
+            UI.message("Remaining Apple Validation Items (#{code_vitem}):")
             (body_vitem["errors"] || []).each do |err|
               UI.message(" - [#{err['code']}] #{err['title']}: #{err['detail']}")
-            end
-          end
-
-          # Query Subscription Groups & Subscriptions
-          code_sg, body_sg = asc_req.call(:get, "apps/#{app.id}/subscriptionGroups")
-          groups = body_sg["data"] || []
-          UI.message("Found #{groups.count} Subscription Groups: #{groups.map { |g| "#{g.dig('attributes', 'referenceName')} (#{g['id']})" }.join(', ')}")
-          groups.each do |grp|
-            code_subs, body_subs = asc_req.call(:get, "subscriptionGroups/#{grp['id']}/subscriptions")
-            subs = body_subs["data"] || []
-            UI.message("Group '#{grp.dig('attributes', 'referenceName')}' has #{subs.count} subscriptions:")
-            subs.each do |sub|
-              s_id = sub["id"]
-              s_pid = sub.dig("attributes", "productId")
-              s_name = sub.dig("attributes", "name")
-              s_state = sub.dig("attributes", "state")
-              UI.message("  * Subscription #{s_pid} ('#{s_name}', id=#{s_id}) -> state: #{s_state}")
-
-              # Check localizations & review screenshot for each subscription
-              code_sloc, body_sloc = asc_req.call(:get, "subscriptions/#{s_id}/subscriptionLocalizations")
-              slocs = body_sloc["data"] || []
-              code_sss, body_sss = asc_req.call(:get, "subscriptions/#{s_id}/appStoreReviewScreenshot")
-              has_rev_shot = !body_sss["data"].nil?
-              UI.message("    - Localizations: #{slocs.count}, Review Screenshot present: #{has_rev_shot}")
-
-              # Try attaching subscription to review submission
-              code_sitem, body_sitem = asc_req.call(:post, "reviewSubmissionItems", {
-                data: {
-                  type: "reviewSubmissionItems",
-                  relationships: {
-                    reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
-                    subscription: { data: { type: "subscriptions", id: s_id } }
-                  }
-                }
-              })
-              if code_sitem >= 200 && code_sitem < 300
-                UI.success("    -> Attached subscription #{s_pid} to review submission!")
-              else
-                errs = (body_sitem["errors"] || []).map { |e| "#{e['title']}: #{e['detail']}" }.join(" | ")
-                UI.message("    -> Notice attaching subscription #{s_pid} (#{code_sitem}): #{errs}")
+              if err["meta"] && err["meta"]["associatedErrors"]
+                err["meta"]["associatedErrors"].each do |res_key, assoc_list|
+                  (assoc_list || []).each do |ae|
+                    UI.message("   * (#{res_key}) [#{ae['code']}] #{ae['title']}: #{ae['detail']}")
+                  end
+                end
               end
             end
           end
