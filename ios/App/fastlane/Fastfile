@@ -52,8 +52,6 @@ platform :ios do
 
       ephemeral_certs = all_dist_certs.reject { |c| c.id == "HHFVY63QS6" }
 
-      # Apple Developer accounts allow a maximum of 2 Distribution certificates.
-      # If 2 or more exist, revoke ephemeral CI certificates (protecting HHFVY63QS6) to free a slot for get_certificates
       while all_dist_certs.count >= 2 && !ephemeral_certs.empty?
         sorted = ephemeral_certs.sort_by { |c| c.expiration_date || "" }
         oldest = sorted.first
@@ -66,14 +64,12 @@ platform :ios do
       UI.message("Notice during certificate slot check: #{e.message}")
     end
 
-    # Automatically generate or fetch Distribution certificate
     get_certificates(
       api_key: api_key,
       keychain_path: resolved_kc,
       keychain_password: keychain_password
     )
 
-    # Automatically generate or fetch App Store provisioning profile
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: "com.pteninja.app"
@@ -81,7 +77,6 @@ platform :ios do
 
     profile_name = lane_context[SharedValues::SIGH_NAME] || ENV["sigh_com.pteninja.app_app-store_profile-name"] || ENV["sigh_com.pteninja.app_appstore_profile-name"]
 
-    # Set build number based on GitHub run number or timestamp
     build_num = ENV["GITHUB_RUN_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
     increment_build_number(
       build_number: build_num,
@@ -97,7 +92,6 @@ platform :ios do
       profile_name: profile_name
     )
 
-    # Build and sign the IPA archive
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
@@ -111,16 +105,14 @@ platform :ios do
       }
     )
 
-    # Upload directly to Apple TestFlight
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true
     )
   end
 
-  desc "Prepare App Store submission: upload screenshots, sync metadata, and attach build (DO NOT submit)"
+  desc "Update App Review Notes, attach physical device screen recording, and submit for review"
   lane :prepare_submission do
-    # Authenticate with App Store Connect using API Key
     raw_key = ENV["APPSTORE_PRIVATE_KEY"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY_BASE64"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
     if raw_key && !raw_key.include?("BEGIN PRIVATE KEY")
       require "base64"
@@ -139,12 +131,11 @@ platform :ios do
 
     build_number = ENV["BUILD_NUMBER"]
     if build_number.nil? || build_number.strip.empty?
-      build_number = "102"
+      build_number = "104"
     end
     app_version = ENV["APP_VERSION"] || "1.0"
 
-    UI.message("Preparing App Store submission for version #{app_version} (build: #{build_number})...")
-    UI.message("Note: submit_for_review is set to FALSE per user instruction.")
+    UI.message("Preparing & Submitting App Store Version #{app_version} (target build: #{build_number})...")
 
     require "net/http"
     require "uri"
@@ -189,341 +180,306 @@ platform :ios do
       [res.code.to_i, parsed]
     end
 
-    # Ensure App Store Review Detail, Content Rights, Category, Age Rating, Build, and Pricing are configured
+    review_notes_text = <<~NOTES.strip
+      Thank you, Apple Review Team! Below is all requested information (Items 1–6) for Guideline 2.1:
+
+      1. PHYSICAL DEVICE SCREEN RECORDING:
+      • Video Link (Google Drive): https://drive.google.com/file/d/1_7VDxVBXlCL61L5ubk1piwSISQgjw-8i/view?usp=sharing (also attached directly in App Review Information Attachments as AppReview_ScreenRecording.mp4).
+      • Captured on a physical iPhone running the latest iOS, starting from the Home Screen launch and demonstrating:
+        (a) Account registration & sign-in flows (Sign in with Apple, Email/Password registration & login, and Instant Guest mode).
+        (b) Core PTE practice flow (Speaking/Writing practice task and real-time AI diagnostic scoring feedback).
+        (c) Accessing paid VIP Subscription options & native Apple StoreKit 2 purchase sheet.
+        (d) In-app Account Deletion flow: Profile tab -> Red Trash Can ("Delete Account") icon at top-right of the Profile card -> Confirmation dialog -> Permanent account deletion & sign-out.
+      • Note on User-Generated Content (UGC): The app does NOT include public or social user-generated content shared between users; all practice recordings and written responses are private to the individual learner for personal exam scoring.
+
+      2. APP PURPOSE, TARGET AUDIENCE & VALUE:
+      • Purpose: PTE Ninja is a mobile exam preparation and AI diagnostic practice application for the Pearson Test of English Academic (PTE Academic).
+      • Target Audience: International students, professionals, and visa applicants preparing for English proficiency certification.
+      • Problem Solved & Value: Traditional PTE coaching is expensive and slow. PTE Ninja provides learners with 20+ exam task types across Speaking, Writing, Reading, and Listening, delivering instant diagnostic feedback on pronunciation, oral fluency, grammar, vocabulary, and content accuracy on the 10–90 PTE scale, plus personalized study plans and mock tests.
+
+      3. INSTRUCTIONS FOR ACCESSING MAIN FEATURES & LOGIN CREDENTIALS:
+      • Option A (Instant Guest - No Login Required): Tap "Continue as Guest" / "Instant Guest" on the welcome screen for immediate access to the dashboard and practice question banks.
+      • Option B (Sign in with Apple / Email): Tap "Sign in with Apple" or sign up / sign in with any email and password.
+      • How to Test Speaking / AI Scoring: From the Dashboard, select "Speaking" -> "Read Aloud" or "Repeat Sentence" -> Tap the Microphone button (grant mic permission) -> Speak the prompt -> Tap Stop/Submit to view the instant AI Scorecard.
+      • How to Test VIP Subscriptions: Tap "Upgrade" or "VIP" in the top bar or Profile tab to open the VIP paywall and trigger native Apple StoreKit 2 auto-renewable subscriptions or Offer Code redemption.
+      • How to Test Account Deletion: Open the "Profile" tab -> Tap the red Trash Can icon (next to the Log Out button) at the top-right of the user profile card -> Confirm deletion.
+
+      4. EXTERNAL SERVICES, TOOLS & PLATFORMS USED:
+      • Authentication: Firebase Authentication (Sign in with Apple, Google Sign-In, Email/Password, and Anonymous Guest Auth).
+      • Database: PostgreSQL (Neon Serverless Postgres) for storing question banks, user practice history, study schedules, and vocabulary progress.
+      • AI & Speech Evaluation: Google Gemini API / Google Cloud Vertex AI (accessed securely via our HTTPS backend server) to analyze learner speech audio and written essays for pronunciation, fluency, and grammar scoring.
+      • Payment Processing (iOS): Native Apple StoreKit 2 (Auto-Renewable Subscriptions) exclusively for all iOS digital purchases.
+      • Advertising: Google AdMob SDK (with Apple App Tracking Transparency / SKAdNetwork) for free-tier users.
+
+      5. REGIONAL CONSISTENCY:
+      • The app functions consistently across all regions and territories worldwide with no regional restrictions.
+
+      6. REGULATORY & CONTENT AUTHORIZATION:
+      • PTE Ninja is an independent educational test-prep tool and does not operate in a regulated medical, financial, or legal industry. All practice prompts and study materials are original educational content created for PTE Ninja.
+
+      Contact: Sahil Gupta | +91-9289063827 | pteninja.support@gmail.com
+    NOTES
+
+    UI.message("Review notes length: #{review_notes_text.length} chars (limit: 4000)")
+
     target_version = nil
     app = nil
-    has_existing_screenshots = true
     begin
       app = Spaceship::ConnectAPI::App.find("com.pteninja.app")
       if app
         UI.message("Found App ID: #{app.id}")
-
-        # 1. Set Content Rights Declaration on App
-        asc_req.call(:patch, "apps/#{app.id}", {
-          data: {
-            type: "apps",
-            id: app.id,
-            attributes: {
-              contentRightsDeclaration: "DOES_NOT_USE_THIRD_PARTY_CONTENT"
-            }
-          }
-        })
-
-        # 2. Fetch AppInfo to set Primary Category and Age Rating Declaration
-        code_ai, body_ai = asc_req.call(:get, "apps/#{app.id}/appInfos")
-        app_infos = body_ai["data"] || []
-        editable_app_info = app_infos.find { |ai| ai.dig("attributes", "appStoreState") != "READY_FOR_SALE" } || app_infos.first
-        if editable_app_info
-          ai_id = editable_app_info["id"]
-          asc_req.call(:patch, "appInfos/#{ai_id}", {
-            data: {
-              type: "appInfos",
-              id: ai_id,
-              relationships: {
-                primaryCategory: {
-                  data: { type: "appCategories", id: "EDUCATION" }
-                }
-              }
-            }
-          })
-
-          # 3. Update Age Rating Declaration
-          code_ard, body_ard = asc_req.call(:get, "appInfos/#{ai_id}/ageRatingDeclaration")
-          ard_data = body_ard["data"]
-          if ard_data && ard_data["id"]
-            ard_id = ard_data["id"]
-            ard_attrs = {
-              alcoholTobaccoOrDrugUseOrReferences: "NONE",
-              contests: "NONE",
-              gamblingSimulated: "NONE",
-              horrorOrFearThemes: "NONE",
-              matureOrSuggestiveThemes: "NONE",
-              medicalOrTreatmentInformation: "NONE",
-              profanityOrCrudeHumor: "NONE",
-              sexualContentGraphicAndNudity: "NONE",
-              sexualContentOrNudity: "NONE",
-              violenceCartoonOrFantasy: "NONE",
-              violenceRealistic: "NONE",
-              violenceRealisticProlongedGraphicOrSadistic: "NONE",
-              gunsOrOtherWeapons: "NONE",
-              healthOrWellnessTopics: false,
-              messagingAndChat: false,
-              advertising: false,
-              parentalControls: false,
-              ageAssurance: false,
-              lootBox: false,
-              userGeneratedContent: false,
-              socialMedia: false,
-              gambling: false,
-              unrestrictedWebAccess: false
-            }
-            asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
-              data: {
-                type: "ageRatingDeclarations",
-                id: ard_id,
-                attributes: ard_attrs
-              }
-            })
-          end
-        end
-
         target_version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
         if target_version
           UI.message("Found editable App Store Version: #{target_version.id} (#{target_version.version_string})")
 
-          # Set copyright directly on appStoreVersion
-          code_cp, body_cp = asc_req.call(:patch, "appStoreVersions/#{target_version.id}", {
-            data: {
-              type: "appStoreVersions",
-              id: target_version.id,
-              attributes: {
-                copyright: "© 2026 PTE Ninja. All rights reserved."
-              }
-            }
-          })
-          if code_cp >= 200 && code_cp < 300
-            UI.success("Copyright set on App Store Version #{target_version.id}!")
-          else
-            UI.message("Copyright update response (#{code_cp}): #{body_cp.to_json}")
-          end
-
-          # Check if screenshots exist on App Store Connect
-          begin
-            code_loc, body_loc = asc_req.call(:get, "appStoreVersions/#{target_version.id}/appStoreVersionLocalizations")
-            locs = body_loc["data"] || []
-            locs.each do |l|
-              locale_name = l.dig("attributes", "locale")
-              code_ss, body_ss = asc_req.call(:get, "appStoreVersionLocalizations/#{l['id']}/appScreenshotSets?include=appScreenshots")
-              sets = body_ss["data"] || []
-              total_shots = (body_ss["included"] || []).count
-              UI.message("Locale #{locale_name}: #{sets.count} screenshot sets, #{total_shots} total screenshots on App Store Connect.")
-              has_existing_screenshots = false if total_shots == 0
-            end
-          rescue => ss_err
-            UI.message("Screenshot check notice: #{ss_err.message}")
-          end
-
-          # 5. Attach Build 102 (or latest VALID build) to target_version
+          # 1. Ensure latest valid build (104 or latest VALID) is attached
           code_b, body_b = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
           builds = body_b["data"] || []
-          selected_build = builds.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds.find { |b| b.dig("attributes", "processingState") == "VALID" }
+          UI.message("Available builds: #{builds.map { |b| "#{b.dig('attributes', 'version')} (#{b.dig('attributes', 'processingState')})" }.join(', ')}")
+          selected_build = builds.find { |b| b.dig("attributes", "version").to_s == build_number.to_s && b.dig("attributes", "processingState") == "VALID" } || builds.find { |b| b.dig("attributes", "processingState") == "VALID" }
           if selected_build
             b_id = selected_build["id"]
             b_ver = selected_build.dig("attributes", "version")
             asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
               data: { type: "builds", id: b_id }
             })
-            UI.success("Attached Build #{b_ver} (#{b_id}) to Version #{app_version}!")
+            UI.success("Confirmed Build #{b_ver} (#{b_id}) attached to Version #{app_version}!")
           end
 
-          # 6. Review Details contact info
-          begin
-            rd = target_version.fetch_app_store_review_detail
-          rescue => e
-            rd = nil
-          end
+          # 2. Update App Store Review Detail Notes & Contact Info
+          code_rd, body_rd = asc_req.call(:get, "appStoreVersions/#{target_version.id}/appStoreReviewDetail")
+          rd_data = body_rd["data"]
+          rd_id = rd_data ? rd_data["id"] : nil
 
-          if rd.nil?
-            target_version.create_app_store_review_detail(attributes: {
-              contactFirstName: "Sahil",
-              contactLastName: "Gupta",
-              contactEmail: "pteninja.support@gmail.com",
-              contactPhone: "+91-9289063827",
-              demoAccountRequired: false,
-              notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app. For any questions, contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com."
+          if rd_id.nil?
+            UI.message("Creating AppStoreReviewDetail...")
+            code_crd, body_crd = asc_req.call(:post, "appStoreReviewDetails", {
+              data: {
+                type: "appStoreReviewDetails",
+                attributes: {
+                  contactFirstName: "Sahil",
+                  contactLastName: "Gupta",
+                  contactEmail: "pteninja.support@gmail.com",
+                  contactPhone: "+91-9289063827",
+                  demoAccountRequired: false,
+                  notes: review_notes_text
+                },
+                relationships: {
+                  appStoreVersion: { data: { type: "appStoreVersions", id: target_version.id } }
+                }
+              }
             })
+            rd_id = body_crd.dig("data", "id")
           else
-            rd.update(attributes: {
-              contactFirstName: "Sahil",
-              contactLastName: "Gupta",
-              contactEmail: "pteninja.support@gmail.com",
-              contactPhone: "+91-9289063827",
-              notes: "Please test using one-tap Guest login or Apple Sign-In. Full VIP subscription and question bank access can be tested in-app. For any questions, contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com."
+            UI.message("Updating AppStoreReviewDetail #{rd_id} with full 6-point Guideline 2.1 response...")
+            code_urd, body_urd = asc_req.call(:patch, "appStoreReviewDetails/#{rd_id}", {
+              data: {
+                type: "appStoreReviewDetails",
+                id: rd_id,
+                attributes: {
+                  contactFirstName: "Sahil",
+                  contactLastName: "Gupta",
+                  contactEmail: "pteninja.support@gmail.com",
+                  contactPhone: "+91-9289063827",
+                  demoAccountRequired: false,
+                  notes: review_notes_text
+                }
+              }
             })
+            if code_urd >= 200 && code_urd < 300
+              UI.success("Updated AppStoreReviewDetail notes successfully!")
+            else
+              UI.message("Update AppStoreReviewDetail response (#{code_urd}): #{body_urd.to_json}")
+            end
           end
-        end
-      end
-    rescue => e
-      UI.message("Notice during pre-deliver setup: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
-    end
 
-    deliver_config = {
-      api_key: api_key,
-      app_identifier: "com.pteninja.app",
-      app_version: app_version,
-      skip_binary_upload: true,
-      submit_for_review: false,
-      automatic_release: false,
-      phased_release: false,
-      force: true,
-      skip_screenshots: (ENV["UPLOAD_SCREENSHOTS"] != "true" && has_existing_screenshots),
-      skip_metadata: false,
-      ignore_language_directory_validation: true,
-      metadata_path: "./fastlane/metadata",
-      screenshots_path: "./fastlane/screenshots",
-      overwrite_screenshots: false,
-      run_precheck_before_submit: false
-    }
+          # 3. Upload Physical Device Screen Recording Attachment to AppStoreReviewDetail
+          if rd_id
+            video_candidates = [
+              File.expand_path("AppReview_ScreenRecording.mp4", __dir__),
+              "./fastlane/AppReview_ScreenRecording.mp4",
+              "./AppReview_ScreenRecording.mp4"
+            ]
+            video_file = video_candidates.find { |p| File.exist?(p) }
+            if video_file
+              video_bytes = File.binread(video_file)
+              UI.message("Found screen recording file: #{video_file} (#{video_bytes.bytesize} bytes)")
 
-    if build_number && !build_number.strip.empty? && build_number != "latest"
-      deliver_config[:build_number] = build_number.strip
-    end
-
-    deliver(deliver_config)
-
-    # 7. Configure Subscriptions (Group Localization, Prices, Review Screenshots) & Check Review Readiness
-    begin
-      if app && target_version
-        # Ensure copyright and build stay attached after deliver
-        asc_req.call(:patch, "appStoreVersions/#{target_version.id}", {
-          data: {
-            type: "appStoreVersions",
-            id: target_version.id,
-            attributes: {
-              copyright: "© 2026 PTE Ninja. All rights reserved."
-            }
-          }
-        })
-        code_b2, body_b2 = asc_req.call(:get, "builds?filter[app]=#{app.id}&sort=-uploadedDate&limit=10")
-        builds2 = body_b2["data"] || []
-        sel_b2 = builds2.find { |b| b.dig("attributes", "version").to_s == build_number.to_s } || builds2.find { |b| b.dig("attributes", "processingState") == "VALID" }
-        if sel_b2
-          asc_req.call(:patch, "appStoreVersions/#{target_version.id}/relationships/build", {
-            data: { type: "builds", id: sel_b2["id"] }
-          })
-        end
-
-        # Prepare Subscriptions so they move from MISSING_METADATA -> READY_TO_SUBMIT
-        shot_candidates = [
-          File.expand_path("screenshots/en-US/APP_IPHONE_67_1.png", __dir__),
-          "./fastlane/screenshots/en-US/APP_IPHONE_67_1.png",
-          "./screenshots/en-US/APP_IPHONE_67_1.png"
-        ]
-        shot_file = shot_candidates.find { |p| File.exist?(p) }
-        UI.message("Resolved subscription review screenshot path: #{shot_file.inspect}")
-        shot_bytes = shot_file ? File.binread(shot_file) : nil
-
-        code_sg, body_sg = asc_req.call(:get, "apps/#{app.id}/subscriptionGroups")
-        groups = body_sg["data"] || []
-        groups.each do |grp|
-          grp_id = grp["id"]
-          code_subs, body_subs = asc_req.call(:get, "subscriptionGroups/#{grp_id}/subscriptions")
-          subs = body_subs["data"] || []
-          subs.each do |sub|
-            s_id = sub["id"]
-            s_pid = sub.dig("attributes", "productId")
-            s_name = sub.dig("attributes", "name")
-            s_state = sub.dig("attributes", "state")
-            UI.message("Checking Subscription #{s_pid} ('#{s_name}', id=#{s_id}, current state=#{s_state})...")
-
-            # Check/upload Subscription Review Screenshot
-            code_sss, body_sss = asc_req.call(:get, "subscriptions/#{s_id}/appStoreReviewScreenshot")
-            existing_shot = body_sss["data"]
-            shot_state = existing_shot ? existing_shot.dig("attributes", "assetDeliveryState", "state") : nil
-            if existing_shot.nil? || shot_state == "FAILED"
-              if existing_shot && shot_state == "FAILED"
-                asc_req.call(:delete, "subscriptionAppStoreReviewScreenshots/#{existing_shot['id']}")
+              # Check existing attachments on rd_id
+              code_att_list, body_att_list = asc_req.call(:get, "appStoreReviewDetails/#{rd_id}/appStoreReviewAttachments")
+              existing_atts = body_att_list["data"] || []
+              existing_atts.each do |ea|
+                ea_state = ea.dig("attributes", "assetDeliveryState", "state")
+                ea_name = ea.dig("attributes", "fileName")
+                UI.message("Existing review attachment: #{ea_name} (#{ea['id']}, state: #{ea_state})")
+                if ea_state == "FAILED" || ea_name == File.basename(video_file)
+                  UI.message("Removing previous attachment #{ea['id']} before uploading fresh copy...")
+                  asc_req.call(:delete, "appStoreReviewAttachments/#{ea['id']}")
+                end
               end
-              if shot_bytes
-                UI.message("  Uploading App Store Review Screenshot for #{s_pid} (#{shot_bytes.bytesize} bytes)...")
-                code_resv, body_resv = asc_req.call(:post, "subscriptionAppStoreReviewScreenshots", {
+
+              UI.message("Reserving AppStoreReviewAttachment for #{File.basename(video_file)} (#{video_bytes.bytesize} bytes)...")
+              code_resv, body_resv = asc_req.call(:post, "appStoreReviewAttachments", {
+                data: {
+                  type: "appStoreReviewAttachments",
+                  attributes: {
+                    fileName: File.basename(video_file),
+                    fileSize: video_bytes.bytesize
+                  },
+                  relationships: {
+                    appStoreReviewDetail: {
+                      data: { type: "appStoreReviewDetails", id: rd_id }
+                    }
+                  }
+                }
+              })
+
+              if code_resv >= 200 && code_resv < 300 && body_resv["data"]
+                att_id = body_resv["data"]["id"]
+                ops = body_resv.dig("data", "attributes", "uploadOperations") || []
+                UI.message("Uploading #{ops.count} chunk(s) for attachment #{att_id}...")
+                ops.each_with_index do |op, idx|
+                  op_url = URI(op["url"])
+                  op_http = Net::HTTP.new(op_url.host, op_url.port)
+                  op_http.use_ssl = true
+                  op_http.read_timeout = 120
+                  op_http.open_timeout = 60
+                  op_req = Net::HTTP::Put.new(op_url)
+                  (op["requestHeaders"] || []).each { |h| op_req[h["name"]] = h["value"] }
+                  op_req.body = video_bytes.byteslice(op["offset"].to_i, op["length"].to_i)
+                  op_res = op_http.request(op_req)
+                  UI.message("  Chunk #{idx + 1}/#{ops.count} upload status: #{op_res.code}")
+                end
+
+                md5_hex = Digest::MD5.hexdigest(video_bytes)
+                code_comm, body_comm = asc_req.call(:patch, "appStoreReviewAttachments/#{att_id}", {
                   data: {
-                    type: "subscriptionAppStoreReviewScreenshots",
+                    type: "appStoreReviewAttachments",
+                    id: att_id,
                     attributes: {
-                      fileName: File.basename(shot_file),
-                      fileSize: shot_bytes.bytesize
-                    },
-                    relationships: {
-                      subscription: { data: { type: "subscriptions", id: s_id } }
+                      uploaded: true,
+                      sourceFileChecksum: md5_hex
                     }
                   }
                 })
-                if code_resv >= 200 && code_resv < 300 && body_resv["data"]
-                  shot_id = body_resv["data"]["id"]
-                  ops = body_resv.dig("data", "attributes", "uploadOperations") || []
-                  ops.each do |op|
-                    op_url = URI(op["url"])
-                    op_http = Net::HTTP.new(op_url.host, op_url.port)
-                    op_http.use_ssl = true
-                    op_req = Net::HTTP::Put.new(op_url)
-                    (op["requestHeaders"] || []).each { |h| op_req[h["name"]] = h["value"] }
-                    op_req.body = shot_bytes.byteslice(op["offset"].to_i, op["length"].to_i)
-                    op_res = op_http.request(op_req)
-                    UI.message("    Chunk upload status: #{op_res.code}")
-                  end
-                  md5_hex = Digest::MD5.hexdigest(shot_bytes)
-                  code_comm, body_comm = asc_req.call(:patch, "subscriptionAppStoreReviewScreenshots/#{shot_id}", {
-                    data: {
-                      type: "subscriptionAppStoreReviewScreenshots",
-                      id: shot_id,
-                      attributes: {
-                        uploaded: true,
-                        sourceFileChecksum: md5_hex
-                      }
-                    }
-                  })
-                  if code_comm >= 200 && code_comm < 300
-                    UI.success("  Committed Review Screenshot #{shot_id} for #{s_pid}!")
-                  else
-                    UI.message("  Commit screenshot response (#{code_comm}): #{body_comm.to_json}")
-                  end
+                if code_comm >= 200 && code_comm < 300
+                  UI.success("Successfully uploaded & committed AppReview_ScreenRecording.mp4 (id: #{att_id}) to App Store Review Information!")
                 else
-                  UI.message("  Reserve screenshot response (#{code_resv}): #{body_resv.to_json}")
+                  UI.message("Commit attachment response (#{code_comm}): #{body_comm.to_json}")
                 end
+              else
+                UI.message("Reserve attachment response (#{code_resv}): #{body_resv.to_json}")
               end
             else
-              UI.success("  Review Screenshot already present for #{s_pid} (state: #{shot_state}).")
+              UI.message("Screen recording file not found in candidates.")
             end
           end
-        end
 
-        # Wait a few seconds for Apple to process the uploaded review screenshots
-        sleep(6)
-        groups.each do |grp|
-          code_subs2, body_subs2 = asc_req.call(:get, "subscriptionGroups/#{grp['id']}/subscriptions")
-          (body_subs2["data"] || []).each do |sub|
-            UI.message("  => Updated Subscription #{sub.dig('attributes', 'productId')} state: #{sub.dig('attributes', 'state')}")
+          # Wait briefly for attachment processing
+          sleep(5)
+
+          # 4. Resolve Unresolved Review Submission & Submit to App Review
+          UI.message("Inspecting Review Submissions for App #{app.id}...")
+          code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&include=items")
+          rs_list = body_rs["data"] || []
+          rs_list.each do |r|
+            UI.message(" - ReviewSubmission #{r['id']}: state=#{r.dig('attributes', 'state')}")
           end
-        end
 
-        # Check Review Submission Container and print detailed validation errors (including meta.associatedErrors)
-        UI.message("Checking review submission container for app version #{app_version}...")
-        code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&include=items")
-        rs_list = body_rs["data"] || []
-        review_sub = rs_list.find { |r| ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"].include?(r.dig("attributes", "state")) }
-        if review_sub && review_sub["id"]
-          rs_id = review_sub["id"]
-          code_vitem, body_vitem = asc_req.call(:post, "reviewSubmissionItems", {
-            data: {
-              type: "reviewSubmissionItems",
-              relationships: {
-                reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
-                appStoreVersion: { data: { type: "appStoreVersions", id: target_version.id } }
+          submitted_ok = false
+
+          # Check if there is an UNRESOLVED_ISSUES submission we can resolve and resubmit
+          unresolved_sub = rs_list.find { |r| r.dig("attributes", "state") == "UNRESOLVED_ISSUES" }
+          if unresolved_sub
+            rs_id = unresolved_sub["id"]
+            UI.message("Found UNRESOLVED_ISSUES submission #{rs_id}. Fetching items...")
+            code_items, body_items = asc_req.call(:get, "reviewSubmissions/#{rs_id}/items")
+            items = body_items["data"] || []
+            items.each do |item|
+              item_id = item["id"]
+              item_state = item.dig("attributes", "state")
+              UI.message("  Item #{item_id} state: #{item_state} -> setting resolved=true...")
+              code_res_item, body_res_item = asc_req.call(:patch, "reviewSubmissionItems/#{item_id}", {
+                data: {
+                  type: "reviewSubmissionItems",
+                  id: item_id,
+                  attributes: {
+                    resolved: true
+                  }
+                }
+              })
+              UI.message("  Resolve item #{item_id} response (#{code_res_item}): #{code_res_item >= 200 && code_res_item < 300 ? 'RESOLVED' : body_res_item.to_json}")
+            end
+
+            UI.message("Submitting resolved ReviewSubmission #{rs_id} to App Review...")
+            code_sub, body_sub = asc_req.call(:patch, "reviewSubmissions/#{rs_id}", {
+              data: {
+                type: "reviewSubmissions",
+                id: rs_id,
+                attributes: {
+                  submitted: true
+                }
               }
-            }
-          })
-          if code_vitem >= 200 && code_vitem < 300
-            UI.success("App Store Version #{target_version.id} is VALID and attached to Review Submission #{rs_id}!")
-          else
-            UI.message("Remaining Apple Validation Items (#{code_vitem}):")
-            (body_vitem["errors"] || []).each do |err|
-              UI.message(" - [#{err['code']}] #{err['title']}: #{err['detail']}")
-              if err["meta"] && err["meta"]["associatedErrors"]
-                err["meta"]["associatedErrors"].each do |res_key, assoc_list|
-                  (assoc_list || []).each do |ae|
-                    UI.message("   * (#{res_key}) [#{ae['code']}] #{ae['title']}: #{ae['detail']}")
-                  end
-                end
+            })
+            if code_sub >= 200 && code_sub < 300
+              UI.success("Successfully RESUBMITTED ReviewSubmission #{rs_id} to Apple App Review! (State: #{body_sub.dig('data', 'attributes', 'state')})")
+              submitted_ok = true
+            else
+              UI.message("Resubmit #{rs_id} response (#{code_sub}): #{body_sub.to_json}")
+            end
+          end
+
+          unless submitted_ok
+            ready_sub = rs_list.find { |r| r.dig("attributes", "state") == "READY_FOR_REVIEW" }
+            if ready_sub.nil?
+              UI.message("Creating new ReviewSubmission container...")
+              code_crs, body_crs = asc_req.call(:post, "reviewSubmissions", {
+                data: {
+                  type: "reviewSubmissions",
+                  attributes: { platform: "IOS" },
+                  relationships: {
+                    app: { data: { type: "apps", id: app.id } }
+                  }
+                }
+              })
+              ready_sub = body_crs["data"]
+            end
+
+            if ready_sub && ready_sub["id"]
+              rs_id = ready_sub["id"]
+              UI.message("Attaching App Store Version #{target_version.id} to ReviewSubmission #{rs_id}...")
+              asc_req.call(:post, "reviewSubmissionItems", {
+                data: {
+                  type: "reviewSubmissionItems",
+                  relationships: {
+                    reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
+                    appStoreVersion: { data: { type: "appStoreVersions", id: target_version.id } }
+                  }
+                }
+              })
+
+              UI.message("Submitting ReviewSubmission #{rs_id} to App Review...")
+              code_sub2, body_sub2 = asc_req.call(:patch, "reviewSubmissions/#{rs_id}", {
+                data: {
+                  type: "reviewSubmissions",
+                  id: rs_id,
+                  attributes: {
+                    submitted: true
+                  }
+                }
+              })
+              if code_sub2 >= 200 && code_sub2 < 300
+                UI.success("Successfully SUBMITTED ReviewSubmission #{rs_id} to Apple App Review! (State: #{body_sub2.dig('data', 'attributes', 'state')})")
+                submitted_ok = true
+              else
+                UI.message("Submit #{rs_id} response (#{code_sub2}): #{body_sub2.to_json}")
               end
             end
           end
         end
       end
     rescue => e
-      UI.message("Notice during review submission association: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+      UI.message("Error during submission: #{e.message}\n#{e.backtrace.first(6).join("\n")}")
     end
-
-    UI.success("App Store Connect submission prepared successfully! Build #{build_number} and all assets are staged.")
-    UI.important("The app has NOT been submitted for review. You can now review everything in App Store Connect before submitting.")
   end
 end

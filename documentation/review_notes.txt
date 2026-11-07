@@ -1,21 +1,37 @@
-Welcome Apple Review Team!
+Thank you, Apple Review Team! Below is all requested information (Items 1–6) for Guideline 2.1:
 
-Thank you for reviewing PTE Ninja - AI Exam Prep. Here is everything you need to test the application:
+1. PHYSICAL DEVICE SCREEN RECORDING:
+• Video Link (Google Drive): https://drive.google.com/file/d/1_7VDxVBXlCL61L5ubk1piwSISQgjw-8i/view?usp=sharing (also attached directly in App Store Review Attachments as AppReview_ScreenRecording.mp4).
+• Captured on a physical iPhone running the latest iOS, starting from the iOS Home Screen launch and demonstrating:
+  (a) Account registration & sign-in flows (Sign in with Apple, Email/Password registration & login, and Instant Guest mode).
+  (b) Core PTE practice flow (Speaking/Writing practice task and real-time AI diagnostic scoring feedback).
+  (c) Accessing paid VIP Subscription options & native Apple StoreKit 2 purchase sheet.
+  (d) In-app Account Deletion flow: Profile tab -> Red Trash Can ("Delete Account") icon at top-right of the Profile card -> Confirmation dialog -> Permanent account deletion & sign-out.
+• Note on User-Generated Content (UGC): The app does NOT include public or social user-generated content shared between users; all practice recordings and written responses are private to the individual learner for personal exam scoring.
 
-1. SIGN-IN & DEMO ACCESS:
-• You can test all features immediately by tapping "Continue as Guest" / "Instant Guest" on the initial welcome screen. No credentials, SMS verification, or credit card are required.
-• Alternatively, you may sign in with Apple, sign in with Google, or sign up with any test email address.
+2. APP PURPOSE, TARGET AUDIENCE & VALUE:
+• Purpose: PTE Ninja is a mobile exam preparation and AI diagnostic practice application for the Pearson Test of English Academic (PTE Academic).
+• Target Audience: International students, professionals, and visa applicants preparing for English proficiency certification.
+• Problem Solved & Value Provided: Traditional PTE coaching is expensive and provides slow feedback. PTE Ninja provides learners with 20+ exam task types across Speaking, Writing, Reading, and Listening, delivering instant diagnostic feedback on pronunciation, oral fluency, grammar, vocabulary, and content accuracy on the 10–90 PTE scale, plus personalized study plans and mock tests.
 
-2. HARDWARE & PERMISSIONS:
-• Microphone (NSMicrophoneUsageDescription): Used solely during Speaking practice tasks (Read Aloud, Repeat Sentence, etc.) to record user speech for real-time pronunciation and fluency evaluation.
-• Speech Recognition: AI models analyze audio transcripts to calculate diagnostic scores on the PTE 10–90 scale.
+3. INSTRUCTIONS FOR ACCESSING MAIN FEATURES & LOGIN CREDENTIALS:
+• Option A (Instant Guest - No Login Required): Tap "Continue as Guest" / "Instant Guest" on the welcome screen for immediate access to the dashboard and practice question banks.
+• Option B (Sign in with Apple / Email): Tap "Sign in with Apple" or sign up / sign in with any email and password.
+• How to Test Speaking / AI Scoring: From the Dashboard, select "Speaking" -> "Read Aloud" or "Repeat Sentence" -> Tap the Microphone button (grant mic permission) -> Speak the prompt -> Tap Stop/Submit to view the instant AI Scorecard.
+• How to Test VIP Subscriptions: Tap "Upgrade" or "VIP" in the top bar or Profile tab to open the VIP paywall and trigger native Apple StoreKit 2 auto-renewable subscriptions or Offer Code redemption.
+• How to Test Account Deletion: Open the "Profile" tab -> Tap the red Trash Can icon (next to the Log Out button) at the top-right of the user profile card -> Confirm deletion.
 
-3. IN-APP PURCHASES & SUBSCRIPTIONS:
-• The app includes optional VIP Auto-Renewable Subscriptions (Weekly, Monthly, Quarterly, Annual) configured under the "PTE Ninja VIP Subscriptions" group.
-• In-app subscription plans and native Apple Offer Code redemption can be reviewed by tapping "Upgrade" or "VIP" in the top bar or sidebar.
-• Core practice question banks and trial evaluations are fully accessible without requiring any purchase.
+4. EXTERNAL SERVICES, TOOLS & PLATFORMS USED:
+• Authentication & User Identity: Firebase Authentication (supporting Sign in with Apple, Google Sign-In, Email/Password, and Anonymous Guest Auth).
+• Database & Storage: PostgreSQL (Neon Serverless Postgres) for storing question banks, user practice history, study schedules, and vocabulary progress.
+• AI & Speech Evaluation Services: Google Gemini API / Google Cloud Vertex AI (accessed securely via our HTTPS backend server) to analyze learner speech audio and written essays for pronunciation, fluency, and grammar scoring.
+• Payment Processing (iOS): Native Apple StoreKit 2 (In-App Purchases / Auto-Renewable Subscriptions) exclusively for all iOS digital purchases.
+• Advertising: Google AdMob SDK (with Apple App Tracking Transparency / SKAdNetwork) for displaying frequency-capped ads to free-tier users.
 
-4. ADVERTISING:
-• The app uses Google AdMob banners and interstitials for free users with frequency caps (cooldowns) to ensure a smooth user experience.
+5. REGIONAL CONSISTENCY:
+• The app functions consistently across all regions and territories worldwide. There are no regional restrictions or feature differences across storefronts.
 
-If you have any questions or require anything further during review, please contact Sahil Gupta at +91-9289063827 or pteninja.support@gmail.com.
+6. REGULATORY & CONTENT AUTHORIZATION:
+• PTE Ninja is an independent educational test-preparation tool and does not operate in a regulated medical, financial, or legal industry. All practice prompts, mock questions, and study guides are original educational material created for PTE Ninja.
+
+Contact for any questions: Sahil Gupta | +91-9289063827 | pteninja.support@gmail.com
