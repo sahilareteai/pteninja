@@ -105,7 +105,7 @@ platform :ios do
     )
   end
 
-  desc "Update App Review Notes, attach physical device screen recording, and submit for review"
+  desc "Update Age Rating advertising=true, verify Review Notes & Attachment, and resubmit to App Review"
   lane :prepare_submission do
     raw_key = ENV["APPSTORE_PRIVATE_KEY"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY_BASE64"] || ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
     if raw_key && !raw_key.include?("BEGIN PRIVATE KEY")
@@ -122,12 +122,6 @@ platform :ios do
       key_content: raw_key,
       is_key_content_base64: false
     )
-
-    build_number = ENV["BUILD_NUMBER"]
-    if build_number.nil? || build_number.strip.empty?
-      build_number = "104"
-    end
-    app_version = ENV["APP_VERSION"] || "1.0"
 
     require "net/http"
     require "uri"
@@ -172,51 +166,66 @@ platform :ios do
       [res.code.to_i, parsed]
     end
 
-    review_notes_text = <<~NOTES.strip
-      Thank you, Apple Review Team! Below is all requested information (Items 1-6) for Guideline 2.1:
-
-      1. PHYSICAL DEVICE SCREEN RECORDING:
-      - Video Link (Google Drive): https://drive.google.com/file/d/1_7VDxVBXlCL61L5ubk1piwSISQgjw-8i/view?usp=sharing (also attached directly in App Review Attachments as AppReview_ScreenRecording.mp4).
-      - Captured on a physical iPhone running the latest iOS, starting from Home Screen launch and showing:
-        (a) Account registration & login (Sign in with Apple, Email/Password, and Instant Guest mode).
-        (b) Core PTE practice flow (Speaking/Writing practice task and real-time AI scoring feedback).
-        (c) Accessing VIP Subscription plans & native Apple StoreKit 2 purchase sheet.
-        (d) In-app Account Deletion flow: Profile tab -> Red Trash Can ("Delete Account") icon at top-right of Profile card -> Confirmation dialog -> Permanent account deletion & sign-out.
-      - User-Generated Content (UGC): The app has NO public/social UGC shared between users; all practice recordings and written answers are private to the individual learner.
-
-      2. APP PURPOSE, TARGET AUDIENCE & VALUE:
-      - Purpose: Mobile exam prep and AI diagnostic practice app for the Pearson Test of English Academic (PTE Academic).
-      - Target Audience: International students, professionals, and visa applicants preparing for English certification.
-      - Value Provided: Provides 20+ exam task types across Speaking, Writing, Reading, and Listening with instant diagnostic scoring on pronunciation, fluency, grammar, and content on the 10-90 PTE scale, plus study plans and mock tests.
-
-      3. INSTRUCTIONS FOR ACCESSING MAIN FEATURES & LOGIN:
-      - Instant Guest (No Login Required): Tap "Continue as Guest" / "Instant Guest" on the welcome screen for immediate access.
-      - Sign in with Apple / Email: Tap "Sign in with Apple" or register/sign in with any email and password.
-      - Speaking / AI Scoring: Dashboard -> "Speaking" -> "Read Aloud" -> Tap Microphone -> Speak prompt -> Stop/Submit for instant AI Scorecard.
-      - VIP Subscriptions: Tap "Upgrade" or "VIP" in the top bar or Profile tab to test native Apple StoreKit 2 subscriptions or Offer Codes.
-      - Account Deletion: Open "Profile" tab -> Tap red Trash Can icon (top-right of profile card) -> Confirm deletion.
-
-      4. EXTERNAL SERVICES, TOOLS & PLATFORMS USED:
-      - Auth: Firebase Authentication (Sign in with Apple, Google Sign-In, Email/Password, Anonymous Guest Auth).
-      - Database: PostgreSQL (Neon Serverless Postgres) for question banks, practice history, study schedules, and progress.
-      - AI Evaluation: Google Gemini API / Google Cloud Vertex AI (via our HTTPS backend) to score learner speech audio and essays.
-      - Payments (iOS): Native Apple StoreKit 2 (Auto-Renewable Subscriptions) exclusively for all iOS purchases.
-      - Ads: Google AdMob SDK (with Apple App Tracking Transparency / SKAdNetwork) for free-tier users.
-
-      5. REGIONAL CONSISTENCY:
-      - The app functions consistently across all regions and territories worldwide with no regional restrictions.
-
-      6. REGULATORY & CONTENT AUTHORIZATION:
-      - PTE Ninja is an independent educational test-prep tool and does not operate in a regulated medical, financial, or legal industry. All practice prompts and study materials are original educational content created for PTE Ninja.
-
-      Contact: Sahil Gupta | +91-9289063827 | pteninja.support@gmail.com
-    NOTES
-
-    UI.message("Review notes length: #{review_notes_text.length} chars, #{review_notes_text.bytesize} bytes (limit: 4000)")
-
     begin
       app = Spaceship::ConnectAPI::App.find("com.pteninja.app")
       if app
+        UI.message("Found App ID: #{app.id}")
+
+        # 1. Update Age Rating Declaration -> set advertising: true (Guideline 2.3.6 fix)
+        code_ai, body_ai = asc_req.call(:get, "apps/#{app.id}/appInfos")
+        app_infos = body_ai["data"] || []
+        app_infos.each do |ai|
+          ai_id = ai["id"]
+          ai_state = ai.dig("attributes", "appStoreState")
+          UI.message("Checking AppInfo #{ai_id} (state: #{ai_state})...")
+
+          code_ard, body_ard = asc_req.call(:get, "appInfos/#{ai_id}/ageRatingDeclaration")
+          ard_data = body_ard["data"]
+          if ard_data && ard_data["id"]
+            ard_id = ard_data["id"]
+            UI.message("Updating ageRatingDeclaration #{ard_id} with advertising: true...")
+            ard_attrs = {
+              alcoholTobaccoOrDrugUseOrReferences: "NONE",
+              contests: "NONE",
+              gamblingSimulated: "NONE",
+              horrorOrFearThemes: "NONE",
+              matureOrSuggestiveThemes: "NONE",
+              medicalOrTreatmentInformation: "NONE",
+              profanityOrCrudeHumor: "NONE",
+              sexualContentGraphicAndNudity: "NONE",
+              sexualContentOrNudity: "NONE",
+              violenceCartoonOrFantasy: "NONE",
+              violenceRealistic: "NONE",
+              violenceRealisticProlongedGraphicOrSadistic: "NONE",
+              gunsOrOtherWeapons: "NONE",
+              healthOrWellnessTopics: false,
+              messagingAndChat: false,
+              advertising: true,
+              parentalControls: false,
+              ageAssurance: false,
+              lootBox: false,
+              userGeneratedContent: false,
+              socialMedia: false,
+              gambling: false,
+              unrestrictedWebAccess: false
+            }
+
+            code_patch_ard, body_patch_ard = asc_req.call(:patch, "ageRatingDeclarations/#{ard_id}", {
+              data: {
+                type: "ageRatingDeclarations",
+                id: ard_id,
+                attributes: ard_attrs
+              }
+            })
+            if code_patch_ard >= 200 && code_patch_ard < 300
+              UI.success("Successfully updated Age Rating Declaration #{ard_id}: advertising = #{body_patch_ard.dig('data', 'attributes', 'advertising')}!")
+            else
+              UI.message("Age Rating update response (#{code_patch_ard}): #{body_patch_ard.to_json}")
+            end
+          end
+        end
+
+        # 2. Check AppStoreVersion & Review Details
         code_v, body_v = asc_req.call(:get, "apps/#{app.id}/appStoreVersions?filter[platform]=IOS&limit=5")
         versions = body_v["data"] || []
         v_obj = versions.first
@@ -227,42 +236,109 @@ platform :ios do
           code_rd, body_rd = asc_req.call(:get, "appStoreVersions/#{v_id}/appStoreReviewDetail")
           rd_id = body_rd.dig("data", "id")
           if rd_id
-            UI.message("Updating AppStoreReviewDetail #{rd_id} notes...")
-            code_urd, body_urd = asc_req.call(:patch, "appStoreReviewDetails/#{rd_id}", {
-              data: {
-                type: "appStoreReviewDetails",
-                id: rd_id,
-                attributes: {
-                  contactFirstName: "Sahil",
-                  contactLastName: "Gupta",
-                  contactEmail: "pteninja.support@gmail.com",
-                  contactPhone: "+91-9289063827",
-                  demoAccountRequired: false,
-                  notes: review_notes_text
-                }
-              }
-            })
-            if code_urd >= 200 && code_urd < 300
-              UI.success("Updated AppStoreReviewDetail #{rd_id} with full 6-point Guideline 2.1 notes!")
-            else
-              UI.message("Update AppStoreReviewDetail response (#{code_urd}): #{body_urd.to_json}")
-            end
-
             code_att_list, body_att_list = asc_req.call(:get, "appStoreReviewDetails/#{rd_id}/appStoreReviewAttachments")
             existing_atts = body_att_list["data"] || []
             existing_atts.each do |ea|
               UI.success("Confirmed Attachment on Review Detail: #{ea.dig('attributes', 'fileName')} (id=#{ea['id']}, state=#{ea.dig('attributes', 'assetDeliveryState', 'state')})")
             end
           end
-        end
 
-        code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS")
-        (body_rs["data"] || []).each do |r|
-          UI.message("ReviewSubmission #{r['id']}: state=#{r.dig('attributes', 'state')}, submittedDate=#{r.dig('attributes', 'submittedDate')}")
+          # 3. Resolve Rejected Item & Resubmit Review Submission to Apple App Review
+          code_rs, body_rs = asc_req.call(:get, "apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&include=items")
+          rs_list = body_rs["data"] || []
+          rs_list.each do |r|
+            UI.message("ReviewSubmission #{r['id']}: state=#{r.dig('attributes', 'state')}")
+          end
+
+          submitted_ok = false
+          unresolved_sub = rs_list.find { |r| r.dig("attributes", "state") == "UNRESOLVED_ISSUES" }
+          if unresolved_sub
+            rs_id = unresolved_sub["id"]
+            UI.message("Found UNRESOLVED_ISSUES ReviewSubmission #{rs_id}. Resolving items...")
+            code_items, body_items = asc_req.call(:get, "reviewSubmissions/#{rs_id}/items")
+            items = body_items["data"] || []
+            items.each do |item|
+              item_id = item["id"]
+              item_state = item.dig("attributes", "state")
+              UI.message("  Item #{item_id} (state: #{item_state}) -> setting resolved=true...")
+              code_res_item, body_res_item = asc_req.call(:patch, "reviewSubmissionItems/#{item_id}", {
+                data: {
+                  type: "reviewSubmissionItems",
+                  id: item_id,
+                  attributes: {
+                    resolved: true
+                  }
+                }
+              })
+              UI.message("  Resolve item #{item_id} response (#{code_res_item}): #{code_res_item >= 200 && code_res_item < 300 ? 'RESOLVED' : body_res_item.to_json}")
+            end
+
+            UI.message("Resubmitting ReviewSubmission #{rs_id} to App Review...")
+            code_sub, body_sub = asc_req.call(:patch, "reviewSubmissions/#{rs_id}", {
+              data: {
+                type: "reviewSubmissions",
+                id: rs_id,
+                attributes: {
+                  submitted: true
+                }
+              }
+            })
+            if code_sub >= 200 && code_sub < 300
+              UI.success("Successfully RESUBMITTED ReviewSubmission #{rs_id} to Apple App Review! (State: #{body_sub.dig('data', 'attributes', 'state')})")
+              submitted_ok = true
+            else
+              UI.message("Resubmit #{rs_id} response (#{code_sub}): #{body_sub.to_json}")
+            end
+          end
+
+          unless submitted_ok
+            ready_sub = rs_list.find { |r| r.dig("attributes", "state") == "READY_FOR_REVIEW" }
+            if ready_sub.nil?
+              UI.message("Creating new ReviewSubmission container...")
+              code_crs, body_crs = asc_req.call(:post, "reviewSubmissions", {
+                data: {
+                  type: "reviewSubmissions",
+                  attributes: { platform: "IOS" },
+                  relationships: {
+                    app: { data: { type: "apps", id: app.id } }
+                  }
+                }
+              })
+              ready_sub = body_crs["data"]
+            end
+
+            if ready_sub && ready_sub["id"]
+              rs_id = ready_sub["id"]
+              asc_req.call(:post, "reviewSubmissionItems", {
+                data: {
+                  type: "reviewSubmissionItems",
+                  relationships: {
+                    reviewSubmission: { data: { type: "reviewSubmissions", id: rs_id } },
+                    appStoreVersion: { data: { type: "appStoreVersions", id: v_id } }
+                  }
+                }
+              })
+
+              code_sub2, body_sub2 = asc_req.call(:patch, "reviewSubmissions/#{rs_id}", {
+                data: {
+                  type: "reviewSubmissions",
+                  id: rs_id,
+                  attributes: {
+                    submitted: true
+                  }
+                }
+              })
+              if code_sub2 >= 200 && code_sub2 < 300
+                UI.success("Successfully SUBMITTED ReviewSubmission #{rs_id} to Apple App Review! (State: #{body_sub2.dig('data', 'attributes', 'state')})")
+              else
+                UI.message("Submit #{rs_id} response (#{code_sub2}): #{body_sub2.to_json}")
+              end
+            end
+          end
         end
       end
     rescue => e
-      UI.message("Error: #{e.message}")
+      UI.message("Error: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
     end
   end
 end
